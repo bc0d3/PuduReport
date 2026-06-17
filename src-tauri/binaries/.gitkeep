@@ -1,0 +1,2 @@
+# El sidecar typst-<target-triple> se coloca aqui en build/release.
+# Ver README (seccion Build) y .github/workflows/release.yml.

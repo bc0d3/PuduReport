@@ -1,0 +1,36 @@
+/target
+# Backlog personal
+FEATURE.md
+
+# Dependencias y builds
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+**/build/
+
+# Sidecar de Typst: binario pesado por plataforma, se obtiene en cada release
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep
+
+# Secretos y claves
+.env
+.env.*
+*.key
+*.p12
+*.pem
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Backlog personal (privado, no se commitea)
+FEAUTURE.md
+.claude/
+# Documento interno (no publicar)
+CLAUDE.md

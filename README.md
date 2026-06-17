@@ -1,0 +1,71 @@
+<p align="center">
+  <img src="branding/logo.png" alt="PuduReport" width="320" />
+</p>
+
+# PuduReport
+
+Aplicacion de escritorio local-first para redactar reportes de vulnerabilidades y generar PDF profesionales. Pensada para pentesters y bug hunters. Funciona offline, sin servidor y sin que los datos salgan de tu equipo.
+
+## Caracteristicas
+
+- Editor de hallazgos tipo formulario: campos estructurados (severidad, CVSS, estado, CWE) y bloques markdown que se llenan pegando contenido.
+- Calculadora CVSS 3.1 y 4.0 integrada. La severidad se deriva del vector.
+- Libreria de plantillas: hallazgos y snippets reutilizables con variables.
+- Generacion de PDF con plantillas personalizables: portada con tu logo y colores, marca de agua, secciones activables.
+- Workspaces locales en la carpeta que elijas. Cada workspace es git-friendly (solo texto + assets).
+- Multiplataforma: macOS, Windows y Linux.
+
+## Stack
+
+- Tauri v2 (Rust + React/TypeScript)
+- Typst como motor de PDF
+- SQLite (solo indice de busqueda)
+
+## Desarrollo
+
+Guia completa de arquitectura, setup y contribucion en [README.dev.md](README.dev.md).
+
+Requisitos: Node.js 20+, Rust estable, y las dependencias de Tauri para tu sistema.
+
+PuduReport empaqueta el binario de Typst como sidecar de Tauri. Antes de
+`dev` o `build`, coloca el binario en `src-tauri/binaries/` con el sufijo del
+target triple de tu plataforma (por ejemplo `typst-aarch64-apple-darwin`).
+Para desarrollo basta tener `typst` en el PATH: el backend lo resuelve por
+variable de entorno `PUDU_TYPST_BIN`, sidecar junto al ejecutable, o PATH.
+
+```bash
+npm install
+npm run tauri dev
+```
+
+Build de produccion:
+
+```bash
+npm run tauri build
+```
+
+Tests del backend (CVSS 3.1/4.0, parseo de front-matter, pipeline de PDF):
+
+```bash
+cd src-tauri && cargo test
+```
+
+El workspace por defecto se ubica donde tu lo elijas (file picker); sugerencia
+`~/Documents/PuduReport/`. Cada workspace es una carpeta de texto + assets,
+apta para versionar con git.
+
+## Privacidad
+
+Sin telemetria. Sin llamadas de red salvo la verificacion de actualizaciones. Los reportes nunca salen de tu equipo.
+
+## Seguridad
+
+Encontraste una vulnerabilidad en PuduReport? Reportala de forma responsable por el
+canal privado de GitHub (pestania **Security** > **Report a vulnerability**), no en un
+issue publico. Detalle, alcance y agradecimientos en [SECURITY.md](SECURITY.md).
+
+Reconocemos publicamente a quien reporte (Hall of Fame). Gracias por ayudar.
+
+## Licencia
+
+GPL-3.0. Ver LICENSE.
