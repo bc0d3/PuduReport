@@ -370,6 +370,7 @@ function SectionEditor({
         placeholder={`${title}...`}
         assetBase={assetBase}
         projectId={projectId}
+        sourceFirst
       />
     </div>
   );

@@ -462,6 +462,26 @@ i.ti {
   background: var(--accent);
   color: #ffffff;
 }
+/* Vista de codigo markdown (textarea) del editor */
+.md-source {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 220px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-control) var(--radius-control);
+  padding: 14px;
+  outline: none;
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+.md-source:focus {
+  border-color: var(--accent);
+}
+
 .ProseMirror {
   background: var(--bg-elevated);
   border: 1px solid var(--border);

@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -65,6 +65,8 @@ interface Props {
   assetBase?: string | null;
   /** Id del proyecto, requerido para guardar assets. */
   projectId?: string | null;
+  /** Si abre en vista de codigo markdown (true) o renderizada (false, por defecto). */
+  sourceFirst?: boolean;
 }
 
 /** Resuelve una ruta relativa de asset a una URL cargable por la webview. */
@@ -115,8 +117,19 @@ function readBase64(file: File): Promise<string> {
  * Si recibe assetBase + projectId, permite pegar o soltar evidencias: las
  * imagenes se guardan en assets/ con nombre UUID y quedan como ![](assets/...).
  */
-export function MarkdownEditor({ value, onChange, placeholder, assetBase, projectId }: Props) {
+export function MarkdownEditor({
+  value,
+  onChange,
+  placeholder,
+  assetBase,
+  projectId,
+  sourceFirst,
+}: Props) {
   const editorRef = useRef<Editor | null>(null);
+  // Vista activa: "source" muestra el markdown crudo en un textarea; "rich" el
+  // editor WYSIWYG renderizado. Se alterna desde la barra.
+  const [mode, setMode] = useState<"source" | "rich">(sourceFirst ? "source" : "rich");
+  const [source, setSource] = useState(value);
 
   async function insertFile(file: File) {
     if (!projectId) return;
@@ -198,20 +211,53 @@ export function MarkdownEditor({ value, onChange, placeholder, assetBase, projec
     return null;
   }
 
+  // Alterna vista sincronizando el contenido entre el textarea y el editor.
+  function applyMode(next: "source" | "rich") {
+    if (next === mode || !editor) return;
+    if (next === "source") {
+      setSource(normalizeImages(editor.storage.markdown.getMarkdown()));
+    } else {
+      editor.commands.setContent(source);
+    }
+    setMode(next);
+  }
+
   return (
     <div>
-      <Toolbar editor={editor} uploadEnabled={uploadEnabled} onPickFile={insertFile} />
-      <EditorContent editor={editor} />
+      <Toolbar
+        editor={editor}
+        mode={mode}
+        onSetMode={applyMode}
+        uploadEnabled={uploadEnabled}
+        onPickFile={insertFile}
+      />
+      {mode === "source" ? (
+        <textarea
+          className="md-source"
+          value={source}
+          placeholder={placeholder ?? "Escribe aqui..."}
+          onChange={(e) => {
+            setSource(e.target.value);
+            onChange(e.target.value);
+          }}
+        />
+      ) : (
+        <EditorContent editor={editor} />
+      )}
     </div>
   );
 }
 
 function Toolbar({
   editor,
+  mode,
+  onSetMode,
   uploadEnabled,
   onPickFile,
 }: {
   editor: Editor;
+  mode: "source" | "rich";
+  onSetMode: (mode: "source" | "rich") => void;
   uploadEnabled: boolean;
   onPickFile: (file: File) => void;
 }) {
@@ -230,8 +276,33 @@ function Toolbar({
     </button>
   );
 
+  // En modo fuente solo se muestra el boton para volver a la vista renderizada.
+  if (mode === "source") {
+    return (
+      <div className="md-toolbar">
+        {btn(
+          <>
+            <i className="ti ti-eye" /> Vista
+          </>,
+          false,
+          () => onSetMode("rich"),
+          "Ver renderizado",
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="md-toolbar">
+      {btn(
+        <>
+          <i className="ti ti-code" /> Markdown
+        </>,
+        false,
+        () => onSetMode("source"),
+        "Ver y editar el markdown",
+      )}
+      <span className="md-sep" />
       {btn(
         "B",
         editor.isActive("bold"),
