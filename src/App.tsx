@@ -44,7 +44,9 @@ function AppInner() {
   useEffect(() => {
     try {
       const title = workspace ? `PuduReport — ${workspace.name}` : "PuduReport";
-      getCurrentWindow().setTitle(title).catch(() => {});
+      getCurrentWindow()
+        .setTitle(title)
+        .catch(() => {});
     } catch {
       // Fuera de Tauri (preview en navegador): ignorar.
     }
@@ -86,8 +88,7 @@ function AppInner() {
   }
 
   // Directorio absoluto del proyecto activo, para adjuntar evidencias.
-  const assetBase =
-    workspacePath && activeProjectId ? `${workspacePath}/${activeProjectId}` : null;
+  const assetBase = workspacePath && activeProjectId ? `${workspacePath}/${activeProjectId}` : null;
 
   if (loading) {
     return <div className="center-screen">Cargando...</div>;
@@ -124,6 +125,7 @@ function AppInner() {
             key={activeProjectId ?? "none"}
             projectId={activeProjectId}
             assetBase={assetBase}
+            examProfile={workspace.exam_profile}
             onGoToPreview={() => setView("preview")}
             onPickProject={() => setView("proyectos")}
           />

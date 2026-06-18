@@ -210,10 +210,19 @@ pub struct WorkspaceMeta {
     pub watermark: Watermark,
     #[serde(default = "default_template")]
     pub active_template: String,
+    /// Perfil de certificacion activo. "" = ninguno; "oscp" = modo examen OSCP.
+    /// El modo examen cambia el scaffold de secciones, permite severidad manual
+    /// (sin CVSS) y nombra el PDF segun la convencion de submission de OffSec.
+    #[serde(default)]
+    pub exam_profile: String,
+    /// Identificador OSID del candidato (solo modo examen). Aparece en la
+    /// portada y en el nombre del archivo del reporte.
+    #[serde(default)]
+    pub osid: String,
 }
 
 fn default_template() -> String {
-    "corporativo".to_string()
+    "pentest".to_string()
 }
 
 // Default manual: el derive daria active_template = "" (el atributo serde solo
@@ -225,6 +234,8 @@ impl Default for WorkspaceMeta {
             branding: Branding::default(),
             watermark: Watermark::default(),
             active_template: default_template(),
+            exam_profile: String::new(),
+            osid: String::new(),
         }
     }
 }

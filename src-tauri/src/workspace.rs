@@ -212,10 +212,17 @@ pub fn create_project(root: &Path, name: &str, client: &str) -> Result<(String, 
     fs::create_dir_all(dir.join("assets"))?;
     fs::create_dir_all(dir.join("build"))?;
 
+    // El scaffold de secciones depende del perfil activo del workspace: el modo
+    // examen OSCP precarga la estructura que espera OffSec.
+    let sections = match read_workspace_meta(root) {
+        Ok(ws) if ws.exam_profile == "oscp" => oscp_sections(),
+        _ => default_sections(),
+    };
+
     let meta = ProjectMeta {
         name: name.to_string(),
         client: client.to_string(),
-        sections: default_sections(),
+        sections,
         ..Default::default()
     };
     write_project_meta(root, &id, &meta)?;
@@ -326,6 +333,52 @@ fn default_sections() -> Vec<crate::models::ReportSection> {
         })
         .collect()
 }
+
+/// Secciones para el modo examen OSCP, con la estructura que espera OffSec.
+/// Cada maquina/objetivo se documenta como un hallazgo aparte (su IP va en
+/// "activos afectados"); estas secciones son la prosa que las enmarca.
+fn oscp_sections() -> Vec<crate::models::ReportSection> {
+    use crate::models::ReportSection;
+    OSCP_SECTION_BOILERPLATE
+        .iter()
+        .map(|(key, title, body)| ReportSection {
+            key: key.to_string(),
+            title: title.to_string(),
+            body: body.to_string(),
+            enabled: true,
+        })
+        .collect()
+}
+
+/// Boilerplate de las secciones del reporte de examen OSCP. Sin acentos para
+/// mantener la convencion del resto del codigo; el candidato edita el texto.
+const OSCP_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[
+    (
+        "introduction",
+        "Introduction",
+        "El presente reporte documenta la prueba de penetracion realizada como parte del examen de certificacion. Contiene todos los pasos ejecutados para comprometer los sistemas del entorno de examen, presentados de forma que el evaluador pueda reproducir cada resultado.\n\nEl objetivo fue evaluar la red, identificar los sistemas en alcance y explotar las debilidades encontradas, documentando cada hallazgo con la evidencia correspondiente (capturas, codigo de explotacion y el contenido de los archivos local.txt / proof.txt cuando aplique).",
+    ),
+    (
+        "high-level-summary",
+        "High-Level Summary",
+        "Se realizo una prueba de penetracion interna contra la red de examen. Se logro acceso administrativo o de root en los sistemas comprometidos, principalmente por parches faltantes y configuraciones inseguras.\n\nLos sistemas comprometidos y el vector inicial de cada uno se resumen a continuacion:\n\n- IP (hostname) - Nombre del exploit inicial\n- IP (hostname) - Nombre del exploit inicial\n- IP (hostname) - Nombre del exploit inicial",
+    ),
+    (
+        "recommendations",
+        "Recommendations",
+        "Se recomienda aplicar los parches correspondientes a las vulnerabilidades identificadas y mantener un programa regular de actualizaciones. Las configuraciones inseguras deben corregirse y revisarse periodicamente para evitar su reaparicion.",
+    ),
+    (
+        "methodology",
+        "Methodology",
+        "Se utilizo un enfoque metodico y ampliamente adoptado de pruebas de penetracion, organizado en las siguientes fases:\n\n- Information Gathering: identificacion del alcance y de las IP objetivo.\n- Service Enumeration: descubrimiento de servicios y puertos abiertos en cada sistema.\n- Penetration: obtencion de acceso a los sistemas en alcance.\n- Maintaining Access: aseguramiento del acceso obtenido sobre los sistemas comprometidos.\n- House Cleaning: eliminacion de cuentas, herramientas y artefactos introducidos durante la prueba.\n\nEl detalle por maquina (enumeracion, acceso inicial, escalada de privilegios y post-explotacion) se encuentra en la seccion de hallazgos.",
+    ),
+    (
+        "additional-items",
+        "Additional Items",
+        "Esta seccion se reserva para informacion complementaria no incluida en el resto del reporte: contenido de los archivos local.txt / proof.txt, codigo completo de buffer overflow u otros apendices relevantes.",
+    ),
+];
 
 /// Texto boilerplate (clave, titulo, cuerpo markdown) para las secciones base.
 const SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[
@@ -803,6 +856,31 @@ mod tests {
 
         delete_finding(&tmp, &pid, &f.id).unwrap();
         assert_eq!(list_findings(&tmp, &pid).unwrap().len(), 0);
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn oscp_exam_profile_seeds_oscp_sections() {
+        let tmp = std::env::temp_dir().join(format!("pudu-exam-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        create_workspace(&tmp, "Examen").unwrap();
+
+        // Sin perfil: scaffold generico.
+        let (generic, _) = create_project(&tmp, "Generico", "ACME").unwrap();
+        let gmeta = read_project_meta(&tmp, &generic).unwrap();
+        assert!(gmeta.sections.iter().any(|s| s.key == "metodologia"));
+        assert!(!gmeta.sections.iter().any(|s| s.key == "high-level-summary"));
+
+        // Con perfil OSCP: scaffold del examen.
+        let mut ws = read_workspace_meta(&tmp).unwrap();
+        ws.exam_profile = "oscp".to_string();
+        write_workspace_meta(&tmp, &ws).unwrap();
+
+        let (exam, _) = create_project(&tmp, "Examen OSCP", "OffSec").unwrap();
+        let emeta = read_project_meta(&tmp, &exam).unwrap();
+        assert!(emeta.sections.iter().any(|s| s.key == "high-level-summary"));
+        assert!(emeta.sections.iter().any(|s| s.key == "methodology"));
 
         let _ = fs::remove_dir_all(&tmp);
     }

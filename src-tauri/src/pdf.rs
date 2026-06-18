@@ -11,7 +11,7 @@ use std::process::Command;
 use serde::Serialize;
 
 use crate::markdown;
-use crate::models::{Branding, Severity, TeamMember, Watermark};
+use crate::models::{Branding, Severity, TeamMember, Watermark, WorkspaceMeta};
 use crate::workspace;
 
 #[derive(Debug, thiserror::Error)]
@@ -47,6 +47,10 @@ struct WorkspaceData {
     name: String,
     branding: Branding,
     watermark: Watermark,
+    /// Perfil de certificacion activo ("" o "oscp"). Lo consume la plantilla.
+    exam_profile: String,
+    /// OSID del candidato (modo examen). Va en la portada.
+    osid: String,
 }
 
 #[derive(Serialize)]
@@ -173,6 +177,8 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
             name: ws.name,
             branding: ws.branding,
             watermark: ws.watermark,
+            exam_profile: ws.exam_profile,
+            osid: ws.osid,
         },
         project: ProjectData {
             name: project.name,
@@ -297,6 +303,28 @@ fn run_typst(
     Ok(())
 }
 
+/// Deja solo caracteres seguros para un nombre de archivo; cae a "XXXXX" vacio.
+fn sanitize_osid(osid: &str) -> String {
+    let s: String = osid
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .collect();
+    if s.is_empty() {
+        "XXXXX".to_string()
+    } else {
+        s
+    }
+}
+
+/// Nombre del PDF generado. En modo examen sigue la convencion de submission de
+/// OffSec (OSCP-OS-<OSID>-Exam-Report.pdf); fuera de examen usa el id del proyecto.
+fn report_filename(ws: &WorkspaceMeta, project_id: &str) -> String {
+    match ws.exam_profile.as_str() {
+        "oscp" => format!("OSCP-OS-{}-Exam-Report.pdf", sanitize_osid(&ws.osid)),
+        _ => format!("{project_id}.pdf"),
+    }
+}
+
 /// Genera el PDF del proyecto y devuelve la ruta del archivo producido.
 pub fn generate_pdf(
     root: &Path,
@@ -305,7 +333,8 @@ pub fn generate_pdf(
     typst_bin: &Path,
 ) -> Result<PathBuf> {
     let (build_dir, report_typ) = prepare_build(root, project_id, templates_dir)?;
-    let pdf_path = build_dir.join(format!("{project_id}.pdf"));
+    let ws = workspace::read_workspace_meta(root)?;
+    let pdf_path = build_dir.join(report_filename(&ws, project_id));
     run_typst(typst_bin, root, &report_typ, &pdf_path, None)?;
     Ok(pdf_path)
 }
@@ -409,7 +438,14 @@ mod tests {
                 .into();
         workspace::write_finding(&tmp, &pid, &finding).unwrap();
 
-        for template in ["corporativo", "bug-bounty", "infra"] {
+        for template in [
+            "pentest",
+            "ejecutivo",
+            "documento-libre",
+            "retest",
+            "oscp",
+            "htb",
+        ] {
             let mut ws = workspace::read_workspace_meta(&tmp).unwrap();
             ws.active_template = template.to_string();
             workspace::write_workspace_meta(&tmp, &ws).unwrap();

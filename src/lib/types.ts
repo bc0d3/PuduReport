@@ -91,6 +91,10 @@ export interface WorkspaceMeta {
   watermark: Watermark;
   /** Plantilla .typ activa (nombre de archivo sin extension). */
   active_template: string;
+  /** Perfil de certificacion activo: "" = ninguno, "oscp" = modo examen OSCP. */
+  exam_profile: string;
+  /** OSID del candidato (modo examen). Va en la portada y el nombre del PDF. */
+  osid: string;
 }
 
 /** Resumen liviano de un proyecto para listados (no carga hallazgos). */

@@ -40,6 +40,12 @@ export function TemplateLibrary({ projectId, workspace, onWorkspaceSaved }: Prop
   const [creatingTemplate, setCreatingTemplate] = useState(false);
   const [creatingSnippet, setCreatingSnippet] = useState(false);
 
+  const examMode = workspace.exam_profile === "oscp";
+  const [osidDraft, setOsidDraft] = useState(workspace.osid ?? "");
+  useEffect(() => {
+    setOsidDraft(workspace.osid ?? "");
+  }, [workspace.osid]);
+
   const reload = useCallback(async () => {
     const [t, s, p] = await Promise.all([
       guard(api.listFindingTemplates()),
@@ -55,6 +61,101 @@ export function TemplateLibrary({ projectId, workspace, onWorkspaceSaved }: Prop
     const next = { ...workspace, active_template: name };
     const done = await guard(api.saveWorkspaceMeta(next), `Plantilla activa: ${name}`);
     if (done !== undefined) onWorkspaceSaved(next);
+  }
+
+  async function saveWorkspace(next: WorkspaceMeta, message?: string) {
+    const done = await guard(api.saveWorkspaceMeta(next), message);
+    if (done !== undefined) onWorkspaceSaved(next);
+  }
+
+  // Al activar el modo examen tambien se fija la plantilla oscp, para que la
+  // severidad manual del editor y el diseno del PDF queden alineados.
+  function toggleExamMode(on: boolean) {
+    saveWorkspace(
+      {
+        ...workspace,
+        exam_profile: on ? "oscp" : "",
+        active_template: on ? "oscp" : workspace.active_template,
+      },
+      on ? "Modo examen OSCP activado" : "Modo examen desactivado",
+    );
+  }
+
+  function commitOsid() {
+    if (osidDraft === workspace.osid) return;
+    saveWorkspace({ ...workspace, osid: osidDraft });
+  }
+
+  // Tabla de plantillas PDF (se reutiliza para las incluidas y las del usuario).
+  function pdfTable(rows: PdfTemplate[]) {
+    return (
+      <table className="tpl-table">
+        <thead>
+          <tr>
+            <th>Plantilla</th>
+            <th>Descripcion</th>
+            <th>Tags</th>
+            <th className="ta-right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((t) => {
+            const active = workspace.active_template === t.name;
+            return (
+              <tr key={`${t.name}-${t.builtin}`} className={active ? "tpl-row-active" : ""}>
+                <td>
+                  <div className="tpl-name">
+                    <i className="ti ti-file-type-pdf" />
+                    <span className="tpl-title">{t.title || t.name}</span>
+                    {active && <span className="tpl-badge">Activa</span>}
+                  </div>
+                  <span className="tpl-id">{t.name}</span>
+                </td>
+                <td className="tpl-desc">{t.description || "Plantilla de PDF."}</td>
+                <td>
+                  {t.tags.length > 0 && (
+                    <div className="tag-list">
+                      {t.tags.map((tag) => (
+                        <span key={tag} className="mini-tag">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </td>
+                <td>
+                  <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
+                    {!t.builtin && (
+                      <button
+                        className="btn small"
+                        title="Editar"
+                        onClick={() => setEditing(t.name)}
+                      >
+                        <i className="ti ti-pencil" />
+                      </button>
+                    )}
+                    <button
+                      className="btn small"
+                      title="Duplicar"
+                      onClick={() => duplicate(t.name)}
+                    >
+                      <i className="ti ti-copy" />
+                    </button>
+                    <button
+                      className={`btn small ${active ? "" : "primary"}`}
+                      disabled={active}
+                      onClick={() => applyTemplate(t.name)}
+                    >
+                      {active ? "En uso" : "Usar"}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    );
   }
 
   async function duplicate(name: string) {
@@ -77,6 +178,8 @@ export function TemplateLibrary({ projectId, workspace, onWorkspaceSaved }: Prop
     const matchesTag = !tagFilter || t.tags.includes(tagFilter);
     return matchesQuery && matchesTag;
   });
+  const builtinPdf = filteredPdf.filter((t) => t.builtin);
+  const userPdf = filteredPdf.filter((t) => !t.builtin);
 
   useEffect(() => {
     reload();
@@ -117,6 +220,41 @@ export function TemplateLibrary({ projectId, workspace, onWorkspaceSaved }: Prop
 
       {tab === "pdf" && (
         <>
+          <div className={`card ${examMode ? "tpl-active" : ""}`} style={{ marginTop: 12 }}>
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div className="row" style={{ gap: 8 }}>
+                  <i
+                    className="ti ti-certificate"
+                    style={{ color: "var(--accent)", fontSize: 18 }}
+                  />
+                  <strong>Modo examen OSCP</strong>
+                </div>
+                <p className="muted" style={{ margin: "4px 0 0", maxWidth: 520 }}>
+                  Activa la plantilla OSCP, precarga las secciones del examen, usa severidad
+                  cualitativa sin CVSS y nombra el PDF como OSCP-OS-&lt;OSID&gt;-Exam-Report.pdf.
+                </p>
+              </div>
+              <button
+                className={`btn small ${examMode ? "primary" : ""}`}
+                onClick={() => toggleExamMode(!examMode)}
+              >
+                {examMode ? "Activado" : "Activar"}
+              </button>
+            </div>
+            {examMode && (
+              <div className="field" style={{ maxWidth: 220, marginTop: 12, marginBottom: 0 }}>
+                <label>OSID</label>
+                <input
+                  className="input"
+                  placeholder="XXXXX"
+                  value={osidDraft}
+                  onChange={(e) => setOsidDraft(e.target.value)}
+                  onBlur={commitOsid}
+                />
+              </div>
+            )}
+          </div>
           <div className="field" style={{ maxWidth: 360, marginTop: 12, marginBottom: 8 }}>
             <input
               className="input"
@@ -147,61 +285,29 @@ export function TemplateLibrary({ projectId, workspace, onWorkspaceSaved }: Prop
           {filteredPdf.length === 0 ? (
             <div className="empty">No hay plantillas que coincidan.</div>
           ) : (
-            <div className="card-grid">
-              {filteredPdf.map((t) => {
-                const active = workspace.active_template === t.name;
-                return (
-                  <div key={`${t.name}-${t.builtin}`} className={`card ${active ? "tpl-active" : ""}`}>
-                    <div className="row" style={{ gap: 8, marginBottom: 4 }}>
-                      <i
-                        className="ti ti-file-type-pdf"
-                        style={{ color: "var(--accent)", fontSize: 18 }}
-                      />
-                      <strong>{t.title || t.name}</strong>
-                      {active && (
-                        <span className="sev-badge" style={{ background: "var(--accent)" }}>
-                          Activa
-                        </span>
-                      )}
-                    </div>
-                    <p className="muted" style={{ margin: "0 0 8px", minHeight: 30 }}>
-                      {t.description || "Plantilla de PDF."}
-                    </p>
-                    {t.tags.length > 0 && (
-                      <div className="tag-list" style={{ marginBottom: 10 }}>
-                        {t.tags.map((tag) => (
-                          <span key={tag} className="mini-tag">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div className="row" style={{ justifyContent: "space-between" }}>
-                      <span className="faint" style={{ fontSize: 11 }}>
-                        {t.builtin ? "incluida" : "tu libreria"}
-                      </span>
-                      <div className="row" style={{ gap: 6 }}>
-                        {!t.builtin && (
-                          <button className="btn small" title="Editar" onClick={() => setEditing(t.name)}>
-                            <i className="ti ti-pencil" />
-                          </button>
-                        )}
-                        <button className="btn small" title="Duplicar" onClick={() => duplicate(t.name)}>
-                          <i className="ti ti-copy" />
-                        </button>
-                        <button
-                          className={`btn small ${active ? "" : "primary"}`}
-                          disabled={active}
-                          onClick={() => applyTemplate(t.name)}
-                        >
-                          {active ? "En uso" : "Usar"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <>
+              <div className="tpl-section-head">
+                <h3>Tu libreria</h3>
+                <span className="faint">Plantillas que duplicaste o creaste en este workspace</span>
+              </div>
+              {userPdf.length === 0 ? (
+                <div className="empty">
+                  Aun no tienes plantillas propias. Duplica una incluida para personalizarla.
+                </div>
+              ) : (
+                pdfTable(userPdf)
+              )}
+
+              <div className="tpl-section-head" style={{ marginTop: 22 }}>
+                <h3>Incluidas</h3>
+                <span className="faint">Vienen en el compilado de PuduReport</span>
+              </div>
+              {builtinPdf.length === 0 ? (
+                <div className="empty">Ninguna incluida coincide con el filtro.</div>
+              ) : (
+                pdfTable(builtinPdf)
+              )}
+            </>
           )}
         </>
       )}
@@ -492,7 +598,12 @@ function SnippetForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       </div>
       <div className="field">
         <label>Contenido</label>
-        <textarea className="textarea" value={body} onChange={(e) => setBody(e.target.value)} rows={6} />
+        <textarea
+          className="textarea"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={6}
+        />
       </div>
     </Modal>
   );

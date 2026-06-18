@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
-import type { CvssResult, CvssVersion, Finding, FindingMeta, FindingStatus } from "../lib/types";
+import type {
+  CvssResult,
+  CvssVersion,
+  Finding,
+  FindingMeta,
+  FindingStatus,
+  Severity,
+} from "../lib/types";
 import { FINDING_SECTIONS, joinSections, parseSections } from "../lib/sections";
 import { SEVERITY_COLOR, SEVERITY_LABEL } from "../lib/severity";
 import { Sidebar } from "../components/Sidebar";
@@ -15,15 +22,34 @@ const STATUS_OPTIONS: { value: FindingStatus; label: string }[] = [
   { value: "wontfix", label: "No se corregira" },
 ];
 
+const SEVERITY_OPTIONS: { value: Severity; label: string }[] = [
+  { value: "critical", label: "Critica" },
+  { value: "high", label: "Alta" },
+  { value: "medium", label: "Media" },
+  { value: "low", label: "Baja" },
+  { value: "info", label: "Informativa" },
+];
+
 interface Props {
   projectId: string | null;
   /** Directorio absoluto del proyecto, para adjuntar evidencias. */
   assetBase?: string | null;
+  /** Perfil de certificacion del workspace ("oscp" activa el modo examen). */
+  examProfile?: string;
   onGoToPreview: () => void;
   onPickProject: () => void;
 }
 
-export function FindingEditor({ projectId, assetBase, onGoToPreview, onPickProject }: Props) {
+export function FindingEditor({
+  projectId,
+  assetBase,
+  examProfile,
+  onGoToPreview,
+  onPickProject,
+}: Props) {
+  // En modo examen (OSCP) no se usa CVSS: la severidad es cualitativa y manual,
+  // y se ocultan los campos CVSS/CWE.
+  const examMode = examProfile === "oscp";
   const { guard, notify } = useToast();
   const [findings, setFindings] = useState<Finding[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -195,21 +221,40 @@ export function FindingEditor({ projectId, assetBase, onGoToPreview, onPickProje
           <div className="fieldrow">
             <div>
               <label className="field-label-top">severidad</label>
-              <div
-                className="sev-field"
-                style={{ background: SEVERITY_COLOR[current.meta.severity] }}
-              >
-                {SEVERITY_LABEL[current.meta.severity]}
-                <i className="ti ti-lock" style={{ fontSize: 13 }} />
-              </div>
+              {examMode ? (
+                <select
+                  className="select"
+                  style={{ width: "100%" }}
+                  value={current.meta.severity}
+                  onChange={(e) =>
+                    patchMeta((m) => ({ ...m, severity: e.target.value as Severity }))
+                  }
+                >
+                  {SEVERITY_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div
+                  className="sev-field"
+                  style={{ background: SEVERITY_COLOR[current.meta.severity] }}
+                >
+                  {SEVERITY_LABEL[current.meta.severity]}
+                  <i className="ti ti-lock" style={{ fontSize: 13 }} />
+                </div>
+              )}
             </div>
-            <div>
-              <label className="field-label-top">CVSS {current.meta.cvss_version}</label>
-              <div className="field cvss-field" onClick={() => setCalcOpen(true)}>
-                {current.meta.cvss || "—"}
-                <i className="ti ti-calculator" style={{ color: "var(--accent)" }} />
+            {!examMode && (
+              <div>
+                <label className="field-label-top">CVSS {current.meta.cvss_version}</label>
+                <div className="field cvss-field" onClick={() => setCalcOpen(true)}>
+                  {current.meta.cvss || "—"}
+                  <i className="ti ti-calculator" style={{ color: "var(--accent)" }} />
+                </div>
               </div>
-            </div>
+            )}
             <div>
               <label className="field-label-top">estado</label>
               <select
@@ -227,16 +272,18 @@ export function FindingEditor({ projectId, assetBase, onGoToPreview, onPickProje
                 ))}
               </select>
             </div>
-            <div>
-              <label className="field-label-top">CWE</label>
-              <input
-                className="input"
-                style={{ width: "100%" }}
-                placeholder="CWE-89"
-                value={current.meta.cwe}
-                onChange={(e) => patchMeta((m) => ({ ...m, cwe: e.target.value }))}
-              />
-            </div>
+            {!examMode && (
+              <div>
+                <label className="field-label-top">CWE</label>
+                <input
+                  className="input"
+                  style={{ width: "100%" }}
+                  placeholder="CWE-89"
+                  value={current.meta.cwe}
+                  onChange={(e) => patchMeta((m) => ({ ...m, cwe: e.target.value }))}
+                />
+              </div>
+            )}
           </div>
 
           <div className="field" style={{ marginBottom: 14 }}>

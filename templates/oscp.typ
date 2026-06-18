@@ -1,10 +1,13 @@
 // Plantilla "OSCP Exam Report" de PuduReport.
 //
-// Estructura inspirada en la OSCP-Exam-Report-Template-Markdown de noraj
-// (github.com/noraj, MIT). Reimplementada en Typst; consume el mismo
-// build/data.json que el resto. Llena las secciones (Introduccion, Objetivo,
-// High-Level Summary, Metodologia...) en la pestaña Reporte; cada maquina o
-// vulnerabilidad es un hallazgo (con su IP en "activos afectados").
+// Rediseno fiel al reporte de examen de Offensive Security (plantilla Eisvogel):
+// portada full-bleed de color, headings numerados (1, 1.1, 1.1.1),
+// header/footer con regla, codigo en bloque y tipografia limpia. Reimplementada
+// en Typst; consume el mismo build/data.json que el resto. La marca y los
+// nombres propios de OffSec NO se incrustan: el color y el logo salen del
+// branding del workspace. Cada maquina o vulnerabilidad es un hallazgo (con su
+// IP en "activos afectados"); las secciones (Introduccion, Objetivo,
+// High-Level Summary, Metodologia...) se llenan en la pestaña Reporte.
 
 #let data = json("data.json")
 #let ws = data.workspace
@@ -59,103 +62,117 @@
   text(fill: white, weight: "bold", size: 8pt, upper(text-content)),
 )
 
-// --- Pagina + marca de agua ---
 #let watermark = ws.watermark
-#set page(
-  paper: "a4",
-  margin: (x: 2.2cm, top: 2.4cm, bottom: 2.2cm),
-  background: if watermark.enabled and watermark.text != "" {
-    place(
-      center + horizon,
-      rotate(-45deg, box(text(
-        size: watermark.size * 1pt,
-        fill: rgb(180, 180, 180, int(watermark.opacity * 255)),
-        weight: "bold",
-        watermark.text,
-      ))),
-    )
-  },
-  footer: context [
-    #set text(size: 8pt, fill: gray)
-    OSCP Exam Report #h(1fr) #project.client #h(1fr) #counter(page).display("1 / 1", both: true)
-  ],
-)
+#let report-title = "Offensive Security Certified Professional Exam Report"
+
+// --- Tipografia y headings numerados (estilo examen) ---
 #set text(font: ("Helvetica Neue", "Arial"), size: 10.5pt, lang: "es")
 #set par(justify: true, leading: 0.65em)
-#set heading(numbering: none)
-#show heading.where(level: 1): it => [
-  #set text(size: 15pt, fill: brand, weight: "bold")
-  #block(above: 1.3em, below: 0.5em)[#it]
-]
-#show heading.where(level: 2): it => [
-  #set text(size: 12pt, weight: "bold")
-  #block(above: 1em, below: 0.4em)[#it]
-]
+#set heading(numbering: "1.1")
+#show heading.where(level: 1): it => block(above: 1.4em, below: 0.6em, text(
+  size: 15pt, weight: "bold", fill: luma(20), it,
+))
+#show heading.where(level: 2): it => block(above: 1em, below: 0.4em, text(
+  size: 12pt, weight: "bold", fill: luma(30), it,
+))
+#show heading.where(level: 3): it => block(above: 0.8em, below: 0.3em, text(
+  size: 10.5pt, weight: "bold", fill: luma(45), it,
+))
 
-// --- Portada estilo examen ---
-#set page(footer: none, background: if ws.branding.cover_background != "" {
-  image(ws.branding.cover_background, width: 100%, height: 100%, fit: "cover")
-})
-#block(fill: brand, width: 100%, height: 10pt)
-#v(5cm)
-#align(center)[
-  #if ws.branding.logo_path != "" [#image(ws.branding.logo_path, width: 4.5cm)#v(0.8cm)]
-  #text(size: 13pt, fill: brand, weight: "bold")[Offensive Security Certified Professional]
-  #v(0.2cm)
-  #text(size: 30pt, weight: "bold")[Exam Penetration Test Report]
-  #v(0.3cm)
-  #line(length: 35%, stroke: 1pt + brand)
-]
-#v(1fr)
-#align(center, box(width: 70%)[
-  #grid(
-    columns: (auto, 1fr),
-    row-gutter: 7pt,
-    column-gutter: 14pt,
-    align: (right, left),
-    [*Candidato:*], project.client,
-    [*OSID:*], [—],
-    [*Equipo:*],
-    if project.team.len() > 0 { project.team.map(m => m.name).join(", ") } else [—],
-    [*Fecha:*], [#project.start_date — #project.end_date],
-  )
-])
-#v(2cm)
-#align(center, text(size: 9pt, fill: gray)[
-  Este documento contiene informacion confidencial. Su distribucion esta restringida.
-])
-#pagebreak()
-
-// --- Page para el resto (footer + watermark) ---
-#set page(
-  footer: context [
-    #set text(size: 8pt, fill: gray)
-    OSCP Exam Report #h(1fr) #project.client #h(1fr) #counter(page).display("1 / 1", both: true)
-  ],
-  background: if watermark.enabled and watermark.text != "" {
-    place(
-      center + horizon,
-      rotate(-45deg, box(text(
-        size: watermark.size * 1pt,
-        fill: rgb(180, 180, 180, int(watermark.opacity * 255)),
-        weight: "bold",
-        watermark.text,
-      ))),
-    )
-  },
+// Bloques de codigo: la sintaxis resalta legible sobre fondo claro con borde.
+#show raw.where(block: true): it => block(
+  fill: luma(247),
+  stroke: 0.5pt + luma(215),
+  radius: 3pt,
+  inset: 9pt,
+  width: 100%,
+  text(size: 8.5pt, it),
 )
 
+// Tablas minimalistas (solo lineas horizontales, estilo booktabs).
+#set table(stroke: (_, y) => if y == 0 {
+  (bottom: 0.7pt + luma(120))
+} else {
+  (bottom: 0.4pt + luma(210))
+})
+
+// --- Portada full-bleed de color de marca ---
+#set page(
+  paper: "a4",
+  margin: (x: 2.5cm, top: 2.6cm, bottom: 2.6cm),
+  fill: brand,
+  header: none,
+  footer: none,
+)
+#set text(fill: white)
+
+#if ws.branding.cover_background != "" [
+  #place(top + left, dx: -2.5cm, dy: -2.6cm, image(
+    ws.branding.cover_background, width: 21cm, height: 29.7cm, fit: "cover",
+  ))
+  #place(top + left, dx: -2.5cm, dy: -2.6cm, rect(
+    width: 21cm, height: 29.7cm, fill: rgb(0, 0, 0, int(ws.branding.cover_scrim * 255)),
+  ))
+]
+
+#v(1.5cm)
+#line(length: 100%, stroke: 2pt + white)
+#v(1fr)
+#if ws.branding.logo_path != "" [
+  #image(ws.branding.logo_path, width: 4cm)
+  #v(0.8cm)
+]
+#text(size: 27pt, weight: "bold")[#report-title]
+#v(0.35cm)
+#text(size: 14pt)[#if project.name != "" { project.name } else { "OSCP Exam Report" }]
+#v(1.2cm)
+#text(size: 11.5pt)[
+  #project.client
+  #if ws.osid != "" [ #h(5pt) · #h(5pt) OSID: #ws.osid ]
+  #if project.team.len() > 0 [ #h(5pt) · #h(5pt) #project.team.map(m => m.name).join(", ") ]
+]
+#v(1fr)
+#text(size: 11pt)[#project.start_date #sym.dash.em #project.end_date]
+#pagebreak()
+
+// --- Paginas de contenido: fondo blanco, header/footer con regla y watermark ---
+#set text(fill: black)
+#set page(
+  fill: white,
+  margin: (x: 2.4cm, top: 2.6cm, bottom: 2.4cm),
+  header: context {
+    set text(size: 8pt, fill: luma(110))
+    grid(columns: (1fr, auto), align: (left, right), report-title, project.end_date)
+    v(1pt)
+    line(length: 100%, stroke: 0.5pt + luma(190))
+  },
+  footer: context {
+    line(length: 100%, stroke: 0.5pt + luma(190))
+    v(2pt)
+    set text(size: 8pt, fill: luma(110))
+    grid(columns: (1fr, auto), align: (left, right), project.client, counter(page).display("1"))
+  },
+  background: if watermark.enabled and watermark.text != "" {
+    place(center + horizon, rotate(-45deg, box(text(
+      size: watermark.size * 1pt,
+      fill: rgb(180, 180, 180, int(watermark.opacity * 255)),
+      weight: "bold",
+      watermark.text,
+    ))))
+  },
+)
+#counter(page).update(1)
+
 // --- Indice de contenidos ---
-#outline(title: [Table of Contents], depth: 2, indent: 1em)
+#outline(title: [Table of Contents], depth: 3, indent: 1em)
 #pagebreak()
 
 // --- Resumen de severidades ---
 #let counts = data.severity_counts
-#heading(level: 1)[Resumen de hallazgos]
+#heading(level: 1, numbering: none)[Resumen de hallazgos]
 #table(
   columns: (1fr, 1fr, 1fr, 1fr, 1fr),
   align: center + horizon,
-  stroke: 0.5pt + gray,
   table.header(
     badge("Critica", sev-color.critical),
     badge("Alta", sev-color.high),
@@ -181,9 +198,8 @@
   }
 }
 
-// --- Hallazgos / Objetivos ---
+// --- Hallazgos (cada uno como seccion numerada; el cuerpo anida bajo el) ---
 #pagebreak()
-#heading(level: 1)[Hallazgos]
 #for (i, f) in data.findings.enumerate() {
   let color = sev-color.at(f.severity, default: sev-color.info)
   if i > 0 and ws.branding.findings_page_break { pagebreak() }
@@ -193,7 +209,7 @@
     inset: (left: 10pt),
     stroke: (left: 3pt + color),
   )[
-    #heading(level: 2, str(i + 1) + ". " + f.title)
+    #heading(level: 1, f.title)
     #badge(sev-label.at(f.severity, default: f.severity), color)
     #h(6pt)
     #if f.cvss != "" [

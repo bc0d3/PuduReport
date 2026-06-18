@@ -55,7 +55,7 @@ src-tauri/
     models.rs             tipos serializables compartidos con el frontend
   binaries/               sidecar typst-<target-triple> (gitignored, se baja por release)
   tauri.conf.json         config Tauri (CSP, assetProtocol, bundle, sidecar)
-templates/                plantillas .typ base (corporativo, bug-bounty, infra)
+templates/                plantillas .typ base (pentest, oscp, htb, ejecutivo, documento-libre, retest)
 scripts/fetch-typst.mjs   baja el sidecar de Typst por plataforma
 .github/workflows/        ci.yml (fmt/clippy/lint/tests/build) y release.yml (tags v*)
 ```
