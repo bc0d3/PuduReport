@@ -231,6 +231,16 @@ pub fn create_project(
     Ok((id, meta))
 }
 
+/// Borra un proyecto completo (su carpeta y todo su contenido) del workspace.
+pub fn delete_project(root: &Path, project_id: &str) -> Result<()> {
+    validate_id(project_id)?;
+    let dir = project_dir(root, project_id);
+    if dir.exists() {
+        fs::remove_dir_all(dir)?;
+    }
+    Ok(())
+}
+
 /// Crea un proyecto de ejemplo completo: secciones boilerplate + hallazgos
 /// genericos pero entendibles, listo para generar un PDF de muestra.
 pub fn create_example_project(root: &Path) -> Result<(String, ProjectMeta)> {
@@ -943,6 +953,11 @@ mod tests {
 
         delete_finding(&tmp, &pid, &f.id).unwrap();
         assert_eq!(list_findings(&tmp, &pid).unwrap().len(), 0);
+
+        // Borrar el proyecto elimina su carpeta y lo saca del listado.
+        delete_project(&tmp, &pid).unwrap();
+        assert!(!project_dir(&tmp, &pid).exists());
+        assert_eq!(list_projects(&tmp).unwrap().len(), 0);
 
         let _ = fs::remove_dir_all(&tmp);
     }

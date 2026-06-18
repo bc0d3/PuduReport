@@ -11,11 +11,12 @@ interface Props {
   welcome: boolean;
   onReload: () => Promise<void> | void;
   onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
 type SortKey = "name" | "client" | "project_type" | "end_date" | "finding_count";
 
-export function Projects({ workspace, projects, welcome, onReload, onSelect }: Props) {
+export function Projects({ workspace, projects, welcome, onReload, onSelect, onDelete }: Props) {
   const { guard } = useToast();
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
@@ -112,6 +113,7 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect }: P
                   <th className="sortable" onClick={() => toggleSort("end_date")}>
                     Fecha {sortIcon("end_date")}
                   </th>
+                  <th className="ta-right"></th>
                 </tr>
               </thead>
               <tbody>
@@ -134,12 +136,30 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect }: P
                       </td>
                       <td className="ta-right">{p.finding_count}</td>
                       <td>{p.end_date || "—"}</td>
+                      <td className="ta-right">
+                        <button
+                          className="btn small danger"
+                          title="Eliminar proyecto"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (
+                              window.confirm(
+                                `Eliminar el proyecto "${p.name}" y todos sus hallazgos? Esta accion no se puede deshacer.`,
+                              )
+                            ) {
+                              onDelete(p.id);
+                            }
+                          }}
+                        >
+                          <i className="ti ti-trash" />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={5} style={{ color: "var(--text-muted)" }}>
+                    <td colSpan={6} style={{ color: "var(--text-muted)" }}>
                       Ningun proyecto coincide con la busqueda.
                     </td>
                   </tr>

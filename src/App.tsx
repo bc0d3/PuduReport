@@ -73,6 +73,16 @@ function AppInner() {
     setView("editor");
   }
 
+  async function deleteProjectById(id: string) {
+    const done = await guard(api.deleteProject(id), "Proyecto eliminado");
+    if (done === undefined) return;
+    if (activeProjectId === id) {
+      setActiveProjectId(null);
+      setActiveProject(null);
+    }
+    await loadProjects();
+  }
+
   // Meta del proyecto activo (tipo, plantilla override, osid...).
   useEffect(() => {
     if (!activeProjectId) {
@@ -126,6 +136,7 @@ function AppInner() {
             welcome={view === "inicio"}
             onReload={loadProjects}
             onSelect={selectProject}
+            onDelete={deleteProjectById}
           />
         )}
         {view === "editor" && (

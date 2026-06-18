@@ -266,6 +266,15 @@ fn load_project(state: State<AppState>, id: String) -> Result<ProjectMeta, Strin
     workspace::read_project_meta(&root, &id).map_err(|e| e.to_string())
 }
 
+/// Borra un proyecto completo. Reindexa para quitar sus hallazgos del indice.
+#[tauri::command]
+fn delete_project(state: State<AppState>, id: String) -> Result<(), String> {
+    let root = current_root(&state)?;
+    workspace::delete_project(&root, &id).map_err(|e| e.to_string())?;
+    let _ = db::reindex(&root);
+    Ok(())
+}
+
 #[tauri::command]
 fn save_project(state: State<AppState>, id: String, meta: ProjectMeta) -> Result<(), String> {
     let root = current_root(&state)?;
@@ -693,6 +702,7 @@ pub fn run() {
             create_project,
             create_example_project,
             load_project,
+            delete_project,
             save_project,
             list_findings,
             load_finding,

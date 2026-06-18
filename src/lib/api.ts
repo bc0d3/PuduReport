@@ -75,6 +75,11 @@ export function loadProject(id: string): Promise<ProjectMeta> {
   return invoke("load_project", { id });
 }
 
+/** Borra un proyecto completo (carpeta y contenido). No se puede deshacer. */
+export function deleteProject(id: string): Promise<void> {
+  return invoke("delete_project", { id });
+}
+
 export function saveProject(id: string, meta: ProjectMeta): Promise<void> {
   return invoke("save_project", { id, meta });
 }
