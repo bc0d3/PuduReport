@@ -72,6 +72,83 @@ fn persist_workspace(app: &AppHandle, path: &std::path::Path) -> Result<(), Stri
     Ok(())
 }
 
+const STORE_KEY_RECENTS: &str = "recent_workspaces";
+const MAX_RECENTS: usize = 20;
+
+/// Entrada persistida de un workspace reciente (pantalla de bienvenida).
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct RecentEntry {
+    path: String,
+    name: String,
+}
+
+/// Vista de un workspace reciente para el frontend (incluye si sigue existiendo).
+#[derive(serde::Serialize)]
+struct RecentWorkspace {
+    path: String,
+    name: String,
+    exists: bool,
+}
+
+fn read_recents(app: &AppHandle) -> Vec<RecentEntry> {
+    let Ok(store) = app.store(STORE_FILE) else {
+        return Vec::new();
+    };
+    store
+        .get(STORE_KEY_RECENTS)
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default()
+}
+
+fn write_recents(app: &AppHandle, list: &[RecentEntry]) -> Result<(), String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    store.set(
+        STORE_KEY_RECENTS,
+        serde_json::to_value(list).map_err(|e| e.to_string())?,
+    );
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Mueve un workspace al frente de la lista de recientes (dedup por ruta).
+fn push_recent(app: &AppHandle, path: &std::path::Path, name: &str) {
+    let path_s = path.to_string_lossy().to_string();
+    let mut list = read_recents(app);
+    list.retain(|e| e.path != path_s);
+    list.insert(
+        0,
+        RecentEntry {
+            path: path_s,
+            name: name.to_string(),
+        },
+    );
+    list.truncate(MAX_RECENTS);
+    let _ = write_recents(app, &list);
+}
+
+/// Lista los workspaces recientes (mas reciente primero) para la bienvenida.
+#[tauri::command]
+fn list_recent_workspaces(app: AppHandle) -> Result<Vec<RecentWorkspace>, String> {
+    Ok(read_recents(&app)
+        .into_iter()
+        .map(|e| RecentWorkspace {
+            exists: std::path::Path::new(&e.path)
+                .join("workspace.yaml")
+                .exists(),
+            path: e.path,
+            name: e.name,
+        })
+        .collect())
+}
+
+/// Quita un workspace de la lista de recientes (no borra nada del disco).
+#[tauri::command]
+fn remove_recent_workspace(app: AppHandle, path: String) -> Result<(), String> {
+    let mut list = read_recents(&app);
+    list.retain(|e| e.path != path);
+    write_recents(&app, &list)
+}
+
 // ---------------------------------------------------------------------------
 // Workspace
 // ---------------------------------------------------------------------------
@@ -106,6 +183,7 @@ fn open_workspace(
     let meta = workspace::read_workspace_meta(&root).map_err(|e| e.to_string())?;
     *state.workspace.lock().map_err(|_| "estado bloqueado")? = Some(root.clone());
     persist_workspace(&app, &root)?;
+    push_recent(&app, &root, &meta.name);
     allow_workspace_assets(&app, &root);
     // Reindexar en segundo plano logico (no critico si falla).
     let _ = db::reindex(&root);
@@ -123,6 +201,7 @@ fn create_workspace(
     let meta = workspace::create_workspace(&root, &name).map_err(|e| e.to_string())?;
     *state.workspace.lock().map_err(|_| "estado bloqueado")? = Some(root.clone());
     persist_workspace(&app, &root)?;
+    push_recent(&app, &root, &meta.name);
     allow_workspace_assets(&app, &root);
     Ok(meta)
 }
@@ -148,13 +227,17 @@ fn create_project(
     state: State<AppState>,
     name: String,
     client: String,
+    project_type: String,
 ) -> Result<ProjectSummary, String> {
     let root = current_root(&state)?;
-    let (id, meta) = workspace::create_project(&root, &name, &client).map_err(|e| e.to_string())?;
+    let (id, meta) = workspace::create_project(&root, &name, &client, &project_type)
+        .map_err(|e| e.to_string())?;
     Ok(ProjectSummary {
         id,
         name: meta.name,
         client: meta.client,
+        project_type: meta.project_type,
+        end_date: meta.end_date,
         finding_count: 0,
     })
 }
@@ -171,6 +254,8 @@ fn create_example_project(state: State<AppState>) -> Result<ProjectSummary, Stri
         id,
         name: meta.name,
         client: meta.client,
+        project_type: meta.project_type,
+        end_date: meta.end_date,
         finding_count,
     })
 }
@@ -502,7 +587,11 @@ fn first_comment(path: &std::path::Path) -> String {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-async fn generate_pdf(app: AppHandle, project_id: String) -> Result<String, String> {
+async fn generate_pdf(
+    app: AppHandle,
+    project_id: String,
+    also_executive: bool,
+) -> Result<Vec<String>, String> {
     // Resolver datos fuera del hilo bloqueante.
     let root = {
         let state = app.state::<AppState>();
@@ -512,14 +601,17 @@ async fn generate_pdf(app: AppHandle, project_id: String) -> Result<String, Stri
     let typst_bin = pdf::resolve_typst().map_err(|e| e.to_string())?;
 
     // La compilacion es bloqueante: ejecutarla en un hilo aparte.
-    let path = tauri::async_runtime::spawn_blocking(move || {
-        pdf::generate_pdf(&root, &project_id, &templates, &typst_bin)
+    let paths = tauri::async_runtime::spawn_blocking(move || {
+        pdf::generate_pdf(&root, &project_id, &templates, &typst_bin, also_executive)
     })
     .await
     .map_err(|e| e.to_string())?
     .map_err(|e| e.to_string())?;
 
-    Ok(path.to_string_lossy().to_string())
+    Ok(paths
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect())
 }
 
 /// Renderiza el PDF a imagenes PNG (data URLs) para la vista previa embebida.
@@ -578,6 +670,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             pick_workspace,
             get_stored_workspace,
+            list_recent_workspaces,
+            remove_recent_workspace,
             open_workspace,
             create_workspace,
             save_workspace_meta,

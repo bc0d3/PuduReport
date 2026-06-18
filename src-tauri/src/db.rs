@@ -119,7 +119,7 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("pudu-db-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         workspace::create_workspace(&tmp, "WS").unwrap();
-        let (pid, _) = workspace::create_project(&tmp, "Web", "ACME").unwrap();
+        let (pid, _) = workspace::create_project(&tmp, "Web", "ACME", "pentest").unwrap();
         workspace::create_finding(&tmp, &pid, "SQL Injection en login").unwrap();
 
         reindex(&tmp).unwrap();

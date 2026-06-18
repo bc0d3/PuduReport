@@ -12,6 +12,8 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
   const [pages, setPages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [pdfPath, setPdfPath] = useState<string | null>(null);
+  const [execPath, setExecPath] = useState<string | null>(null);
+  const [alsoExec, setAlsoExec] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!projectId) return;
@@ -27,8 +29,11 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
 
   async function handleExport() {
     if (!projectId) return;
-    const path = await guard(api.generatePdf(projectId), "PDF exportado");
-    if (path) setPdfPath(path);
+    const paths = await guard(api.generatePdf(projectId, alsoExec), "PDF exportado");
+    if (paths) {
+      setPdfPath(paths[0] ?? null);
+      setExecPath(paths[1] ?? null);
+    }
   }
 
   if (!projectId) {
@@ -55,6 +60,14 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
           <p className="sub">Se regenera con el contenido actual del proyecto.</p>
         </div>
         <div className="row" style={{ gap: 8 }}>
+          <label className="row" style={{ gap: 6, fontSize: 12, color: "var(--text-secondary)" }}>
+            <input
+              type="checkbox"
+              checked={alsoExec}
+              onChange={(e) => setAlsoExec(e.target.checked)}
+            />
+            Tambien informe ejecutivo
+          </label>
           <button className="btn" onClick={refresh} disabled={loading}>
             <i className={`ti ${loading ? "ti-loader-2" : "ti-refresh"}`} />
             {loading ? "Generando..." : "Actualizar"}
@@ -74,6 +87,12 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
                 Abrir carpeta
               </button>
             </>
+          )}
+          {execPath && (
+            <button className="btn" onClick={() => guard(api.openPath(execPath))}>
+              <i className="ti ti-presentation" />
+              Abrir ejecutivo
+            </button>
           )}
         </div>
       </div>

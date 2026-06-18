@@ -639,29 +639,34 @@ i.ti {
   overflow: hidden;
 }
 .rail {
-  width: 56px;
+  width: 80px;
   flex-shrink: 0;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 10px 0;
-  gap: 4px;
+  padding: 10px 6px;
+  gap: 3px;
 }
 .rail-btn {
-  width: 40px;
-  height: 40px;
+  width: 100%;
   border: none;
   background: transparent;
   border-radius: var(--radius-md, 8px);
   color: var(--text-muted);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 3px;
+  padding: 7px 2px;
+  font-size: 10px;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
 }
 .rail-btn i {
-  font-size: 20px;
+  font-size: 19px;
 }
 .rail-btn:hover {
   background: var(--bg-subtle);
@@ -748,6 +753,174 @@ i.ti {
   font-size: 10px;
 }
 
+/* Pantalla de bienvenida (launcher estilo IDE) */
+.welcome {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  height: 100vh;
+  background: var(--bg-app);
+}
+.welcome-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px 14px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+}
+.welcome-brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 8px 18px;
+}
+.welcome-brand > i {
+  font-size: 26px;
+  color: var(--accent);
+}
+.welcome-brand-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.welcome-brand-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.welcome-nav {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.welcome-nav:hover {
+  background: var(--bg-subtle);
+}
+.welcome-nav.on {
+  background: var(--accent-bg);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.welcome-nav i {
+  font-size: 17px;
+}
+.welcome-side-foot {
+  margin-top: auto;
+}
+.welcome-main {
+  padding: 24px 28px;
+  overflow-y: auto;
+}
+.welcome-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+.welcome-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 38px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+}
+.welcome-search input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+.welcome-list {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+}
+.welcome-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.welcome-item:hover {
+  background: var(--bg-subtle);
+}
+.welcome-item.missing {
+  cursor: default;
+  opacity: 0.5;
+}
+.welcome-avatar {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 16px;
+}
+.welcome-item-text {
+  flex: 1;
+  min-width: 0;
+}
+.welcome-item-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.welcome-item-path {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.welcome-missing-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--sev-high);
+}
+.welcome-remove {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  padding: 4px;
+  border-radius: 4px;
+}
+.welcome-item:hover .welcome-remove {
+  opacity: 1;
+}
+.welcome-remove:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
 /* Tabla de plantillas PDF (incluidas / libreria del usuario) */
 .tpl-section-head {
   display: flex;
@@ -781,6 +954,14 @@ i.ti {
 }
 .tpl-table th.ta-right {
   text-align: right;
+}
+.tpl-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.tpl-table th.sortable:hover {
+  color: var(--text-secondary);
 }
 .tpl-table td {
   padding: 10px 12px;

@@ -9,6 +9,7 @@ import type {
   PdfTemplate,
   ProjectMeta,
   ProjectSummary,
+  RecentWorkspace,
   Snippet,
   WorkspaceMeta,
 } from "./types";
@@ -23,6 +24,16 @@ export function pickWorkspace(): Promise<string | null> {
 /** Ruta del ultimo workspace abierto (persistida en tauri-plugin-store). */
 export function getStoredWorkspace(): Promise<string | null> {
   return invoke("get_stored_workspace");
+}
+
+/** Workspaces recientes para la pantalla de bienvenida (mas reciente primero). */
+export function listRecentWorkspaces(): Promise<RecentWorkspace[]> {
+  return invoke("list_recent_workspaces");
+}
+
+/** Quita un workspace de recientes (no borra del disco). */
+export function removeRecentWorkspace(path: string): Promise<void> {
+  return invoke("remove_recent_workspace", { path });
 }
 
 /** Abre un workspace existente en la ruta dada. */
@@ -45,8 +56,12 @@ export function listProjects(): Promise<ProjectSummary[]> {
   return invoke("list_projects");
 }
 
-export function createProject(name: string, client: string): Promise<ProjectSummary> {
-  return invoke("create_project", { name, client });
+export function createProject(
+  name: string,
+  client: string,
+  projectType: string,
+): Promise<ProjectSummary> {
+  return invoke("create_project", { name, client, projectType });
 }
 
 /** Crea un proyecto de ejemplo completo (secciones + hallazgos demo). */
@@ -154,9 +169,13 @@ export function saveTemplateSource(name: string, content: string): Promise<void>
 
 // --- PDF ---
 
-/** Compila el PDF del proyecto y devuelve la ruta del archivo generado. */
-export function generatePdf(projectId: string): Promise<string> {
-  return invoke("generate_pdf", { projectId });
+/**
+ * Compila el PDF del proyecto. Si alsoExecutive es true y la plantilla no es ya
+ * la ejecutiva, genera ademas un segundo PDF ejecutivo. Devuelve las rutas
+ * producidas (principal primero).
+ */
+export function generatePdf(projectId: string, alsoExecutive = false): Promise<string[]> {
+  return invoke("generate_pdf", { projectId, alsoExecutive });
 }
 
 /** Renderiza el PDF a imagenes PNG (data URLs) para la vista previa embebida. */

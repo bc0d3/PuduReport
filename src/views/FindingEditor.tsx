@@ -10,6 +10,7 @@ import type {
 } from "../lib/types";
 import { FINDING_SECTIONS, joinSections, parseSections } from "../lib/sections";
 import { SEVERITY_COLOR, SEVERITY_LABEL } from "../lib/severity";
+import { typeInfo } from "../lib/projectTypes";
 import { Sidebar } from "../components/Sidebar";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { CvssCalculator } from "../components/CvssCalculator";
@@ -34,8 +35,8 @@ interface Props {
   projectId: string | null;
   /** Directorio absoluto del proyecto, para adjuntar evidencias. */
   assetBase?: string | null;
-  /** Perfil de certificacion del workspace ("oscp" activa el modo examen). */
-  examProfile?: string;
+  /** Tipo del proyecto activo (examenes activan el modo cualitativo). */
+  projectType?: string;
   onGoToPreview: () => void;
   onPickProject: () => void;
 }
@@ -43,13 +44,13 @@ interface Props {
 export function FindingEditor({
   projectId,
   assetBase,
-  examProfile,
+  projectType,
   onGoToPreview,
   onPickProject,
 }: Props) {
-  // En modo examen (OSCP) no se usa CVSS: la severidad es cualitativa y manual,
+  // En los tipos de examen no se usa CVSS: la severidad es cualitativa y manual,
   // y se ocultan los campos CVSS/CWE.
-  const examMode = examProfile === "oscp";
+  const examMode = typeInfo(projectType).exam;
   const { guard, notify } = useToast();
   const [findings, setFindings] = useState<Finding[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -151,8 +152,8 @@ export function FindingEditor({
 
   async function handleExport() {
     if (!projectId) return;
-    const path = await guard(api.generatePdf(projectId), "PDF generado");
-    if (path) onGoToPreview();
+    const paths = await guard(api.generatePdf(projectId), "PDF generado");
+    if (paths) onGoToPreview();
   }
 
   function applyCvss(result: CvssResult) {
@@ -202,6 +203,24 @@ export function FindingEditor({
       />
       {current ? (
         <div className="editor">
+          {!typeInfo(projectType).usesFindings && (
+            <div
+              className="row"
+              style={{
+                gap: 8,
+                padding: "8px 12px",
+                marginBottom: 14,
+                borderRadius: 6,
+                background: "var(--accent-bg)",
+                color: "var(--text-secondary)",
+                fontSize: 12,
+              }}
+            >
+              <i className="ti ti-info-circle" style={{ color: "var(--accent)" }} />
+              Este tipo de proyecto ({typeInfo(projectType).label}) no incluye la tabla de hallazgos
+              en el PDF. El contenido va en la pestaña Reporte.
+            </div>
+          )}
           <div
             className="row"
             style={{ justifyContent: "space-between", marginBottom: 14, alignItems: "flex-start" }}

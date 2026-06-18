@@ -145,6 +145,47 @@
   #list(..project.scope.map(s => [#raw(s)]))
 ]
 
+// --- Resumen de severidades (solo si hay hallazgos) ---
+// Cuando este informe se genera como salida ejecutiva de un pentest, muestra los
+// conteos por severidad (no el detalle). En un ejecutivo puro, no hay hallazgos
+// y esta seccion no aparece.
+#let counts = data.severity_counts
+#let total = counts.critical + counts.high + counts.medium + counts.low + counts.info
+#if total > 0 {
+  let sev-color = (
+    critical: rgb("#a32d2d"),
+    high: rgb("#c2410c"),
+    medium: rgb("#ba7517"),
+    low: rgb("#639922"),
+    info: rgb("#78716c"),
+  )
+  let badge(label, fill-color) = box(
+    fill: fill-color,
+    inset: (x: 7pt, y: 3pt),
+    radius: 3pt,
+    text(fill: white, weight: "bold", size: 8pt, upper(label)),
+  )
+  v(0.5cm)
+  heading(numbering: none)[Resumen de severidades]
+  table(
+    columns: (1fr, 1fr, 1fr, 1fr, 1fr),
+    align: center + horizon,
+    stroke: 0.5pt + gray,
+    table.header(
+      badge("Critica", sev-color.critical),
+      badge("Alta", sev-color.high),
+      badge("Media", sev-color.medium),
+      badge("Baja", sev-color.low),
+      badge("Info", sev-color.info),
+    ),
+    text(weight: "bold", str(counts.critical)),
+    text(weight: "bold", str(counts.high)),
+    text(weight: "bold", str(counts.medium)),
+    text(weight: "bold", str(counts.low)),
+    text(weight: "bold", str(counts.info)),
+  )
+}
+
 // --- Secciones de prosa (el contenido del informe) ---
 #for section in project.sections {
   if section.body.trim() != "" {

@@ -11,7 +11,7 @@ use std::process::Command;
 use serde::Serialize;
 
 use crate::markdown;
-use crate::models::{Branding, Severity, TeamMember, Watermark, WorkspaceMeta};
+use crate::models::{Branding, ProjectMeta, Severity, TeamMember, Watermark};
 use crate::workspace;
 
 #[derive(Debug, thiserror::Error)]
@@ -47,16 +47,16 @@ struct WorkspaceData {
     name: String,
     branding: Branding,
     watermark: Watermark,
-    /// Perfil de certificacion activo ("" o "oscp"). Lo consume la plantilla.
-    exam_profile: String,
-    /// OSID del candidato (modo examen). Va en la portada.
-    osid: String,
 }
 
 #[derive(Serialize)]
 struct ProjectData {
     name: String,
     client: String,
+    /// Tipo de proyecto. Lo puede consumir la plantilla.
+    project_type: String,
+    /// OSID del candidato (tipos de examen). Va en la portada.
+    osid: String,
     start_date: String,
     end_date: String,
     scope: Vec<String>,
@@ -177,12 +177,12 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
             name: ws.name,
             branding: ws.branding,
             watermark: ws.watermark,
-            exam_profile: ws.exam_profile,
-            osid: ws.osid,
         },
         project: ProjectData {
             name: project.name,
             client: project.client,
+            project_type: project.project_type,
+            osid: project.osid,
             start_date: project.start_date,
             end_date: project.end_date,
             scope: project.scope,
@@ -242,6 +242,7 @@ fn prepare_build(
     root: &Path,
     project_id: &str,
     templates_dir: &Path,
+    template_name: &str,
 ) -> Result<(PathBuf, PathBuf)> {
     let data = build_data(root, project_id)?;
     let build_dir = root.join(project_id).join("build");
@@ -250,8 +251,7 @@ fn prepare_build(
     let json = serde_json::to_string_pretty(&data)?;
     std::fs::write(build_dir.join("data.json"), json)?;
 
-    let ws = workspace::read_workspace_meta(root)?;
-    let template = resolve_template(root, templates_dir, &ws.active_template)?;
+    let template = resolve_template(root, templates_dir, template_name)?;
     let report_typ = build_dir.join("report.typ");
     std::fs::copy(&template, &report_typ)?;
 
@@ -316,27 +316,52 @@ fn sanitize_osid(osid: &str) -> String {
     }
 }
 
-/// Nombre del PDF generado. En modo examen sigue la convencion de submission de
-/// OffSec (OSCP-OS-<OSID>-Exam-Report.pdf); fuera de examen usa el id del proyecto.
-fn report_filename(ws: &WorkspaceMeta, project_id: &str) -> String {
-    match ws.exam_profile.as_str() {
-        "oscp" => format!("OSCP-OS-{}-Exam-Report.pdf", sanitize_osid(&ws.osid)),
+/// Plantilla .typ efectiva del proyecto: el override si existe, si no la del tipo.
+fn effective_template(project: &ProjectMeta) -> String {
+    if project.template_override.is_empty() {
+        crate::models::template_for_type(&project.project_type).to_string()
+    } else {
+        project.template_override.clone()
+    }
+}
+
+/// Nombre del PDF generado. Los tipos de examen siguen la convencion de
+/// submission (OSCP-OS-<OSID>-Exam-Report.pdf); el resto usa el id del proyecto.
+fn report_filename(project: &ProjectMeta, project_id: &str) -> String {
+    match project.project_type.as_str() {
+        "oscp" => format!("OSCP-OS-{}-Exam-Report.pdf", sanitize_osid(&project.osid)),
+        "htb" => format!("HTB-{}-Exam-Report.pdf", sanitize_osid(&project.osid)),
         _ => format!("{project_id}.pdf"),
     }
 }
 
-/// Genera el PDF del proyecto y devuelve la ruta del archivo producido.
+/// Genera el PDF del proyecto. Si `also_executive` es true y la plantilla no es
+/// ya la ejecutiva, genera ademas un segundo PDF con la plantilla ejecutiva a
+/// partir de los mismos datos. Devuelve las rutas producidas (principal primero).
 pub fn generate_pdf(
     root: &Path,
     project_id: &str,
     templates_dir: &Path,
     typst_bin: &Path,
-) -> Result<PathBuf> {
-    let (build_dir, report_typ) = prepare_build(root, project_id, templates_dir)?;
-    let ws = workspace::read_workspace_meta(root)?;
-    let pdf_path = build_dir.join(report_filename(&ws, project_id));
-    run_typst(typst_bin, root, &report_typ, &pdf_path, None)?;
-    Ok(pdf_path)
+    also_executive: bool,
+) -> Result<Vec<PathBuf>> {
+    let project = workspace::read_project_meta(root, project_id)?;
+    let template = effective_template(&project);
+    let (build_dir, report_typ) = prepare_build(root, project_id, templates_dir, &template)?;
+    let primary = build_dir.join(report_filename(&project, project_id));
+    run_typst(typst_bin, root, &report_typ, &primary, None)?;
+    let mut out = vec![primary];
+
+    if also_executive && template != "ejecutivo" {
+        // Reutiliza el data.json ya escrito; solo cambia la plantilla.
+        let exec_src = resolve_template(root, templates_dir, "ejecutivo")?;
+        let exec_typ = build_dir.join("report-ejecutivo.typ");
+        std::fs::copy(&exec_src, &exec_typ)?;
+        let exec_pdf = build_dir.join(format!("{project_id}-ejecutivo.pdf"));
+        run_typst(typst_bin, root, &exec_typ, &exec_pdf, None)?;
+        out.push(exec_pdf);
+    }
+    Ok(out)
 }
 
 /// Renderiza el PDF a PNG por pagina y los devuelve como data URLs base64,
@@ -349,7 +374,9 @@ pub fn preview_pdf(
 ) -> Result<Vec<String>> {
     use base64::Engine;
 
-    let (build_dir, report_typ) = prepare_build(root, project_id, templates_dir)?;
+    let project = workspace::read_project_meta(root, project_id)?;
+    let template = effective_template(&project);
+    let (build_dir, report_typ) = prepare_build(root, project_id, templates_dir, &template)?;
     let preview_dir = build_dir.join("preview");
     std::fs::create_dir_all(&preview_dir)?;
     // Limpiar PNGs previos para no mezclar paginas viejas.
@@ -391,7 +418,7 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("pudu-pdf-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         workspace::create_workspace(&tmp, "WS").unwrap();
-        let (pid, _) = workspace::create_project(&tmp, "Web", "ACME").unwrap();
+        let (pid, _) = workspace::create_project(&tmp, "Web", "ACME", "pentest").unwrap();
         workspace::create_finding(&tmp, &pid, "SQLi").unwrap();
 
         let data = build_data(&tmp, &pid).unwrap();
@@ -427,7 +454,7 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("pudu-pdfgen-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         workspace::create_workspace(&tmp, "WS").unwrap();
-        let (pid, _) = workspace::create_project(&tmp, "Pentest", "ACME").unwrap();
+        let (pid, _) = workspace::create_project(&tmp, "Pentest", "ACME", "pentest").unwrap();
 
         let f = workspace::create_finding(&tmp, &pid, "SQL Injection en login").unwrap();
         let mut finding = f;
@@ -438,23 +465,35 @@ mod tests {
                 .into();
         workspace::write_finding(&tmp, &pid, &finding).unwrap();
 
-        for template in [
+        // Cada tipo de proyecto debe compilar con su plantilla derivada.
+        for project_type in [
             "pentest",
+            "redteam",
             "ejecutivo",
-            "documento-libre",
+            "documento",
             "retest",
             "oscp",
             "htb",
         ] {
-            let mut ws = workspace::read_workspace_meta(&tmp).unwrap();
-            ws.active_template = template.to_string();
-            workspace::write_workspace_meta(&tmp, &ws).unwrap();
+            let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();
+            project.project_type = project_type.to_string();
+            workspace::write_project_meta(&tmp, &pid, &project).unwrap();
 
-            let pdf = generate_pdf(&tmp, &pid, &templates, &typst_bin)
-                .unwrap_or_else(|e| panic!("fallo {template}: {e}"));
-            let bytes = std::fs::metadata(&pdf).unwrap().len();
-            assert!(bytes > 1000, "PDF de {template} sospechosamente pequeno");
+            let pdfs = generate_pdf(&tmp, &pid, &templates, &typst_bin, false)
+                .unwrap_or_else(|e| panic!("fallo {project_type}: {e}"));
+            let bytes = std::fs::metadata(&pdfs[0]).unwrap().len();
+            assert!(
+                bytes > 1000,
+                "PDF de {project_type} sospechosamente pequeno"
+            );
         }
+
+        // Salida ejecutiva secundaria desde un proyecto de pentest.
+        let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();
+        project.project_type = "pentest".to_string();
+        workspace::write_project_meta(&tmp, &pid, &project).unwrap();
+        let pdfs = generate_pdf(&tmp, &pid, &templates, &typst_bin, true).unwrap();
+        assert_eq!(pdfs.len(), 2, "deberia generar principal + ejecutivo");
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

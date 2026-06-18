@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as api from "../lib/api";
-import type { FindingTemplate, PdfTemplate, Snippet, WorkspaceMeta } from "../lib/types";
+import type { FindingTemplate, PdfTemplate, ProjectMeta, Snippet } from "../lib/types";
+import { typeInfo } from "../lib/projectTypes";
 import { SeverityBadge } from "../components/Severity";
 import { Modal } from "../components/Modal";
 import { MarkdownEditor } from "../components/MarkdownEditor";
@@ -8,8 +9,9 @@ import { useToast } from "../components/Toast";
 
 interface Props {
   projectId: string | null;
-  workspace: WorkspaceMeta;
-  onWorkspaceSaved: (meta: WorkspaceMeta) => void;
+  /** Proyecto activo: define la plantilla por su tipo + override. */
+  project: ProjectMeta | null;
+  onProjectSaved: (meta: ProjectMeta) => void;
 }
 
 type Tab = "pdf" | "findings" | "snippets";
@@ -27,7 +29,7 @@ function extractVars(...texts: string[]): string[] {
   return [...found];
 }
 
-export function TemplateLibrary({ projectId, workspace, onWorkspaceSaved }: Props) {
+export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
   const { guard, notify } = useToast();
   const [tab, setTab] = useState<Tab>("pdf");
   const [templates, setTemplates] = useState<FindingTemplate[]>([]);
@@ -40,11 +42,9 @@ export function TemplateLibrary({ projectId, workspace, onWorkspaceSaved }: Prop
   const [creatingTemplate, setCreatingTemplate] = useState(false);
   const [creatingSnippet, setCreatingSnippet] = useState(false);
 
-  const examMode = workspace.exam_profile === "oscp";
-  const [osidDraft, setOsidDraft] = useState(workspace.osid ?? "");
-  useEffect(() => {
-    setOsidDraft(workspace.osid ?? "");
-  }, [workspace.osid]);
+  // Plantilla del tipo del proyecto y la efectiva (override si existe).
+  const typeTemplate = project ? typeInfo(project.project_type).template : "";
+  const effectiveTemplate = project ? project.template_override || typeTemplate : "";
 
   const reload = useCallback(async () => {
     const [t, s, p] = await Promise.all([
@@ -57,33 +57,16 @@ export function TemplateLibrary({ projectId, workspace, onWorkspaceSaved }: Prop
     if (p) setPdfTemplates(p);
   }, [guard]);
 
+  // Fija la plantilla del proyecto. Si coincide con la del tipo, limpia el
+  // override para que el proyecto siga al tipo; si no, guarda el override.
   async function applyTemplate(name: string) {
-    const next = { ...workspace, active_template: name };
-    const done = await guard(api.saveWorkspaceMeta(next), `Plantilla activa: ${name}`);
-    if (done !== undefined) onWorkspaceSaved(next);
-  }
-
-  async function saveWorkspace(next: WorkspaceMeta, message?: string) {
-    const done = await guard(api.saveWorkspaceMeta(next), message);
-    if (done !== undefined) onWorkspaceSaved(next);
-  }
-
-  // Al activar el modo examen tambien se fija la plantilla oscp, para que la
-  // severidad manual del editor y el diseno del PDF queden alineados.
-  function toggleExamMode(on: boolean) {
-    saveWorkspace(
-      {
-        ...workspace,
-        exam_profile: on ? "oscp" : "",
-        active_template: on ? "oscp" : workspace.active_template,
-      },
-      on ? "Modo examen OSCP activado" : "Modo examen desactivado",
-    );
-  }
-
-  function commitOsid() {
-    if (osidDraft === workspace.osid) return;
-    saveWorkspace({ ...workspace, osid: osidDraft });
+    if (!projectId || !project) return;
+    const next: ProjectMeta = {
+      ...project,
+      template_override: name === typeTemplate ? "" : name,
+    };
+    const done = await guard(api.saveProject(projectId, next), `Plantilla: ${name}`);
+    if (done !== undefined) onProjectSaved(next);
   }
 
   // Tabla de plantillas PDF (se reutiliza para las incluidas y las del usuario).
@@ -100,7 +83,7 @@ export function TemplateLibrary({ projectId, workspace, onWorkspaceSaved }: Prop
         </thead>
         <tbody>
           {rows.map((t) => {
-            const active = workspace.active_template === t.name;
+            const active = effectiveTemplate === t.name;
             return (
               <tr key={`${t.name}-${t.builtin}`} className={active ? "tpl-row-active" : ""}>
                 <td>
@@ -220,42 +203,20 @@ export function TemplateLibrary({ projectId, workspace, onWorkspaceSaved }: Prop
 
       {tab === "pdf" && (
         <>
-          <div className={`card ${examMode ? "tpl-active" : ""}`} style={{ marginTop: 12 }}>
-            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div className="row" style={{ gap: 8 }}>
-                  <i
-                    className="ti ti-certificate"
-                    style={{ color: "var(--accent)", fontSize: 18 }}
-                  />
-                  <strong>Modo examen OSCP</strong>
-                </div>
-                <p className="muted" style={{ margin: "4px 0 0", maxWidth: 520 }}>
-                  Activa la plantilla OSCP, precarga las secciones del examen, usa severidad
-                  cualitativa sin CVSS y nombra el PDF como OSCP-OS-&lt;OSID&gt;-Exam-Report.pdf.
-                </p>
-              </div>
-              <button
-                className={`btn small ${examMode ? "primary" : ""}`}
-                onClick={() => toggleExamMode(!examMode)}
-              >
-                {examMode ? "Activado" : "Activar"}
-              </button>
-            </div>
-            {examMode && (
-              <div className="field" style={{ maxWidth: 220, marginTop: 12, marginBottom: 0 }}>
-                <label>OSID</label>
-                <input
-                  className="input"
-                  placeholder="XXXXX"
-                  value={osidDraft}
-                  onChange={(e) => setOsidDraft(e.target.value)}
-                  onBlur={commitOsid}
-                />
-              </div>
-            )}
-          </div>
-          <div className="field" style={{ maxWidth: 360, marginTop: 12, marginBottom: 8 }}>
+          {project ? (
+            <p className="muted" style={{ marginTop: 12, marginBottom: 4 }}>
+              Plantilla de <strong>{project.name}</strong> (tipo{" "}
+              {typeInfo(project.project_type).label}).
+              {project.template_override
+                ? " Usas un override manual; vuelve a la del tipo eligiendola de nuevo."
+                : " Sigue la plantilla del tipo. Elige otra para cambiarla solo en este proyecto."}
+            </p>
+          ) : (
+            <p className="muted" style={{ marginTop: 12, marginBottom: 4 }}>
+              Selecciona un proyecto para asignarle una plantilla.
+            </p>
+          )}
+          <div className="field" style={{ maxWidth: 360, marginTop: 8, marginBottom: 8 }}>
             <input
               className="input"
               placeholder="Buscar por nombre, descripcion o tag..."

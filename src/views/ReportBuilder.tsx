@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import type { Finding, ProjectMeta, Severity, WorkspaceMeta } from "../lib/types";
 import { SEVERITY_LABEL, SEVERITY_ORDER, SEVERITY_COLOR } from "../lib/severity";
+import { typeInfo } from "../lib/projectTypes";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { useToast } from "../components/Toast";
 
@@ -63,8 +64,8 @@ export function ReportBuilder({ projectId, assetBase, onGoToPreview, onPickProje
 
   async function handleExport() {
     if (!projectId) return;
-    const path = await guard(api.generatePdf(projectId), "PDF generado");
-    if (path) onGoToPreview();
+    const paths = await guard(api.generatePdf(projectId), "PDF generado");
+    if (paths) onGoToPreview();
   }
 
   function reorderSections(from: number, to: number) {
@@ -268,6 +269,17 @@ function ProjectDataForm({
             onChange={(e) => patch((p) => ({ ...p, end_date: e.target.value }))}
           />
         </div>
+        {typeInfo(project.project_type).exam && (
+          <div className="field">
+            <label>OSID</label>
+            <input
+              className="input"
+              placeholder="XXXXX"
+              value={project.osid}
+              onChange={(e) => patch((p) => ({ ...p, osid: e.target.value }))}
+            />
+          </div>
+        )}
       </div>
       <div className="field full">
         <label>Alcance</label>
@@ -276,7 +288,9 @@ function ProjectDataForm({
             <span className="tag" key={`${s}-${i}`}>
               {s}
               <button
-                onClick={() => patch((p) => ({ ...p, scope: p.scope.filter((_, idx) => idx !== i) }))}
+                onClick={() =>
+                  patch((p) => ({ ...p, scope: p.scope.filter((_, idx) => idx !== i) }))
+                }
               >
                 <i className="ti ti-x" />
               </button>

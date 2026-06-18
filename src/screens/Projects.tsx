@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import * as api from "../lib/api";
 import type { ProjectSummary, WorkspaceMeta } from "../lib/types";
+import { PROJECT_TYPES, typeInfo } from "../lib/projectTypes";
 import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toast";
 
@@ -12,9 +13,14 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
+type SortKey = "name" | "client" | "project_type" | "end_date" | "finding_count";
+
 export function Projects({ workspace, projects, welcome, onReload, onSelect }: Props) {
   const { guard } = useToast();
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("client");
+  const [sortDir, setSortDir] = useState<1 | -1>(1);
 
   async function handleExample() {
     const summary = await guard(api.createExampleProject(), "Proyecto de ejemplo creado");
@@ -22,6 +28,36 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect }: P
       await onReload();
       onSelect(summary.id);
     }
+  }
+
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 1 ? -1 : 1));
+    } else {
+      setSortKey(key);
+      setSortDir(1);
+    }
+  }
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = projects.filter(
+      (p) => q === "" || p.name.toLowerCase().includes(q) || p.client.toLowerCase().includes(q),
+    );
+    const val = (p: ProjectSummary): string | number =>
+      sortKey === "finding_count" ? p.finding_count : (p[sortKey] ?? "").toString().toLowerCase();
+    return [...filtered].sort((a, b) => {
+      const av = val(a);
+      const bv = val(b);
+      if (av < bv) return -1 * sortDir;
+      if (av > bv) return 1 * sortDir;
+      return 0;
+    });
+  }, [projects, query, sortKey, sortDir]);
+
+  function sortIcon(key: SortKey) {
+    if (key !== sortKey) return null;
+    return <i className={`ti ${sortDir === 1 ? "ti-chevron-up" : "ti-chevron-down"}`} />;
   }
 
   return (
@@ -47,24 +83,70 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect }: P
 
       <div className="view" style={{ paddingTop: 16 }}>
         {projects.length === 0 ? (
-          <div className="empty">
-            No hay proyectos todavia. Crea uno o carga el de ejemplo.
-          </div>
+          <div className="empty">No hay proyectos todavia. Crea uno o carga el de ejemplo.</div>
         ) : (
-          <div className="card-grid">
-            {projects.map((p) => (
-              <div key={p.id} className="card clickable" onClick={() => onSelect(p.id)}>
-                <div className="row" style={{ gap: 8, marginBottom: 8 }}>
-                  <i className="ti ti-folder" style={{ color: "var(--accent)", fontSize: 18 }} />
-                  <strong>{p.name}</strong>
-                </div>
-                <p className="muted" style={{ margin: 0 }}>
-                  {p.client || "Sin cliente"} · {p.finding_count} hallazgo
-                  {p.finding_count === 1 ? "" : "s"}
-                </p>
-              </div>
-            ))}
-          </div>
+          <>
+            <div className="field" style={{ maxWidth: 360, marginBottom: 10 }}>
+              <input
+                className="input"
+                placeholder="Buscar por nombre o cliente..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <table className="tpl-table">
+              <thead>
+                <tr>
+                  <th className="sortable" onClick={() => toggleSort("name")}>
+                    Proyecto {sortIcon("name")}
+                  </th>
+                  <th className="sortable" onClick={() => toggleSort("client")}>
+                    Cliente {sortIcon("client")}
+                  </th>
+                  <th className="sortable" onClick={() => toggleSort("project_type")}>
+                    Tipo {sortIcon("project_type")}
+                  </th>
+                  <th className="sortable ta-right" onClick={() => toggleSort("finding_count")}>
+                    Hallazgos {sortIcon("finding_count")}
+                  </th>
+                  <th className="sortable" onClick={() => toggleSort("end_date")}>
+                    Fecha {sortIcon("end_date")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((p) => {
+                  const info = typeInfo(p.project_type);
+                  return (
+                    <tr key={p.id} style={{ cursor: "pointer" }} onClick={() => onSelect(p.id)}>
+                      <td>
+                        <div className="tpl-name">
+                          <i className="ti ti-folder" />
+                          <span className="tpl-title">{p.name}</span>
+                        </div>
+                      </td>
+                      <td>{p.client || "—"}</td>
+                      <td>
+                        <span className="mini-tag">
+                          <i className={`ti ${info.icon}`} style={{ marginRight: 4 }} />
+                          {info.label}
+                        </span>
+                      </td>
+                      <td className="ta-right">{p.finding_count}</td>
+                      <td>{p.end_date || "—"}</td>
+                    </tr>
+                  );
+                })}
+                {rows.length === 0 && (
+                  <tr>
+                    <td colSpan={5} style={{ color: "var(--text-muted)" }}>
+                      Ningun proyecto coincide con la busqueda.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </>
         )}
       </div>
 
@@ -92,10 +174,11 @@ function ProjectForm({
   const { guard } = useToast();
   const [name, setName] = useState("");
   const [client, setClient] = useState("");
+  const [type, setType] = useState("pentest");
 
   async function create() {
     if (!name.trim()) return;
-    const summary = await guard(api.createProject(name, client), "Proyecto creado");
+    const summary = await guard(api.createProject(name, client, type), "Proyecto creado");
     if (summary) onCreated(summary.id);
   }
 
@@ -114,6 +197,24 @@ function ProjectForm({
         </>
       }
     >
+      <div className="field">
+        <label>Que vas a hacer?</label>
+        <div className="cardsel-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+          {PROJECT_TYPES.map((t) => (
+            <button
+              key={t.value}
+              className={`cardsel ${type === t.value ? "sel" : ""}`}
+              onClick={() => setType(t.value)}
+            >
+              <i className={`ti ${t.icon}`} />
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <p className="faint" style={{ marginTop: 6 }}>
+          {typeInfo(type).desc}
+        </p>
+      </div>
       <div className="field">
         <label>Nombre del proyecto</label>
         <input

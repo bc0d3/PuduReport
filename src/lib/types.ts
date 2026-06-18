@@ -51,6 +51,12 @@ export interface TeamMember {
 export interface ProjectMeta {
   name: string;
   client: string;
+  /** Tipo de proyecto: define formulario, scaffold y plantilla por defecto. */
+  project_type: string;
+  /** OSID del candidato (tipos de examen). Portada y nombre del PDF. */
+  osid: string;
+  /** Plantilla .typ a usar en vez de la del tipo. Vacio = la del tipo. */
+  template_override: string;
   /** Fechas ISO (YYYY-MM-DD). */
   start_date: string;
   end_date: string;
@@ -84,17 +90,19 @@ export interface Branding {
   findings_page_break: boolean;
 }
 
-/** workspace.yaml */
+/** workspace.yaml. Solo identidad visual; la plantilla y el tipo viven en el proyecto. */
 export interface WorkspaceMeta {
   name: string;
   branding: Branding;
   watermark: Watermark;
-  /** Plantilla .typ activa (nombre de archivo sin extension). */
-  active_template: string;
-  /** Perfil de certificacion activo: "" = ninguno, "oscp" = modo examen OSCP. */
-  exam_profile: string;
-  /** OSID del candidato (modo examen). Va en la portada y el nombre del PDF. */
-  osid: string;
+}
+
+/** Workspace reciente para la pantalla de bienvenida. */
+export interface RecentWorkspace {
+  path: string;
+  name: string;
+  /** Si la carpeta sigue existiendo (tiene workspace.yaml). */
+  exists: boolean;
 }
 
 /** Resumen liviano de un proyecto para listados (no carga hallazgos). */
@@ -102,6 +110,8 @@ export interface ProjectSummary {
   id: string;
   name: string;
   client: string;
+  project_type: string;
+  end_date: string;
   finding_count: number;
 }
 

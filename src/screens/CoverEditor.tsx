@@ -80,7 +80,7 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
       <div className="screen-head">
         <div>
           <h1>Portada y marca</h1>
-          <p className="sub">Plantilla: {workspace.active_template}</p>
+          <p className="sub">Logo, colores y marca de agua. Se aplican a todos los reportes.</p>
         </div>
       </div>
 
@@ -94,7 +94,10 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
                   key={l.value}
                   className={`cardsel ${workspace.branding.cover_layout === l.value ? "sel" : ""}`}
                   onClick={() =>
-                    save({ ...workspace, branding: { ...workspace.branding, cover_layout: l.value } })
+                    save({
+                      ...workspace,
+                      branding: { ...workspace.branding, cover_layout: l.value },
+                    })
                   }
                 >
                   <i className={`ti ${l.icon}`} />
@@ -273,7 +276,10 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
                 value={workspace.watermark.size}
                 onChange={(e) =>
                   save(
-                    { ...workspace, watermark: { ...workspace.watermark, size: Number(e.target.value) } },
+                    {
+                      ...workspace,
+                      watermark: { ...workspace.watermark, size: Number(e.target.value) },
+                    },
                     true,
                   )
                 }
@@ -362,7 +368,13 @@ function CoverPreview({
         <img
           src={bgSrc}
           alt=""
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
         />
       )}
       {/* Scrim para legibilidad cuando hay imagen de fondo en full-bleed */}
@@ -392,7 +404,14 @@ function CoverPreview({
       >
         {layout === "sidebar" && !hasBg && (
           <div
-            style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 6, background: brand }}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 6,
+              background: brand,
+            }}
           />
         )}
         {logoSrc ? (

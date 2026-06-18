@@ -128,7 +128,7 @@
 #v(1.2cm)
 #text(size: 11.5pt)[
   #project.client
-  #if ws.osid != "" [ #h(5pt) · #h(5pt) OSID: #ws.osid ]
+  #if project.osid != "" [ #h(5pt) · #h(5pt) OSID: #project.osid ]
   #if project.team.len() > 0 [ #h(5pt) · #h(5pt) #project.team.map(m => m.name).join(", ") ]
 ]
 #v(1fr)

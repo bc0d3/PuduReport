@@ -114,6 +114,18 @@ pub struct ProjectMeta {
     pub name: String,
     #[serde(default)]
     pub client: String,
+    /// Tipo de proyecto: define el formulario, el scaffold de secciones y la
+    /// plantilla por defecto. "pentest" | "redteam" | "oscp" | "htb" |
+    /// "ejecutivo" | "documento" | "retest".
+    #[serde(default = "default_project_type")]
+    pub project_type: String,
+    /// OSID del candidato (solo tipos de examen). Va en la portada y el nombre
+    /// del PDF.
+    #[serde(default)]
+    pub osid: String,
+    /// Plantilla .typ a usar en vez de la del tipo. Vacio = la del tipo.
+    #[serde(default)]
+    pub template_override: String,
     #[serde(default)]
     pub start_date: String,
     #[serde(default)]
@@ -126,6 +138,25 @@ pub struct ProjectMeta {
     pub sections: Vec<ReportSection>,
     #[serde(default)]
     pub finding_order: Vec<String>,
+}
+
+/// Tipo de proyecto por defecto cuando el archivo no lo trae.
+pub fn default_project_type() -> String {
+    "pentest".to_string()
+}
+
+/// Plantilla .typ por defecto para cada tipo de proyecto. Pentest y red team
+/// comparten diseno visual; el override por proyecto puede cambiarla.
+pub fn template_for_type(project_type: &str) -> &'static str {
+    match project_type {
+        "oscp" => "oscp",
+        "htb" => "htb",
+        "ejecutivo" => "ejecutivo",
+        "documento" => "documento-libre",
+        "retest" => "retest",
+        // pentest, redteam y cualquier desconocido caen al diseno de pentest.
+        _ => "pentest",
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,7 +231,10 @@ impl Default for Branding {
 }
 
 /// workspace.yaml
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// El workspace solo guarda identidad visual compartida (branding, watermark).
+/// La plantilla y el tipo de reporte viven en cada proyecto (ProjectMeta).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WorkspaceMeta {
     #[serde(default)]
     pub name: String,
@@ -208,36 +242,6 @@ pub struct WorkspaceMeta {
     pub branding: Branding,
     #[serde(default)]
     pub watermark: Watermark,
-    #[serde(default = "default_template")]
-    pub active_template: String,
-    /// Perfil de certificacion activo. "" = ninguno; "oscp" = modo examen OSCP.
-    /// El modo examen cambia el scaffold de secciones, permite severidad manual
-    /// (sin CVSS) y nombra el PDF segun la convencion de submission de OffSec.
-    #[serde(default)]
-    pub exam_profile: String,
-    /// Identificador OSID del candidato (solo modo examen). Aparece en la
-    /// portada y en el nombre del archivo del reporte.
-    #[serde(default)]
-    pub osid: String,
-}
-
-fn default_template() -> String {
-    "pentest".to_string()
-}
-
-// Default manual: el derive daria active_template = "" (el atributo serde solo
-// aplica al deserializar). Una plantilla activa valida es obligatoria.
-impl Default for WorkspaceMeta {
-    fn default() -> Self {
-        WorkspaceMeta {
-            name: String::new(),
-            branding: Branding::default(),
-            watermark: Watermark::default(),
-            active_template: default_template(),
-            exam_profile: String::new(),
-            osid: String::new(),
-        }
-    }
 }
 
 /// Resumen liviano de un proyecto para listados.
@@ -246,6 +250,8 @@ pub struct ProjectSummary {
     pub id: String,
     pub name: String,
     pub client: String,
+    pub project_type: String,
+    pub end_date: String,
     pub finding_count: usize,
 }
 

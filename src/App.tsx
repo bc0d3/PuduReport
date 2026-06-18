@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "./lib/api";
-import type { ProjectSummary, WorkspaceMeta } from "./lib/types";
+import type { ProjectMeta, ProjectSummary, WorkspaceMeta } from "./lib/types";
 import { Rail, type View } from "./components/Rail";
-import { Onboarding } from "./screens/Onboarding";
+import { Welcome } from "./screens/Welcome";
 import { Projects } from "./screens/Projects";
 import { CoverEditor } from "./screens/CoverEditor";
 import { PdfPreview } from "./screens/PdfPreview";
@@ -28,6 +28,7 @@ function AppInner() {
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProject, setActiveProject] = useState<ProjectMeta | null>(null);
   const [view, setView] = useState<View>("inicio");
   const [dark, setDark] = useState<boolean>(() => {
     const saved = window.localStorage.getItem("pudu-theme");
@@ -60,32 +61,25 @@ function AppInner() {
     }
   }, [guard]);
 
-  const openAt = useCallback(
-    async (path: string) => {
-      const meta = await guard(api.openWorkspace(path));
-      if (meta) {
-        setWorkspace(meta);
-        setWorkspacePath(path);
-        await loadProjects();
-        setView("inicio");
-      }
-    },
-    [guard, loadProjects],
-  );
-
+  // Al arrancar mostramos el launcher (no auto-abrimos): el usuario elige un
+  // workspace reciente o crea/abre uno, como la pantalla de bienvenida de un IDE.
   useEffect(() => {
-    (async () => {
-      const stored = await guard(api.getStoredWorkspace());
-      if (stored) await openAt(stored);
-      setLoading(false);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setLoading(false);
   }, []);
 
   function selectProject(id: string) {
     setActiveProjectId(id);
     setView("editor");
   }
+
+  // Meta del proyecto activo (tipo, plantilla override, osid...).
+  useEffect(() => {
+    if (!activeProjectId) {
+      setActiveProject(null);
+      return;
+    }
+    guard(api.loadProject(activeProjectId)).then((m) => setActiveProject(m ?? null));
+  }, [guard, activeProjectId]);
 
   // Directorio absoluto del proyecto activo, para adjuntar evidencias.
   const assetBase = workspacePath && activeProjectId ? `${workspacePath}/${activeProjectId}` : null;
@@ -96,7 +90,9 @@ function AppInner() {
 
   if (!workspace) {
     return (
-      <Onboarding
+      <Welcome
+        dark={dark}
+        onToggleTheme={() => setDark((d) => !d)}
         onOpened={(meta, path) => {
           setWorkspace(meta);
           setWorkspacePath(path);
@@ -109,7 +105,18 @@ function AppInner() {
 
   return (
     <div className="shell">
-      <Rail view={view} onNavigate={setView} dark={dark} onToggleTheme={() => setDark((d) => !d)} />
+      <Rail
+        view={view}
+        onNavigate={setView}
+        dark={dark}
+        onToggleTheme={() => setDark((d) => !d)}
+        onCloseWorkspace={() => {
+          setWorkspace(null);
+          setWorkspacePath(null);
+          setActiveProjectId(null);
+          setView("inicio");
+        }}
+      />
       <div className="content">
         {(view === "inicio" || view === "proyectos") && (
           <Projects
@@ -125,7 +132,7 @@ function AppInner() {
             key={activeProjectId ?? "none"}
             projectId={activeProjectId}
             assetBase={assetBase}
-            examProfile={workspace.exam_profile}
+            projectType={activeProject?.project_type}
             onGoToPreview={() => setView("preview")}
             onPickProject={() => setView("proyectos")}
           />
@@ -144,8 +151,8 @@ function AppInner() {
         {view === "plantillas" && (
           <TemplateLibrary
             projectId={activeProjectId}
-            workspace={workspace}
-            onWorkspaceSaved={setWorkspace}
+            project={activeProject}
+            onProjectSaved={setActiveProject}
           />
         )}
         {view === "portada" && (

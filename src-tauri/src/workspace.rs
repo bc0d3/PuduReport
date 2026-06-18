@@ -197,6 +197,8 @@ pub fn list_projects(root: &Path) -> Result<Vec<ProjectSummary>> {
             id,
             name: meta.name,
             client: meta.client,
+            project_type: meta.project_type,
+            end_date: meta.end_date,
             finding_count,
         });
     }
@@ -204,25 +206,25 @@ pub fn list_projects(root: &Path) -> Result<Vec<ProjectSummary>> {
     Ok(out)
 }
 
-/// Crea un proyecto nuevo con secciones de reporte por defecto.
-pub fn create_project(root: &Path, name: &str, client: &str) -> Result<(String, ProjectMeta)> {
+/// Crea un proyecto nuevo del tipo indicado. El tipo define el scaffold de
+/// secciones precargado (y mas adelante, en la UI, el formulario y la plantilla).
+pub fn create_project(
+    root: &Path,
+    name: &str,
+    client: &str,
+    project_type: &str,
+) -> Result<(String, ProjectMeta)> {
     let id = unique_dir(root, &slugify(name));
     let dir = project_dir(root, &id);
     fs::create_dir_all(dir.join("findings"))?;
     fs::create_dir_all(dir.join("assets"))?;
     fs::create_dir_all(dir.join("build"))?;
 
-    // El scaffold de secciones depende del perfil activo del workspace: el modo
-    // examen OSCP precarga la estructura que espera OffSec.
-    let sections = match read_workspace_meta(root) {
-        Ok(ws) if ws.exam_profile == "oscp" => oscp_sections(),
-        _ => default_sections(),
-    };
-
     let meta = ProjectMeta {
         name: name.to_string(),
         client: client.to_string(),
-        sections,
+        project_type: project_type.to_string(),
+        sections: sections_for_type(project_type),
         ..Default::default()
     };
     write_project_meta(root, &id, &meta)?;
@@ -234,7 +236,7 @@ pub fn create_project(root: &Path, name: &str, client: &str) -> Result<(String, 
 pub fn create_example_project(root: &Path) -> Result<(String, ProjectMeta)> {
     use crate::models::TeamMember;
 
-    let (id, _) = create_project(root, "Proyecto de ejemplo", "Cliente Demo S.A.")?;
+    let (id, _) = create_project(root, "Proyecto de ejemplo", "Cliente Demo S.A.", "pentest")?;
 
     let findings = example_findings();
     let order: Vec<String> = findings.iter().map(|f| f.id.clone()).collect();
@@ -245,6 +247,7 @@ pub fn create_example_project(root: &Path) -> Result<(String, ProjectMeta)> {
     let meta = ProjectMeta {
         name: "Proyecto de ejemplo".to_string(),
         client: "Cliente Demo S.A.".to_string(),
+        project_type: "pentest".to_string(),
         start_date: "2026-01-13".to_string(),
         end_date: "2026-01-24".to_string(),
         scope: vec![
@@ -263,6 +266,7 @@ pub fn create_example_project(root: &Path) -> Result<(String, ProjectMeta)> {
         ],
         sections: default_sections(),
         finding_order: order,
+        ..Default::default()
     };
     write_project_meta(root, &id, &meta)?;
     Ok((id, meta))
@@ -319,11 +323,23 @@ fn example_findings() -> Vec<Finding> {
     ]
 }
 
-/// Secciones de reporte por defecto, con texto boilerplate generico pero
-/// entendible. El pentester edita o reemplaza; nunca parte de cero.
-fn default_sections() -> Vec<crate::models::ReportSection> {
+/// Scaffold de secciones precargadas segun el tipo de proyecto.
+fn sections_for_type(project_type: &str) -> Vec<crate::models::ReportSection> {
+    match project_type {
+        "oscp" | "htb" => oscp_sections(),
+        "redteam" => sections_from(REDTEAM_SECTION_BOILERPLATE),
+        "ejecutivo" => sections_from(EJECUTIVO_SECTION_BOILERPLATE),
+        "documento" => sections_from(DOCUMENTO_SECTION_BOILERPLATE),
+        "retest" => sections_from(RETEST_SECTION_BOILERPLATE),
+        // pentest y desconocidos: scaffold generico de pentest.
+        _ => default_sections(),
+    }
+}
+
+/// Construye secciones a partir de una tabla (clave, titulo, cuerpo).
+fn sections_from(boilerplate: &[(&str, &str, &str)]) -> Vec<crate::models::ReportSection> {
     use crate::models::ReportSection;
-    SECTION_BOILERPLATE
+    boilerplate
         .iter()
         .map(|(key, title, body)| ReportSection {
             key: key.to_string(),
@@ -334,21 +350,92 @@ fn default_sections() -> Vec<crate::models::ReportSection> {
         .collect()
 }
 
+/// Secciones de reporte por defecto (pentest), con texto boilerplate generico
+/// pero entendible. El pentester edita o reemplaza; nunca parte de cero.
+fn default_sections() -> Vec<crate::models::ReportSection> {
+    sections_from(SECTION_BOILERPLATE)
+}
+
 /// Secciones para el modo examen OSCP, con la estructura que espera OffSec.
 /// Cada maquina/objetivo se documenta como un hallazgo aparte (su IP va en
 /// "activos afectados"); estas secciones son la prosa que las enmarca.
 fn oscp_sections() -> Vec<crate::models::ReportSection> {
-    use crate::models::ReportSection;
-    OSCP_SECTION_BOILERPLATE
-        .iter()
-        .map(|(key, title, body)| ReportSection {
-            key: key.to_string(),
-            title: title.to_string(),
-            body: body.to_string(),
-            enabled: true,
-        })
-        .collect()
+    sections_from(OSCP_SECTION_BOILERPLATE)
 }
+
+/// Boilerplate para red team: narrativa de ataque por sobre la lista de hallazgos.
+const REDTEAM_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[
+    (
+        "resumen",
+        "Resumen ejecutivo",
+        "Se ejecuto un ejercicio de red team simulando a un adversario real contra los activos en alcance. El objetivo no fue enumerar todas las vulnerabilidades, sino demostrar el impacto de una intrusion siguiendo objetivos concretos (acceso a datos sensibles, control de dominio, etc.).\n\nEste resumen esta dirigido a gestion: describe el resultado del ejercicio y el nivel de exposicion sin entrar en detalle tecnico.",
+    ),
+    (
+        "alcance-reglas",
+        "Alcance y reglas de enfrentamiento",
+        "Se detallan los activos en alcance, la ventana de ejecucion y las reglas acordadas (objetivos, tecnicas permitidas, restricciones y contactos de escalamiento).",
+    ),
+    (
+        "narrativa",
+        "Narrativa del ataque",
+        "Relato cronologico de la intrusion: acceso inicial, ejecucion, persistencia, escalada de privilegios, movimiento lateral y cumplimiento de los objetivos. Cada paso enlaza con los hallazgos tecnicos que lo habilitaron.",
+    ),
+    (
+        "conclusiones",
+        "Conclusiones y recomendaciones",
+        "Lecciones del ejercicio: que detecto y que no detecto la defensa, y las mejoras prioritarias para reducir el riesgo de una intrusion real.",
+    ),
+];
+
+/// Boilerplate para el informe ejecutivo / no tecnico (sin hallazgos).
+const EJECUTIVO_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[
+    (
+        "resumen",
+        "Resumen ejecutivo",
+        "Sintesis del trabajo realizado y de sus resultados, en lenguaje de negocio. Describe el nivel de riesgo general y los puntos que requieren atencion de la direccion, sin detalle tecnico.",
+    ),
+    (
+        "alcance",
+        "Alcance y contexto",
+        "Que se evaluo, durante que periodo y con que objetivo de negocio. Contexto necesario para interpretar las conclusiones.",
+    ),
+    (
+        "conclusiones",
+        "Conclusiones",
+        "Estado general y principales aprendizajes, orientados a la toma de decisiones.",
+    ),
+    (
+        "recomendaciones",
+        "Recomendaciones",
+        "Acciones priorizadas (corto, mediano y largo plazo) con su impacto esperado en el nivel de riesgo.",
+    ),
+];
+
+/// Boilerplate minimo para un documento libre: una sola seccion abierta.
+const DOCUMENTO_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[(
+    "contenido",
+    "Contenido",
+    "Escribe aqui el contenido del documento. Puedes crear todas las secciones que necesites desde la pestaña Reporte.",
+)];
+
+/// Boilerplate para el retest / verificacion de remediacion.
+const RETEST_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[
+    (
+        "alcance-retest",
+        "Alcance del retest",
+        "Hallazgos del informe original que fueron re-evaluados, fecha del retest y metodologia usada para verificar cada remediacion.",
+    ),
+    (
+        "resumen",
+        "Resumen del estado",
+        "Vision general del avance de la remediacion: cuantos hallazgos se corrigieron, cuantos siguen abiertos y cuantos fueron aceptados como riesgo.",
+    ),
+    (
+        "conclusiones",
+        "Conclusiones",
+        "Evaluacion del progreso y recomendaciones sobre los hallazgos que continuan abiertos.",
+    ),
+];
 
 /// Boilerplate de las secciones del reporte de examen OSCP. Sin acentos para
 /// mantener la convencion del resto del codigo; el candidato edita el texto.
@@ -843,7 +930,7 @@ mod tests {
         create_workspace(&tmp, "Test WS").unwrap();
         assert!(tmp.join("workspace.yaml").exists());
 
-        let (pid, _) = create_project(&tmp, "Web App", "ACME").unwrap();
+        let (pid, _) = create_project(&tmp, "Web App", "ACME", "pentest").unwrap();
         let f = create_finding(&tmp, &pid, "SQL Injection en login").unwrap();
         assert!(f.id.starts_with("001-"));
 
@@ -861,26 +948,28 @@ mod tests {
     }
 
     #[test]
-    fn oscp_exam_profile_seeds_oscp_sections() {
-        let tmp = std::env::temp_dir().join(format!("pudu-exam-{}", std::process::id()));
+    fn project_type_seeds_matching_scaffold() {
+        let tmp = std::env::temp_dir().join(format!("pudu-type-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
-        create_workspace(&tmp, "Examen").unwrap();
+        create_workspace(&tmp, "WS").unwrap();
 
-        // Sin perfil: scaffold generico.
-        let (generic, _) = create_project(&tmp, "Generico", "ACME").unwrap();
-        let gmeta = read_project_meta(&tmp, &generic).unwrap();
-        assert!(gmeta.sections.iter().any(|s| s.key == "metodologia"));
-        assert!(!gmeta.sections.iter().any(|s| s.key == "high-level-summary"));
+        // Pentest: scaffold generico.
+        let (pentest, meta) = create_project(&tmp, "Pentest", "ACME", "pentest").unwrap();
+        assert_eq!(meta.project_type, "pentest");
+        let pmeta = read_project_meta(&tmp, &pentest).unwrap();
+        assert!(pmeta.sections.iter().any(|s| s.key == "metodologia"));
+        assert!(!pmeta.sections.iter().any(|s| s.key == "high-level-summary"));
 
-        // Con perfil OSCP: scaffold del examen.
-        let mut ws = read_workspace_meta(&tmp).unwrap();
-        ws.exam_profile = "oscp".to_string();
-        write_workspace_meta(&tmp, &ws).unwrap();
-
-        let (exam, _) = create_project(&tmp, "Examen OSCP", "OffSec").unwrap();
+        // OSCP: scaffold del examen.
+        let (exam, _) = create_project(&tmp, "Examen OSCP", "OffSec", "oscp").unwrap();
         let emeta = read_project_meta(&tmp, &exam).unwrap();
+        assert_eq!(emeta.project_type, "oscp");
         assert!(emeta.sections.iter().any(|s| s.key == "high-level-summary"));
-        assert!(emeta.sections.iter().any(|s| s.key == "methodology"));
+
+        // Ejecutivo: scaffold no tecnico.
+        let (eje, _) = create_project(&tmp, "Ejecutivo", "ACME", "ejecutivo").unwrap();
+        let xmeta = read_project_meta(&tmp, &eje).unwrap();
+        assert!(xmeta.sections.iter().any(|s| s.key == "recomendaciones"));
 
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -890,7 +979,7 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("pudu-trav-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         create_workspace(&tmp, "WS").unwrap();
-        let (pid, _) = create_project(&tmp, "Web", "ACME").unwrap();
+        let (pid, _) = create_project(&tmp, "Web", "ACME", "pentest").unwrap();
 
         // Ids con traversal o separadores deben fallar, no escribir fuera.
         assert!(load_finding(&tmp, "../../etc", "passwd").is_err());
@@ -915,7 +1004,7 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("pudu-asset-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         create_workspace(&tmp, "WS").unwrap();
-        let (pid, _) = create_project(&tmp, "Web", "ACME").unwrap();
+        let (pid, _) = create_project(&tmp, "Web", "ACME", "pentest").unwrap();
 
         let rel = save_asset(&tmp, &pid, "PNG", &[1, 2, 3, 4]).unwrap();
         assert!(rel.starts_with("assets/"));
