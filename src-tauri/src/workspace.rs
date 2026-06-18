@@ -202,7 +202,7 @@ pub fn list_projects(root: &Path) -> Result<Vec<ProjectSummary>> {
             finding_count,
         });
     }
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|a| a.name.to_lowercase());
     Ok(out)
 }
 
@@ -758,12 +758,7 @@ pub fn list_finding_templates(root: &Path) -> Result<Vec<FindingTemplate>> {
             }
         }
     }
-    out.sort_by(|a, b| {
-        a.meta
-            .title
-            .to_lowercase()
-            .cmp(&b.meta.title.to_lowercase())
-    });
+    out.sort_by_key(|a| a.meta.title.to_lowercase());
     Ok(out)
 }
 
@@ -850,7 +845,7 @@ pub fn list_snippets(root: &Path) -> Result<Vec<Snippet>> {
             }
         }
     }
-    out.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    out.sort_by_key(|a| a.title.to_lowercase());
     Ok(out)
 }
 
