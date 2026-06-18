@@ -1,0 +1,12 @@
+# Workspace de Rust: core compartido + app Tauri (+ binario MCP en el futuro).
+[workspace]
+members = ["core", "src-tauri"]
+resolver = "2"
+
+# El perfil de release vive en la raiz del workspace (Cargo lo ignora en miembros).
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

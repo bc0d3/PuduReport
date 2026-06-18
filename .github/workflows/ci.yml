@@ -36,7 +36,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
       - name: Instalar dependencias de Tauri (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -49,11 +49,8 @@ jobs:
           npm ci
           npm run build
       - name: rustfmt
-        working-directory: src-tauri
-        run: cargo fmt --check
+        run: cargo fmt --all --check
       - name: clippy
-        working-directory: src-tauri
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
       - name: tests
-        working-directory: src-tauri
-        run: cargo test
+        run: cargo test --workspace

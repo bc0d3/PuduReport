@@ -41,7 +41,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
 
       - name: Instalar dependencias de Tauri (Linux)
         if: matrix.platform == 'ubuntu-latest'

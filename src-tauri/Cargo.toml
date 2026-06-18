@@ -20,6 +20,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+pudureport-core = { path = "../core" }
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
@@ -42,9 +43,4 @@ opener = { version = "0.7", features = ["reveal"] }
 # Feature por defecto requerida por Tauri en build de produccion.
 custom-protocol = ["tauri/custom-protocol"]
 
-[profile.release]
-opt-level = "s"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
+# El perfil [profile.release] vive en el Cargo.toml raiz del workspace.

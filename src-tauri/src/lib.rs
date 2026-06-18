@@ -4,13 +4,9 @@
 //! La logica vive en los modulos enfocados (workspace, db, pdf, cvss, git);
 //! aqui solo se orquesta y se mapean errores a String para el frontend.
 
-mod cvss;
 mod db;
 mod git;
-mod markdown;
-mod models;
 mod pdf;
-mod workspace;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -19,10 +15,12 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_store::StoreExt;
 
-use models::{
+// Logica compartida en el crate pudureport-core.
+use pudureport_core::models::{
     CvssResult, CvssVersion, Finding, FindingTemplate, PdfTemplate, ProjectMeta, ProjectSummary,
     Snippet, WorkspaceMeta,
 };
+use pudureport_core::{cvss, workspace};
 
 const STORE_FILE: &str = "settings.json";
 const STORE_KEY_WORKSPACE: &str = "workspace_path";

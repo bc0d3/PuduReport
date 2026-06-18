@@ -10,9 +10,9 @@ use std::process::Command;
 
 use serde::Serialize;
 
-use crate::markdown;
-use crate::models::{Branding, ProjectMeta, Severity, TeamMember, Watermark};
-use crate::workspace;
+use pudureport_core::markdown;
+use pudureport_core::models::{Branding, ProjectMeta, Severity, TeamMember, Watermark};
+use pudureport_core::workspace;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PdfError {
@@ -119,15 +119,15 @@ fn severity_str(s: Severity) -> String {
     .to_string()
 }
 
-fn version_str(v: crate::models::CvssVersion) -> String {
+fn version_str(v: pudureport_core::models::CvssVersion) -> String {
     match v {
-        crate::models::CvssVersion::V31 => "3.1",
-        crate::models::CvssVersion::V40 => "4.0",
+        pudureport_core::models::CvssVersion::V31 => "3.1",
+        pudureport_core::models::CvssVersion::V40 => "4.0",
     }
     .to_string()
 }
 
-fn status_str(s: crate::models::FindingStatus) -> String {
+fn status_str(s: pudureport_core::models::FindingStatus) -> String {
     serde_json::to_string(&s)
         .unwrap_or_default()
         .trim_matches('"')
@@ -326,7 +326,7 @@ fn sanitize_osid(osid: &str) -> String {
 /// Plantilla .typ efectiva del proyecto: el override si existe, si no la del tipo.
 fn effective_template(project: &ProjectMeta) -> String {
     if project.template_override.is_empty() {
-        crate::models::template_for_type(&project.project_type).to_string()
+        pudureport_core::models::template_for_type(&project.project_type).to_string()
     } else {
         project.template_override.clone()
     }

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 
-use crate::workspace;
+use pudureport_core::workspace;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DbError {
