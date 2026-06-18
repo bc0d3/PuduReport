@@ -252,6 +252,24 @@ function ProjectDataForm({
           />
         </div>
         <div className="field">
+          <label>Gerencia</label>
+          <input
+            className="input"
+            placeholder="Opcional"
+            value={project.gerencia}
+            onChange={(e) => patch((p) => ({ ...p, gerencia: e.target.value }))}
+          />
+        </div>
+        <div className="field">
+          <label>Area</label>
+          <input
+            className="input"
+            placeholder="Opcional"
+            value={project.area}
+            onChange={(e) => patch((p) => ({ ...p, area: e.target.value }))}
+          />
+        </div>
+        <div className="field">
           <label>Fecha de inicio</label>
           <input
             className="input"

@@ -139,6 +139,15 @@
   #if project.osid != "" [ #h(5pt) · #h(5pt) OSID: #project.osid ]
   #if project.team.len() > 0 [ #h(5pt) · #h(5pt) #project.team.map(m => m.name).join(", ") ]
 ]
+#{
+  let parts = ()
+  if project.gerencia != "" { parts.push(project.gerencia) }
+  if project.area != "" { parts.push(project.area) }
+  if parts.len() > 0 [
+    #v(0.35cm)
+    #text(size: 10.5pt)[#parts.join("  ·  ")]
+  ]
+}
 #v(1fr)
 #text(size: 11pt)[#project.start_date #sym.dash.em #project.end_date]
 #pagebreak()

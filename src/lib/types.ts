@@ -51,6 +51,10 @@ export interface TeamMember {
 export interface ProjectMeta {
   name: string;
   client: string;
+  /** Gerencia del cliente (opcional). Se muestra en la portada si no esta vacia. */
+  gerencia: string;
+  /** Area del cliente (opcional). Se muestra en la portada si no esta vacia. */
+  area: string;
   /** Tipo de proyecto: define formulario, scaffold y plantilla por defecto. */
   project_type: string;
   /** OSID del candidato (tipos de examen). Portada y nombre del PDF. */

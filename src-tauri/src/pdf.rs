@@ -53,6 +53,10 @@ struct WorkspaceData {
 struct ProjectData {
     name: String,
     client: String,
+    /// Gerencia del cliente (opcional). La portada la muestra si no esta vacia.
+    gerencia: String,
+    /// Area del cliente (opcional). La portada la muestra si no esta vacia.
+    area: String,
     /// Tipo de proyecto. Lo puede consumir la plantilla.
     project_type: String,
     /// OSID del candidato (tipos de examen). Va en la portada.
@@ -181,6 +185,8 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
         project: ProjectData {
             name: project.name,
             client: project.client,
+            gerencia: project.gerencia,
+            area: project.area,
             project_type: project.project_type,
             osid: project.osid,
             start_date: project.start_date,
@@ -471,6 +477,13 @@ mod tests {
             "## Descripcion\n\nEl parametro **user** es vulnerable.\n\n```sql\nSELECT 1\n```"
                 .into();
         workspace::write_finding(&tmp, &pid, &finding).unwrap();
+
+        // Gerencia y area pobladas: ejercita la linea opcional de la portada
+        // en todas las plantillas (la rama que las muestra).
+        let mut p = workspace::read_project_meta(&tmp, &pid).unwrap();
+        p.gerencia = "Gerencia de Tecnologia".into();
+        p.area = "Seguridad de la Informacion".into();
+        workspace::write_project_meta(&tmp, &pid, &p).unwrap();
 
         // Cada tipo de proyecto debe compilar con su plantilla derivada.
         for project_type in [

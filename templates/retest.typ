@@ -110,6 +110,14 @@
   #block(inset: 9pt, text(size: 8.5pt, fill: rgb("#e6e6e6"), it))
 ]
 
+// Linea opcional con gerencia y area del cliente, para la portada.
+#let org-line = {
+  let parts = ()
+  if project.gerencia != "" { parts.push(project.gerencia) }
+  if project.area != "" { parts.push(project.area) }
+  parts.join("  ·  ")
+}
+
 // --- Portada ---
 #let logo = ws.branding.logo_path
 #align(center + horizon)[
@@ -121,6 +129,7 @@
   #line(length: 40%, stroke: 1pt + brand)
   #v(0.4cm)
   #text(size: 18pt, project.client)
+  #if org-line != none [#v(0.3cm)#text(size: 11pt, fill: gray, org-line)]
   #v(2.5cm)
   #text(size: 11pt, fill: gray)[Periodo: #project.start_date — #project.end_date]
 ]

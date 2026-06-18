@@ -114,6 +114,12 @@ pub struct ProjectMeta {
     pub name: String,
     #[serde(default)]
     pub client: String,
+    /// Gerencia del cliente (opcional). Se muestra en la portada si no esta vacio.
+    #[serde(default)]
+    pub gerencia: String,
+    /// Area del cliente (opcional). Se muestra en la portada si no esta vacio.
+    #[serde(default)]
+    pub area: String,
     /// Tipo de proyecto: define el formulario, el scaffold de secciones y la
     /// plantilla por defecto. "pentest" | "redteam" | "oscp" | "htb" |
     /// "ejecutivo" | "documento" | "retest".
