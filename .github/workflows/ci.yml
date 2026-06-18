@@ -29,7 +29,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - uses: dtolnay/rust-toolchain@stable
+      # Toolchain fijo (no @stable) para que clippy/fmt sean deterministas y
+      # coincidan con el entorno local; se sube a mano cuando convenga.
+      - uses: dtolnay/rust-toolchain@1.93.0
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
