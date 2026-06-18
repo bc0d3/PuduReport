@@ -21,6 +21,7 @@ import yaml from "highlight.js/lib/languages/yaml";
 import { Markdown } from "tiptap-markdown";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import * as api from "../lib/api";
+import { PromptDialog } from "./PromptDialog";
 
 // Resaltado de sintaxis para los bloques de codigo (se empaqueta, sin red).
 const lowlight = createLowlight();
@@ -262,6 +263,7 @@ function Toolbar({
   onPickFile: (file: File) => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
 
   const btn = (label: ReactNode, isActive: boolean, action: () => void, title: string) => (
     <button
@@ -293,6 +295,7 @@ function Toolbar({
   }
 
   return (
+    <>
     <div className="md-toolbar">
       {btn(
         <>
@@ -371,8 +374,7 @@ function Toolbar({
             editor.chain().focus().unsetLink().run();
             return;
           }
-          const url = window.prompt("URL del enlace:");
-          if (url) editor.chain().focus().toggleLink({ href: url }).run();
+          setLinkOpen(true);
         },
         "Enlace",
       )}
@@ -443,5 +445,16 @@ function Toolbar({
         </>
       )}
     </div>
+      {linkOpen && (
+        <PromptDialog
+          title="Insertar enlace"
+          label="URL del enlace"
+          placeholder="https://ejemplo.com"
+          confirmLabel="Insertar"
+          onConfirm={(url) => editor.chain().focus().toggleLink({ href: url }).run()}
+          onClose={() => setLinkOpen(false)}
+        />
+      )}
+    </>
   );
 }
