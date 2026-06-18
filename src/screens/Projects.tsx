@@ -3,6 +3,7 @@ import * as api from "../lib/api";
 import type { ProjectSummary, WorkspaceMeta } from "../lib/types";
 import { PROJECT_TYPES, typeInfo } from "../lib/projectTypes";
 import { Modal } from "../components/Modal";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 
 interface Props {
@@ -19,6 +20,7 @@ type SortKey = "name" | "client" | "project_type" | "end_date" | "finding_count"
 export function Projects({ workspace, projects, welcome, onReload, onSelect, onDelete }: Props) {
   const { guard } = useToast();
   const [creating, setCreating] = useState(false);
+  const [toDelete, setToDelete] = useState<ProjectSummary | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("client");
   const [sortDir, setSortDir] = useState<1 | -1>(1);
@@ -142,13 +144,7 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
                           title="Eliminar proyecto"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (
-                              window.confirm(
-                                `Eliminar el proyecto "${p.name}" y todos sus hallazgos? Esta accion no se puede deshacer.`,
-                              )
-                            ) {
-                              onDelete(p.id);
-                            }
+                            setToDelete(p);
                           }}
                         >
                           <i className="ti ti-trash" />
@@ -178,6 +174,15 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
             await onReload();
             onSelect(id);
           }}
+        />
+      )}
+
+      {toDelete && (
+        <ConfirmDialog
+          title="Eliminar proyecto"
+          message={`Se eliminara el proyecto "${toDelete.name}" y todos sus hallazgos. Esta accion no se puede deshacer.`}
+          onConfirm={() => onDelete(toDelete.id)}
+          onClose={() => setToDelete(null)}
         />
       )}
     </>

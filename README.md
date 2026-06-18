@@ -66,6 +66,12 @@ issue publico. Detalle, alcance y agradecimientos en [SECURITY.md](SECURITY.md).
 
 Reconocemos publicamente a quien reporte (Hall of Fame). Gracias por ayudar.
 
+## Aviso
+
+PuduReport es una herramienta gratuita y de codigo abierto, provista "tal cual" (as is), sin garantia de ningun tipo, segun la licencia GPL-3.0 (ver secciones 15 y 16 de LICENSE).
+
+El usuario es el unico responsable del uso que le da a la herramienta, del contenido que ingresa y de los reportes que genera. PuduReport esta pensada para documentar pruebas de seguridad autorizadas; cualquier uso fuera de ese marco es responsabilidad exclusiva de quien la utiliza. Los autores no se responsabilizan por danos ni uso indebido.
+
 ## Licencia
 
 GPL-3.0. Ver LICENSE.

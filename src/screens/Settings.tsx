@@ -71,10 +71,16 @@ export function Settings({ workspace, workspacePath, dark, onSetDark, onWorkspac
             <i className={`ti ${dark ? "ti-moon" : "ti-sun"}`} style={{ color: "var(--accent)" }} />
             <strong>Tema</strong>
             <div className="row" style={{ marginLeft: "auto", gap: 6 }}>
-              <button className={`btn small ${!dark ? "primary" : ""}`} onClick={() => onSetDark(false)}>
+              <button
+                className={`btn small ${!dark ? "primary" : ""}`}
+                onClick={() => onSetDark(false)}
+              >
                 Claro
               </button>
-              <button className={`btn small ${dark ? "primary" : ""}`} onClick={() => onSetDark(true)}>
+              <button
+                className={`btn small ${dark ? "primary" : ""}`}
+                onClick={() => onSetDark(true)}
+              >
                 Oscuro
               </button>
             </div>
@@ -107,6 +113,22 @@ export function Settings({ workspace, workspacePath, dark, onSetDark, onWorkspac
                 })
               }
             />
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="row" style={{ gap: 10, alignItems: "flex-start" }}>
+            <i className="ti ti-info-circle" style={{ color: "var(--accent)" }} />
+            <div>
+              <strong>Acerca de PuduReport</strong>
+              <p className="faint" style={{ fontSize: 12, margin: "6px 0 0", lineHeight: 1.5 }}>
+                Herramienta gratuita y de codigo abierto bajo licencia GPL-3.0, provista "tal cual"
+                y sin garantia de ningun tipo. El usuario es el unico responsable del uso que le da
+                a la herramienta, del contenido que ingresa y de los reportes que genera. Pensada
+                para documentar pruebas de seguridad autorizadas; los autores no se responsabilizan
+                por danos ni uso indebido.
+              </p>
+            </div>
           </div>
         </div>
       </div>

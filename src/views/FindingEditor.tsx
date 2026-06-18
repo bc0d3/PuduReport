@@ -14,6 +14,7 @@ import { typeInfo } from "../lib/projectTypes";
 import { Sidebar } from "../components/Sidebar";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { CvssCalculator } from "../components/CvssCalculator";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 
 const STATUS_OPTIONS: { value: FindingStatus; label: string }[] = [
@@ -58,6 +59,7 @@ export function FindingEditor({
   const [sections, setSections] = useState<Record<string, string>>({});
   const [calcOpen, setCalcOpen] = useState(false);
   const [affectedInput, setAffectedInput] = useState("");
+  const [confirmDel, setConfirmDel] = useState(false);
 
   const saveTimer = useRef<number | undefined>(undefined);
   const metaRef = useRef<FindingMeta | null>(null);
@@ -131,9 +133,8 @@ export function FindingEditor({
     }
   }
 
-  async function handleDelete() {
+  async function doDelete() {
     if (!current || !projectId) return;
-    if (!window.confirm(`Eliminar el hallazgo "${current.meta.title}"?`)) return;
     const done = await guard(api.deleteFinding(projectId, current.id), "Hallazgo eliminado");
     if (done !== undefined) {
       setActiveId(null);
@@ -360,7 +361,7 @@ export function FindingEditor({
           </div>
 
           <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
-            <button className="btn danger" onClick={handleDelete}>
+            <button className="btn danger" onClick={() => setConfirmDel(true)}>
               <i className="ti ti-trash" />
               Eliminar hallazgo
             </button>
@@ -378,6 +379,15 @@ export function FindingEditor({
           initialVector={current.meta.cvss_vector}
           onApply={applyCvss}
           onClose={() => setCalcOpen(false)}
+        />
+      )}
+
+      {confirmDel && current && (
+        <ConfirmDialog
+          title="Eliminar hallazgo"
+          message={`Se eliminara el hallazgo "${current.meta.title}". Esta accion no se puede deshacer.`}
+          onConfirm={doDelete}
+          onClose={() => setConfirmDel(false)}
         />
       )}
     </div>
