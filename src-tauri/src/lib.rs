@@ -43,12 +43,17 @@ fn current_root(state: &State<AppState>) -> Result<PathBuf, String> {
         .ok_or_else(|| "no hay un workspace abierto".to_string())
 }
 
-/// Resuelve el directorio de plantillas .typ base.
+/// Resuelve el directorio de plantillas .typ base empaquetadas.
 fn templates_dir(app: &AppHandle) -> PathBuf {
     if let Ok(resource) = app.path().resource_dir() {
-        let candidate = resource.join("templates");
-        if candidate.exists() {
-            return candidate;
+        // El recurso "../templates/*" se bundlea bajo "_up_/templates" (Tauri
+        // reemplaza el ".." por "_up_"). Tambien probamos "templates" por si la
+        // config cambia a una ruta sin "..".
+        for sub in ["_up_/templates", "templates"] {
+            let candidate = resource.join(sub);
+            if candidate.exists() {
+                return candidate;
+            }
         }
     }
     // Fallback para desarrollo (cargo tauri dev): repo/templates.
