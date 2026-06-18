@@ -8,9 +8,10 @@ interface Props {
 }
 
 export function PdfPreview({ projectId, onPickProject }: Props) {
-  const { guard, notify } = useToast();
+  const { guard } = useToast();
   const [pages, setPages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pdfPath, setPdfPath] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!projectId) return;
@@ -26,8 +27,8 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
 
   async function handleExport() {
     if (!projectId) return;
-    const path = await guard(api.generatePdf(projectId));
-    if (path) notify(`PDF exportado: ${path}`, "ok");
+    const path = await guard(api.generatePdf(projectId), "PDF exportado");
+    if (path) setPdfPath(path);
   }
 
   if (!projectId) {
@@ -62,6 +63,18 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
             <i className="ti ti-download" />
             Exportar PDF
           </button>
+          {pdfPath && (
+            <>
+              <button className="btn" onClick={() => guard(api.openPath(pdfPath))}>
+                <i className="ti ti-file-type-pdf" />
+                Abrir PDF
+              </button>
+              <button className="btn" onClick={() => guard(api.revealPath(pdfPath))}>
+                <i className="ti ti-folder-open" />
+                Abrir carpeta
+              </button>
+            </>
+          )}
         </div>
       </div>
 

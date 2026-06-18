@@ -28,9 +28,17 @@ Primer beta.
 - Adjuntar evidencias: pegar o arrastrar imagenes en cualquier seccion del hallazgo las guarda en assets/ con nombre UUID y quedan como ![](assets/<uuid>.<ext>); se muestran en el editor (protocolo asset:) y en el PDF. Los archivos no-imagen se insertan como enlace.
 - La Prueba de concepto pasa a ser markdown (estilo HackerOne: paso a paso con evidencia y bloques de codigo).
 - Tamano de imagenes: tope automatico para que no se desborden (editor y PDF) y ancho manual por imagen (S/M/L) guardado en el alt (![60%](...)), respetado en el editor y en el PDF (#image width).
+- Portada: subir logo e imagen de fondo por separado (file picker), con scrim configurable sobre la imagen y marca de agua con tamano/opacidad ajustables (la marca ya no se parte).
+- Boton "Abrir PDF" / "Abrir carpeta" tras exportar (crate opener).
+- Indice de contenidos (TOC con numeros de pagina) e indice de hallazgos por severidad; hallazgos numerados.
+- Opcion "cada hallazgo en su propia hoja" (activada por defecto).
+- Plantilla OSCP (estructura estilo examen), y plantillas Hack The Box y Red Team.
+- Galeria de plantillas con buscador y filtro por tags; duplicar y editar plantillas (.typ) desde la app, con metadata por sidecar (titulo, descripcion, tags).
 
 ### Changed
 - Escala de severidad y color de marca por defecto alineados al sistema de diseno, en la UI y en las plantillas PDF.
+- Orden de secciones del hallazgo: Prueba de concepto antes de Remediacion.
+- En el PDF: chip de CVSS coloreado por severidad, estado como chip de color, vector CVSS legible, e imagenes de evidencia centradas.
 
 ### Fixed
 - WorkspaceMeta::default dejaba la plantilla activa vacia (el default de serde no aplica en memoria), lo que rompia la generacion de PDF en un workspace recien creado.

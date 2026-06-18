@@ -160,12 +160,14 @@ fn escape_string(text: &str) -> String {
     text.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-/// Construye la llamada #image, aplicando el ancho si el alt lo indica.
+/// Construye la llamada #image centrada, aplicando el ancho si el alt lo indica.
 fn image_typst(url: &str, alt: &str) -> String {
-    match parse_width(alt) {
-        Some(width) => format!("#image(\"{}\", width: {})", escape_string(url), width),
-        None => format!("#image(\"{}\")", escape_string(url)),
-    }
+    let img = match parse_width(alt) {
+        Some(width) => format!("image(\"{}\", width: {})", escape_string(url), width),
+        None => format!("image(\"{}\")", escape_string(url)),
+    };
+    // Las evidencias van centradas.
+    format!("#align(center, {img})")
 }
 
 /// Interpreta el alt como un ancho ("60%" o "60") y devuelve el ancho Typst.
@@ -234,7 +236,8 @@ mod tests {
     fn image_conversion() {
         // El alt no debe quedar como texto suelto despues de la imagen.
         let out = to_typst("![captura de evidencia](assets/ab12.png)");
-        assert!(out.contains("#image(\"assets/ab12.png\")"));
+        assert!(out.contains("image(\"assets/ab12.png\")"));
+        assert!(out.contains("align(center"));
         assert!(!out.contains("captura de evidencia"));
         assert!(!out.contains("width:"));
     }
@@ -242,7 +245,7 @@ mod tests {
     #[test]
     fn image_width_from_alt() {
         let out = to_typst("![60%](assets/ab12.png)");
-        assert!(out.contains("#image(\"assets/ab12.png\", width: 60%)"));
+        assert!(out.contains("image(\"assets/ab12.png\", width: 60%)"));
 
         // Sin sufijo % tambien se interpreta como porcentaje.
         let out2 = to_typst("![35](assets/x.png)");

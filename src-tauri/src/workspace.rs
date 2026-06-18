@@ -555,6 +555,30 @@ pub fn save_asset(root: &Path, project_id: &str, ext: &str, bytes: &[u8]) -> Res
     Ok(format!("assets/{name}"))
 }
 
+/// Guarda un asset de marca (logo, fondo de portada) en `<root>/branding/`.
+/// Devuelve una ruta root-relative ("/branding/<uuid>.<ext>") para que Typst
+/// la resuelva con `--root` en el workspace desde cualquier proyecto.
+pub fn save_branding_asset(root: &Path, ext: &str, bytes: &[u8]) -> Result<String> {
+    let dir = root.join("branding");
+    fs::create_dir_all(&dir)?;
+
+    let clean: String = ext
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(8)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let ext = if clean.is_empty() {
+        "bin".to_string()
+    } else {
+        clean
+    };
+
+    let name = format!("{}.{}", uuid::Uuid::new_v4(), ext);
+    fs::write(dir.join(&name), bytes)?;
+    Ok(format!("/branding/{name}"))
+}
+
 // ---------------------------------------------------------------------------
 // Libreria (hallazgos reutilizables + snippets)
 // ---------------------------------------------------------------------------

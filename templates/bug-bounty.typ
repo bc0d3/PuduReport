@@ -28,6 +28,27 @@
   accepted: "Aceptado",
   wontfix: "No se corregira",
 )
+#let status-color = (
+  open: rgb("#c2410c"),
+  fixed: rgb("#639922"),
+  accepted: rgb("#2563eb"),
+  wontfix: rgb("#78716c"),
+)
+#let status-chip(status) = box(
+  inset: (x: 6pt, y: 2pt),
+  radius: 3pt,
+  stroke: 0.7pt + status-color.at(status, default: rgb("#78716c")),
+  text(size: 8pt, weight: "bold", fill: status-color.at(status, default: rgb("#78716c")), upper(
+    status-label.at(status, default: status),
+  )),
+)
+#let vector-chip(vec) = box(
+  fill: luma(236),
+  stroke: 0.5pt + luma(200),
+  inset: (x: 6pt, y: 3pt),
+  radius: 3pt,
+  text(size: 8pt, fill: luma(60), font: ("JetBrains Mono", "SF Mono", "monospace"), vec),
+)
 
 #let badge(text-content, fill-color) = box(
   fill: fill-color,
@@ -43,12 +64,12 @@
   background: if watermark.enabled and watermark.text != "" {
     place(
       center + horizon,
-      rotate(-45deg, text(
-        size: 90pt,
+      rotate(-45deg, box(text(
+        size: watermark.size * 1pt,
         fill: rgb(180, 180, 180, int(watermark.opacity * 255)),
         weight: "bold",
         watermark.text,
-      )),
+      ))),
     )
   },
   footer: context [
@@ -97,9 +118,9 @@
 #line(length: 100%, stroke: 0.5pt + luma(200))
 
 // Hallazgos como tarjetas
-#for f in data.findings {
+#for (i, f) in data.findings.enumerate() {
   let color = sev-color.at(f.severity, default: sev-color.info)
-  v(0.4cm)
+  if i > 0 and ws.branding.findings_page_break { pagebreak() } else { v(0.4cm) }
   block(
     breakable: false,
     width: 100%,
@@ -110,17 +131,19 @@
   )[
     #badge(sev-label.at(f.severity, default: f.severity), color)
     #h(6pt)
-    #text(size: 13pt, weight: "bold", f.title)
+    #text(size: 13pt, weight: "bold", str(i + 1) + ". " + f.title)
     #v(4pt)
     #if f.cvss != "" [
-      #text(size: 8pt, weight: "bold")[CVSS #f.cvss_version: #f.cvss]
+      #box(fill: color, inset: (x: 6pt, y: 3pt), radius: 3pt)[
+        #text(size: 8pt, weight: "bold", fill: white)[CVSS #f.cvss_version: #f.cvss]
+      ]
       #h(8pt)
     ]
     #if f.cwe != "" [#text(size: 8pt)[#f.cwe] #h(8pt)]
-    #text(size: 8pt, fill: gray)[#status-label.at(f.status, default: f.status)]
+    #status-chip(f.status)
     #if f.cvss_vector != "" [
-      #v(2pt)
-      #text(size: 8pt, fill: gray)[#raw(f.cvss_vector)]
+      #v(4pt)
+      #vector-chip(f.cvss_vector)
     ]
     #if f.affected.len() > 0 [
       #v(4pt)

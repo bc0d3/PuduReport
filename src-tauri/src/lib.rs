@@ -274,6 +274,21 @@ fn save_asset(
     workspace::save_asset(&root, &project_id, &ext, &bytes).map_err(|e| e.to_string())
 }
 
+/// Guarda un asset de marca (logo / fondo de portada) y devuelve su ruta.
+#[tauri::command]
+fn save_branding_asset(
+    state: State<AppState>,
+    ext: String,
+    data_base64: String,
+) -> Result<String, String> {
+    use base64::Engine;
+    let root = current_root(&state)?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_base64.as_bytes())
+        .map_err(|e| format!("base64 invalido: {e}"))?;
+    workspace::save_branding_asset(&root, &ext, &bytes).map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
 // CVSS
 // ---------------------------------------------------------------------------
@@ -338,20 +353,135 @@ fn list_pdf_templates(app: AppHandle, state: State<AppState>) -> Result<Vec<PdfT
     Ok(out)
 }
 
+/// Metadata opcional de una plantilla (templates/<name>.meta.yaml).
+#[derive(Default, serde::Deserialize)]
+struct TemplateMeta {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
 fn collect_typ(dir: &std::path::Path, builtin: bool, out: &mut Vec<PdfTemplate>) {
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().is_some_and(|e| e == "typ") {
                 if let Some(stem) = path.file_stem() {
+                    let name = stem.to_string_lossy().to_string();
+                    // Metadata sidecar opcional.
+                    let meta: TemplateMeta = std::fs::read_to_string(dir.join(format!("{name}.meta.yaml")))
+                        .ok()
+                        .and_then(|c| serde_yaml::from_str(&c).ok())
+                        .unwrap_or_default();
                     out.push(PdfTemplate {
-                        name: stem.to_string_lossy().to_string(),
+                        title: if meta.title.is_empty() { name.clone() } else { meta.title },
+                        description: if meta.description.is_empty() {
+                            first_comment(&path)
+                        } else {
+                            meta.description
+                        },
+                        tags: meta.tags,
+                        name,
                         builtin,
                     });
                 }
             }
         }
     }
+}
+
+/// Directorio de plantillas del usuario dentro del workspace.
+fn user_templates_dir(root: &std::path::Path) -> std::path::PathBuf {
+    root.join("library/templates")
+}
+
+/// Duplica una plantilla (builtin o de la libreria) a la libreria del usuario
+/// para poder editarla. Devuelve el nuevo nombre.
+#[tauri::command]
+fn duplicate_template(
+    app: AppHandle,
+    state: State<AppState>,
+    name: String,
+) -> Result<String, String> {
+    let root = current_root(&state)?;
+    // Buscar el origen: primero libreria del usuario, luego builtin.
+    let src = {
+        let user = user_templates_dir(&root).join(format!("{name}.typ"));
+        if user.exists() {
+            user
+        } else {
+            templates_dir(&app).join(format!("{name}.typ"))
+        }
+    };
+    if !src.exists() {
+        return Err(format!("plantilla no encontrada: {name}"));
+    }
+    let dir = user_templates_dir(&root);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    // Nombre unico: <name>-copia, -copia-2, ...
+    let mut new_name = format!("{name}-copia");
+    let mut n = 2;
+    while dir.join(format!("{new_name}.typ")).exists() {
+        new_name = format!("{name}-copia-{n}");
+        n += 1;
+    }
+    std::fs::copy(&src, dir.join(format!("{new_name}.typ"))).map_err(|e| e.to_string())?;
+    // Copiar metadata si existe (junto al origen).
+    if let Some(src_dir) = src.parent() {
+        let meta_src = src_dir.join(format!("{name}.meta.yaml"));
+        if meta_src.exists() {
+            let _ = std::fs::copy(meta_src, dir.join(format!("{new_name}.meta.yaml")));
+        }
+    }
+    Ok(new_name)
+}
+
+/// Lee el codigo fuente .typ de una plantilla (para editarla).
+#[tauri::command]
+fn read_template_source(app: AppHandle, state: State<AppState>, name: String) -> Result<String, String> {
+    let root = current_root(&state)?;
+    let user = user_templates_dir(&root).join(format!("{name}.typ"));
+    let path = if user.exists() {
+        user
+    } else {
+        templates_dir(&app).join(format!("{name}.typ"))
+    };
+    std::fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
+/// Guarda el codigo fuente .typ en la libreria del usuario.
+#[tauri::command]
+fn save_template_source(state: State<AppState>, name: String, content: String) -> Result<(), String> {
+    if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err(format!("nombre invalido: {name}"));
+    }
+    let root = current_root(&state)?;
+    let dir = user_templates_dir(&root);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join(format!("{name}.typ")), content).map_err(|e| e.to_string())
+}
+
+/// Primer comentario (`// ...`) no vacio del archivo, como descripcion.
+fn first_comment(path: &std::path::Path) -> String {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return String::new();
+    };
+    for line in content.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("//") {
+            let d = rest.trim();
+            if !d.is_empty() {
+                return d.to_string();
+            }
+        } else if !t.is_empty() {
+            break;
+        }
+    }
+    String::new()
 }
 
 // ---------------------------------------------------------------------------
@@ -397,6 +527,18 @@ async fn preview_pdf(app: AppHandle, project_id: String) -> Result<Vec<String>, 
     .map_err(|e| e.to_string())
 }
 
+/// Abre un archivo con la aplicacion por defecto del sistema (ej. el PDF).
+#[tauri::command]
+fn open_path(path: String) -> Result<(), String> {
+    opener::open(&path).map_err(|e| e.to_string())
+}
+
+/// Abre el explorador de archivos mostrando el archivo (revela la carpeta).
+#[tauri::command]
+fn reveal_path(path: String) -> Result<(), String> {
+    opener::reveal(&path).map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
 // Git
 // ---------------------------------------------------------------------------
@@ -438,6 +580,7 @@ pub fn run() {
             delete_finding,
             reorder_findings,
             save_asset,
+            save_branding_asset,
             search_findings,
             calc_cvss,
             list_finding_templates,
@@ -446,8 +589,13 @@ pub fn run() {
             list_snippets,
             save_snippet,
             list_pdf_templates,
+            duplicate_template,
+            read_template_source,
+            save_template_source,
             generate_pdf,
             preview_pdf,
+            open_path,
+            reveal_path,
             git_init,
             git_commit,
         ])

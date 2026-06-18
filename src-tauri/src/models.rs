@@ -133,6 +133,13 @@ pub struct Watermark {
     pub enabled: bool,
     pub text: String,
     pub opacity: f64,
+    /// Tamano de fuente en puntos. Editable; el texto nunca se parte.
+    #[serde(default = "default_watermark_size")]
+    pub size: f64,
+}
+
+fn default_watermark_size() -> f64 {
+    64.0
 }
 
 impl Default for Watermark {
@@ -142,6 +149,7 @@ impl Default for Watermark {
             enabled: true,
             text: "CONFIDENCIAL".to_string(),
             opacity: 0.08,
+            size: default_watermark_size(),
         }
     }
 }
@@ -150,10 +158,23 @@ impl Default for Watermark {
 pub struct Branding {
     #[serde(default)]
     pub logo_path: String,
+    /// Imagen de fondo de portada (distinta del logo). Vacio = color de marca.
+    #[serde(default)]
+    pub cover_background: String,
     #[serde(default = "default_primary_color")]
     pub primary_color: String,
     #[serde(default = "default_cover_layout")]
     pub cover_layout: String,
+    /// Opacidad de la capa oscura sobre la imagen de fondo (0.0 - 1.0).
+    #[serde(default = "default_scrim")]
+    pub cover_scrim: f64,
+    /// Si cada hallazgo arranca en su propia pagina en el PDF.
+    #[serde(default = "default_true")]
+    pub findings_page_break: bool,
+}
+
+fn default_scrim() -> f64 {
+    0.5
 }
 
 fn default_primary_color() -> String {
@@ -169,8 +190,11 @@ impl Default for Branding {
     fn default() -> Self {
         Branding {
             logo_path: String::new(),
+            cover_background: String::new(),
             primary_color: default_primary_color(),
             cover_layout: default_cover_layout(),
+            cover_scrim: default_scrim(),
+            findings_page_break: true,
         }
     }
 }
@@ -233,8 +257,18 @@ pub struct Snippet {
 /// Plantilla de PDF (.typ) disponible.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PdfTemplate {
+    /// Nombre de archivo sin extension (id).
     pub name: String,
     pub builtin: bool,
+    /// Titulo legible (de la metadata; cae al nombre si falta).
+    #[serde(default)]
+    pub title: String,
+    /// Descripcion corta.
+    #[serde(default)]
+    pub description: String,
+    /// Tags para filtrar (red-team, perimetral, web, oscp, htb...).
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 /// Resultado del calculo CVSS.

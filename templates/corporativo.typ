@@ -33,6 +33,28 @@
   accepted: "Aceptado",
   wontfix: "No se corregira",
 )
+#let status-color = (
+  open: rgb("#c2410c"),
+  fixed: rgb("#639922"),
+  accepted: rgb("#2563eb"),
+  wontfix: rgb("#78716c"),
+)
+// Chip con borde de color (estado) y chip mono para el vector CVSS.
+#let status-chip(status) = box(
+  inset: (x: 6pt, y: 2pt),
+  radius: 3pt,
+  stroke: 0.7pt + status-color.at(status, default: rgb("#78716c")),
+  text(size: 8pt, weight: "bold", fill: status-color.at(status, default: rgb("#78716c")), upper(
+    status-label.at(status, default: status),
+  )),
+)
+#let vector-chip(vec) = box(
+  fill: luma(236),
+  stroke: 0.5pt + luma(200),
+  inset: (x: 6pt, y: 3pt),
+  radius: 3pt,
+  text(size: 8pt, fill: luma(60), font: ("JetBrains Mono", "SF Mono", "monospace"), vec),
+)
 
 #let badge(text-content, fill-color) = box(
   fill: fill-color,
@@ -47,14 +69,15 @@
   paper: "a4",
   margin: (x: 2.2cm, top: 2.4cm, bottom: 2.2cm),
   background: if watermark.enabled and watermark.text != "" {
+    // box() evita que el texto se parta; el tamano es configurable.
     place(
       center + horizon,
-      rotate(-45deg, text(
-        size: 90pt,
+      rotate(-45deg, box(text(
+        size: watermark.size * 1pt,
         fill: rgb(180, 180, 180, int(watermark.opacity * 255)),
         weight: "bold",
         watermark.text,
-      )),
+      ))),
     )
   },
   footer: context [
@@ -81,8 +104,17 @@
 #let cover() = {
   let layout = ws.branding.cover_layout
   let logo = ws.branding.logo_path
+  let cover_bg = ws.branding.cover_background
 
-  set page(footer: none, background: none)
+  // El fondo de portada (imagen) es independiente del logo.
+  set page(
+    footer: none,
+    background: if cover_bg != "" {
+      image(cover_bg, width: 100%, height: 100%, fit: "cover")
+    } else {
+      none
+    },
+  )
   if layout == "sidebar" {
     grid(
       columns: (4pt, 1fr),
@@ -108,7 +140,13 @@
     ]
   } else if layout == "full-bleed" {
     set page(margin: 0pt)
-    block(fill: brand, width: 100%, height: 100%, inset: 3cm)[
+    // Con imagen de fondo: scrim oscuro translucido (opacidad configurable).
+    block(
+      fill: if cover_bg != "" { rgb(0, 0, 0, int(ws.branding.cover_scrim * 255)) } else { brand },
+      width: 100%,
+      height: 100%,
+      inset: 3cm,
+    )[
       #align(left + horizon)[
         #if logo != "" [#image(logo, width: 4cm)#v(1cm)]
         #text(size: 34pt, weight: "bold", fill: white, project.name)
@@ -135,6 +173,10 @@
 }
 
 #cover()
+
+// --- Indice de contenidos (TOC con numeros de pagina) ---
+#outline(title: [Indice de contenidos], depth: 2, indent: 1em)
+#pagebreak()
 
 // --- Equipo y alcance ---
 #heading(numbering: none)[Informacion del proyecto]
@@ -178,11 +220,32 @@
   text(weight: "bold", str(counts.info)),
 )
 
+// --- Indice de hallazgos ---
+#if data.findings.len() > 0 {
+  v(0.5cm)
+  heading(numbering: none)[Indice de hallazgos]
+  table(
+    columns: (auto, 1fr, auto),
+    align: (center + horizon, left + horizon, center + horizon),
+    stroke: 0.5pt + luma(220),
+    table.header([*\#*], [*Hallazgo*], [*Severidad*]),
+    ..data.findings.enumerate().map(((i, f)) => (
+      str(i + 1),
+      f.title,
+      badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info)),
+    )).flatten(),
+  )
+}
+
 // --- Secciones de prosa (resumen, alcance, metodologia, conclusiones) ---
 #for section in project.sections {
   if section.body.trim() != "" {
     heading(level: 1, numbering: none, section.title)
-    eval(section.body, mode: "markup")
+    // Los encabezados internos del cuerpo no van al indice de contenidos.
+    {
+      set heading(outlined: false)
+      eval(section.body, mode: "markup")
+    }
   }
 }
 
@@ -190,35 +253,39 @@
 #pagebreak()
 #heading(level: 1, numbering: none)[Hallazgos]
 
-#for f in data.findings {
+#for (i, f) in data.findings.enumerate() {
   let color = sev-color.at(f.severity, default: sev-color.info)
+  // Opcion: cada hallazgo en su propia hoja.
+  if i > 0 and ws.branding.findings_page_break { pagebreak() }
   block(
     breakable: false,
     width: 100%,
     inset: (left: 10pt),
     stroke: (left: 3pt + color),
   )[
-    #heading(level: 2, numbering: none, f.title)
+    #heading(level: 2, numbering: none, str(i + 1) + ". " + f.title)
     #badge(sev-label.at(f.severity, default: f.severity), color)
     #h(6pt)
     #if f.cvss != "" [
-      #box(fill: luma(240), inset: (x: 6pt, y: 3pt), radius: 3pt)[
-        #text(size: 8pt, weight: "bold")[CVSS #f.cvss_version: #f.cvss]
+      #box(fill: color, inset: (x: 6pt, y: 3pt), radius: 3pt)[
+        #text(size: 8pt, weight: "bold", fill: white)[CVSS #f.cvss_version: #f.cvss]
       ]
     ]
     #if f.cwe != "" [#h(6pt) #box(fill: luma(240), inset: (x: 6pt, y: 3pt), radius: 3pt, text(size: 8pt)[#f.cwe])]
     #h(6pt)
-    #text(size: 8pt, fill: gray)[Estado: #status-label.at(f.status, default: f.status)]
+    #status-chip(f.status)
   ]
 
   if f.cvss_vector != "" {
-    set text(size: 8pt, fill: gray)
-    block(above: 4pt)[#raw(f.cvss_vector)]
+    block(above: 6pt, vector-chip(f.cvss_vector))
   }
   if f.affected.len() > 0 {
     block(above: 6pt)[*Activos afectados:* #f.affected.map(a => raw(a)).join(", ")]
   }
   v(4pt)
-  eval(f.body, mode: "markup")
+  {
+    set heading(outlined: false)
+    eval(f.body, mode: "markup")
+  }
   v(0.6cm)
 }

@@ -10,13 +10,14 @@ export interface SectionDef {
   full?: boolean;
 }
 
-// El PoC es markdown como las demas (estilo HackerOne: paso a paso con
-// evidencia, capturas pegadas e includes de codigo).
+// Orden convencional de pentest: Descripcion, Impacto, Prueba de concepto y
+// por ultimo Remediacion. El PoC es markdown como las demas (estilo HackerOne:
+// paso a paso con evidencia, capturas pegadas e includes de codigo).
 export const FINDING_SECTIONS: SectionDef[] = [
   { key: "descripcion", title: "Descripcion", full: true },
-  { key: "impacto", title: "Impacto" },
-  { key: "remediacion", title: "Remediacion" },
+  { key: "impacto", title: "Impacto", full: true },
   { key: "poc", title: "Prueba de concepto", full: true },
+  { key: "remediacion", title: "Remediacion", full: true },
 ];
 
 /** Normaliza un titulo para comparar (minusculas, sin acentos). */

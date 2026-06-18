@@ -37,6 +37,15 @@ function parseWidth(alt: string): string | null {
   return n >= 1 && n <= 100 ? `${n}%` : null;
 }
 
+/** Asegura que cada imagen quede como bloque aislado (linea propia con saltos
+ * alrededor). Evita que un `![](..)` quede pegado al texto/encabezado siguiente. */
+function normalizeImages(md: string): string {
+  return md
+    .replace(/(!\[[^\]]*\]\([^)]*\))/g, "\n\n$1\n\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function extFromFile(file: File): string {
   const fromName = file.name.includes(".") ? file.name.split(".").pop() ?? "" : "";
   if (fromName) return fromName;
@@ -129,7 +138,7 @@ export function MarkdownEditor({ value, onChange, placeholder, assetBase, projec
     },
     content: value,
     onUpdate: ({ editor }) => {
-      onChange(editor.storage.markdown.getMarkdown());
+      onChange(normalizeImages(editor.storage.markdown.getMarkdown()));
     },
   });
 

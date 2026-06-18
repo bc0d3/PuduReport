@@ -67,13 +67,21 @@ export interface Watermark {
   text: string;
   /** 0.0 - 1.0 */
   opacity: number;
+  /** Tamano de fuente en puntos. */
+  size: number;
 }
 
 export interface Branding {
   logo_path: string;
+  /** Imagen de fondo de portada (ruta root-relative); vacio = color de marca. */
+  cover_background: string;
   primary_color: string;
   /** Disposicion de portada. */
   cover_layout: "centered" | "sidebar" | "full-bleed" | "minimal";
+  /** Opacidad de la capa oscura sobre la imagen de fondo (0.0 - 1.0). */
+  cover_scrim: number;
+  /** Cada hallazgo en su propia pagina. */
+  findings_page_break: boolean;
 }
 
 /** workspace.yaml */
@@ -109,10 +117,16 @@ export interface Snippet {
 
 /** Plantilla de PDF (.typ) disponible. */
 export interface PdfTemplate {
-  /** Nombre de archivo sin extension. */
+  /** Nombre de archivo sin extension (id). */
   name: string;
   /** Si es de la libreria base (versionada) o del workspace del usuario. */
   builtin: boolean;
+  /** Titulo legible. */
+  title: string;
+  /** Descripcion corta. */
+  description: string;
+  /** Tags para filtrar (red-team, perimetral, web, oscp, htb...). */
+  tags: string[];
 }
 
 export interface CvssResult {

@@ -36,6 +36,7 @@ git2 = { version = "0.19", default-features = false }
 pulldown-cmark = { version = "0.12", default-features = false }
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
+opener = { version = "0.7", features = ["reveal"] }
 
 [features]
 # Feature por defecto requerida por Tauri en build de produccion.

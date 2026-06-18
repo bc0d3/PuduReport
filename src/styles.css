@@ -715,6 +715,38 @@ i.ti {
   border-color: var(--border-strong);
   background: var(--bg-subtle);
 }
+.card.tpl-active {
+  border: 2px solid var(--accent);
+}
+.tag-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.tag-chip {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 12px;
+}
+.tag-chip:hover {
+  border-color: var(--border-strong);
+}
+.tag-chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+.mini-tag {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 10px;
+}
 
 /* Editor de hallazgo: fila de campos */
 .fieldrow {
@@ -856,4 +888,25 @@ i.ti {
   color: var(--text-muted);
   padding: 16px;
   font-size: 12px;
+}
+.upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brand-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  object-fit: contain;
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+}
+.brand-thumb.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 20px;
 }

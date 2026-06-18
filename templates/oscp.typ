@@ -1,13 +1,15 @@
-// Plantilla "infraestructura" de PuduReport.
+// Plantilla "OSCP Exam Report" de PuduReport.
 //
-// Orientada a pentest de infraestructura: portada con barra lateral, enfasis
-// en alcance/activos como tabla, acento teal. Consume build/data.json.
+// Estructura inspirada en la OSCP-Exam-Report-Template-Markdown de noraj
+// (github.com/noraj, MIT). Reimplementada en Typst; consume el mismo
+// build/data.json que el resto. Llena las secciones (Introduccion, Objetivo,
+// High-Level Summary, Metodologia...) en la pestaña Reporte; cada maquina o
+// vulnerabilidad es un hallazgo (con su IP en "activos afectados").
 
 #let data = json("data.json")
 #let ws = data.workspace
 #let project = data.project
 #let brand = rgb(ws.branding.primary_color)
-#let accent = rgb("#0f766e")
 
 #let sev-color = (
   critical: rgb("#a32d2d"),
@@ -50,7 +52,6 @@
   radius: 3pt,
   text(size: 8pt, fill: luma(60), font: ("JetBrains Mono", "SF Mono", "monospace"), vec),
 )
-
 #let badge(text-content, fill-color) = box(
   fill: fill-color,
   inset: (x: 7pt, y: 3pt),
@@ -58,6 +59,7 @@
   text(fill: white, weight: "bold", size: 8pt, upper(text-content)),
 )
 
+// --- Pagina + marca de agua ---
 #let watermark = ws.watermark
 #set page(
   paper: "a4",
@@ -75,52 +77,60 @@
   },
   footer: context [
     #set text(size: 8pt, fill: gray)
-    #ws.watermark.text #h(1fr) #project.client #h(1fr) #counter(page).display("1 / 1", both: true)
+    OSCP Exam Report #h(1fr) #project.client #h(1fr) #counter(page).display("1 / 1", both: true)
   ],
 )
 #set text(font: ("Helvetica Neue", "Arial"), size: 10.5pt, lang: "es")
 #set par(justify: true, leading: 0.65em)
 #set heading(numbering: none)
 #show heading.where(level: 1): it => [
-  #set text(size: 15pt, fill: accent, weight: "bold")
-  #block(above: 1.3em, below: 0.6em)[#it]
+  #set text(size: 15pt, fill: brand, weight: "bold")
+  #block(above: 1.3em, below: 0.5em)[#it]
 ]
 #show heading.where(level: 2): it => [
   #set text(size: 12pt, weight: "bold")
-  #block(above: 0.9em, below: 0.4em)[#it]
+  #block(above: 1em, below: 0.4em)[#it]
 ]
 
-// Portada con barra lateral
-#set page(
-  footer: none,
-  background: if ws.branding.cover_background != "" {
-    image(ws.branding.cover_background, width: 100%, height: 100%, fit: "cover")
-  } else {
-    none
-  },
-)
-#grid(
-  columns: (5pt, 1fr),
-  rows: 100%,
-  box(fill: accent, height: 100%, width: 5pt),
-  pad(left: 1cm, align(left + horizon)[
-    #if ws.branding.logo_path != "" [#image(ws.branding.logo_path, width: 4cm)#v(1cm)]
-    #text(size: 12pt, fill: accent, weight: "bold")[REPORTE DE INFRAESTRUCTURA]
-    #v(0.3cm)
-    #text(size: 30pt, weight: "bold", project.name)
-    #v(0.3cm)
-    #text(size: 16pt, fill: gray, project.client)
-    #v(2cm)
-    #text(size: 11pt, fill: gray)[#project.start_date — #project.end_date]
-  ]),
-)
+// --- Portada estilo examen ---
+#set page(footer: none, background: if ws.branding.cover_background != "" {
+  image(ws.branding.cover_background, width: 100%, height: 100%, fit: "cover")
+})
+#block(fill: brand, width: 100%, height: 10pt)
+#v(5cm)
+#align(center)[
+  #if ws.branding.logo_path != "" [#image(ws.branding.logo_path, width: 4.5cm)#v(0.8cm)]
+  #text(size: 13pt, fill: brand, weight: "bold")[Offensive Security Certified Professional]
+  #v(0.2cm)
+  #text(size: 30pt, weight: "bold")[Exam Penetration Test Report]
+  #v(0.3cm)
+  #line(length: 35%, stroke: 1pt + brand)
+]
+#v(1fr)
+#align(center, box(width: 70%)[
+  #grid(
+    columns: (auto, 1fr),
+    row-gutter: 7pt,
+    column-gutter: 14pt,
+    align: (right, left),
+    [*Candidato:*], project.client,
+    [*OSID:*], [—],
+    [*Equipo:*],
+    if project.team.len() > 0 { project.team.map(m => m.name).join(", ") } else [—],
+    [*Fecha:*], [#project.start_date — #project.end_date],
+  )
+])
+#v(2cm)
+#align(center, text(size: 9pt, fill: gray)[
+  Este documento contiene informacion confidencial. Su distribucion esta restringida.
+])
 #pagebreak()
 
-// Restaurar page con footer y watermark para el resto
+// --- Page para el resto (footer + watermark) ---
 #set page(
   footer: context [
     #set text(size: 8pt, fill: gray)
-    #ws.watermark.text #h(1fr) #project.client #h(1fr) #counter(page).display("1 / 1", both: true)
+    OSCP Exam Report #h(1fr) #project.client #h(1fr) #counter(page).display("1 / 1", both: true)
   ],
   background: if watermark.enabled and watermark.text != "" {
     place(
@@ -135,35 +145,11 @@
   },
 )
 
-// Indice de contenidos (TOC con numeros de pagina)
-#outline(title: [Indice de contenidos], depth: 2, indent: 1em)
+// --- Indice de contenidos ---
+#outline(title: [Table of Contents], depth: 2, indent: 1em)
 #pagebreak()
 
-// Alcance / activos como tabla destacada
-#heading(level: 1)[Alcance y activos]
-#if project.scope.len() > 0 {
-  table(
-    columns: (auto, 1fr),
-    align: (center + horizon, left + horizon),
-    stroke: 0.5pt + luma(200),
-    table.header([*\#*], [*Activo*]),
-    ..project.scope.enumerate().map(((i, s)) => (str(i + 1), raw(s))).flatten(),
-  )
-} else [Sin activos definidos.]
-
-#grid(
-  columns: (auto, 1fr),
-  row-gutter: 6pt,
-  column-gutter: 12pt,
-  [*Cliente:*], project.client,
-  [*Periodo:*], [#project.start_date — #project.end_date],
-  [*Equipo:*],
-  if project.team.len() > 0 {
-    project.team.map(m => m.name + " (" + m.role + ")").join(", ")
-  } else [—],
-)
-
-// Resumen de severidades
+// --- Resumen de severidades ---
 #let counts = data.severity_counts
 #heading(level: 1)[Resumen de hallazgos]
 #table(
@@ -184,24 +170,7 @@
   text(weight: "bold", str(counts.info)),
 )
 
-// Indice de hallazgos
-#if data.findings.len() > 0 {
-  v(0.5cm)
-  heading(level: 1)[Indice de hallazgos]
-  table(
-    columns: (auto, 1fr, auto),
-    align: (center + horizon, left + horizon, center + horizon),
-    stroke: 0.5pt + luma(220),
-    table.header([*\#*], [*Hallazgo*], [*Severidad*]),
-    ..data.findings.enumerate().map(((i, f)) => (
-      str(i + 1),
-      f.title,
-      badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info)),
-    )).flatten(),
-  )
-}
-
-// Secciones de prosa
+// --- Secciones de prosa (Introduccion, Objetivo, Metodologia, etc.) ---
 #for section in project.sections {
   if section.body.trim() != "" {
     heading(level: 1, section.title)
@@ -212,7 +181,7 @@
   }
 }
 
-// Hallazgos
+// --- Hallazgos / Objetivos ---
 #pagebreak()
 #heading(level: 1)[Hallazgos]
 #for (i, f) in data.findings.enumerate() {
@@ -240,7 +209,7 @@
     block(above: 6pt, vector-chip(f.cvss_vector))
   }
   if f.affected.len() > 0 {
-    block(above: 6pt)[*Activos afectados:* #f.affected.map(a => raw(a)).join(", ")]
+    block(above: 6pt)[*Objetivo / activos:* #f.affected.map(a => raw(a)).join(", ")]
   }
   v(4pt)
   {

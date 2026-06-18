@@ -94,6 +94,11 @@ export function saveAsset(projectId: string, ext: string, dataBase64: string): P
   return invoke("save_asset", { projectId, ext, dataBase64 });
 }
 
+/** Guarda un asset de marca (logo / fondo de portada). Devuelve ruta root-relative. */
+export function saveBrandingAsset(ext: string, dataBase64: string): Promise<string> {
+  return invoke("save_branding_asset", { ext, dataBase64 });
+}
+
 // --- CVSS ---
 
 /** Calcula puntaje y severidad a partir de un vector CVSS 3.1 o 4.0. */
@@ -132,6 +137,21 @@ export function listPdfTemplates(): Promise<PdfTemplate[]> {
   return invoke("list_pdf_templates");
 }
 
+/** Duplica una plantilla a la libreria del usuario. Devuelve el nuevo nombre. */
+export function duplicateTemplate(name: string): Promise<string> {
+  return invoke("duplicate_template", { name });
+}
+
+/** Lee el codigo fuente .typ de una plantilla. */
+export function readTemplateSource(name: string): Promise<string> {
+  return invoke("read_template_source", { name });
+}
+
+/** Guarda el codigo fuente .typ en la libreria del usuario. */
+export function saveTemplateSource(name: string, content: string): Promise<void> {
+  return invoke("save_template_source", { name, content });
+}
+
 // --- PDF ---
 
 /** Compila el PDF del proyecto y devuelve la ruta del archivo generado. */
@@ -142,6 +162,16 @@ export function generatePdf(projectId: string): Promise<string> {
 /** Renderiza el PDF a imagenes PNG (data URLs) para la vista previa embebida. */
 export function previewPdf(projectId: string): Promise<string[]> {
   return invoke("preview_pdf", { projectId });
+}
+
+/** Abre un archivo con la app por defecto del sistema. */
+export function openPath(path: string): Promise<void> {
+  return invoke("open_path", { path });
+}
+
+/** Abre el explorador mostrando el archivo (revela la carpeta). */
+export function revealPath(path: string): Promise<void> {
+  return invoke("reveal_path", { path });
 }
 
 // --- Git ---

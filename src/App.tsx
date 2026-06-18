@@ -139,9 +139,19 @@ function AppInner() {
             onPickProject={() => setView("proyectos")}
           />
         )}
-        {view === "plantillas" && <TemplateLibrary projectId={activeProjectId} />}
+        {view === "plantillas" && (
+          <TemplateLibrary
+            projectId={activeProjectId}
+            workspace={workspace}
+            onWorkspaceSaved={setWorkspace}
+          />
+        )}
         {view === "portada" && (
-          <CoverEditor workspace={workspace} onWorkspaceSaved={setWorkspace} />
+          <CoverEditor
+            workspace={workspace}
+            workspacePath={workspacePath}
+            onWorkspaceSaved={setWorkspace}
+          />
         )}
         {view === "preview" && (
           <PdfPreview projectId={activeProjectId} onPickProject={() => setView("proyectos")} />

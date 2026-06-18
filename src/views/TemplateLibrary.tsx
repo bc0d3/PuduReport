@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as api from "../lib/api";
-import type { FindingTemplate, Snippet } from "../lib/types";
+import type { FindingTemplate, PdfTemplate, Snippet, WorkspaceMeta } from "../lib/types";
 import { SeverityBadge } from "../components/Severity";
 import { Modal } from "../components/Modal";
 import { MarkdownEditor } from "../components/MarkdownEditor";
@@ -8,9 +8,11 @@ import { useToast } from "../components/Toast";
 
 interface Props {
   projectId: string | null;
+  workspace: WorkspaceMeta;
+  onWorkspaceSaved: (meta: WorkspaceMeta) => void;
 }
 
-type Tab = "findings" | "snippets";
+type Tab = "pdf" | "findings" | "snippets";
 
 /** Extrae los nombres de variables {{var}} de un texto. */
 function extractVars(...texts: string[]): string[] {
@@ -25,23 +27,56 @@ function extractVars(...texts: string[]): string[] {
   return [...found];
 }
 
-export function TemplateLibrary({ projectId }: Props) {
+export function TemplateLibrary({ projectId, workspace, onWorkspaceSaved }: Props) {
   const { guard, notify } = useToast();
-  const [tab, setTab] = useState<Tab>("findings");
+  const [tab, setTab] = useState<Tab>("pdf");
   const [templates, setTemplates] = useState<FindingTemplate[]>([]);
   const [snippets, setSnippets] = useState<Snippet[]>([]);
+  const [pdfTemplates, setPdfTemplates] = useState<PdfTemplate[]>([]);
+  const [query, setQuery] = useState("");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [instantiating, setInstantiating] = useState<FindingTemplate | null>(null);
   const [creatingTemplate, setCreatingTemplate] = useState(false);
   const [creatingSnippet, setCreatingSnippet] = useState(false);
 
   const reload = useCallback(async () => {
-    const [t, s] = await Promise.all([
+    const [t, s, p] = await Promise.all([
       guard(api.listFindingTemplates()),
       guard(api.listSnippets()),
+      guard(api.listPdfTemplates()),
     ]);
     if (t) setTemplates(t);
     if (s) setSnippets(s);
+    if (p) setPdfTemplates(p);
   }, [guard]);
+
+  async function applyTemplate(name: string) {
+    const next = { ...workspace, active_template: name };
+    const done = await guard(api.saveWorkspaceMeta(next), `Plantilla activa: ${name}`);
+    if (done !== undefined) onWorkspaceSaved(next);
+  }
+
+  async function duplicate(name: string) {
+    const newName = await guard(api.duplicateTemplate(name), "Plantilla duplicada");
+    if (newName) {
+      await reload();
+      setEditing(newName);
+    }
+  }
+
+  const allTags = [...new Set(pdfTemplates.flatMap((t) => t.tags))].sort();
+  const q = query.trim().toLowerCase();
+  const filteredPdf = pdfTemplates.filter((t) => {
+    const matchesQuery =
+      q === "" ||
+      t.title.toLowerCase().includes(q) ||
+      t.name.toLowerCase().includes(q) ||
+      t.description.toLowerCase().includes(q) ||
+      t.tags.some((tag) => tag.toLowerCase().includes(q));
+    const matchesTag = !tagFilter || t.tags.includes(tagFilter);
+    return matchesQuery && matchesTag;
+  });
 
   useEffect(() => {
     reload();
@@ -51,6 +86,10 @@ export function TemplateLibrary({ projectId }: Props) {
     <div className="view">
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div className="tabs">
+          <button className={`tab ${tab === "pdf" ? "active" : ""}`} onClick={() => setTab("pdf")}>
+            <i className="ti ti-layout-cards" />
+            Plantillas PDF
+          </button>
           <button
             className={`tab ${tab === "findings" ? "active" : ""}`}
             onClick={() => setTab("findings")}
@@ -64,16 +103,108 @@ export function TemplateLibrary({ projectId }: Props) {
             Snippets
           </button>
         </div>
-        {tab === "findings" ? (
+        {tab === "findings" && (
           <button className="btn primary" onClick={() => setCreatingTemplate(true)}>
             Nueva plantilla
           </button>
-        ) : (
+        )}
+        {tab === "snippets" && (
           <button className="btn primary" onClick={() => setCreatingSnippet(true)}>
             Nuevo snippet
           </button>
         )}
       </div>
+
+      {tab === "pdf" && (
+        <>
+          <div className="field" style={{ maxWidth: 360, marginTop: 12, marginBottom: 8 }}>
+            <input
+              className="input"
+              placeholder="Buscar por nombre, descripcion o tag..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          {allTags.length > 0 && (
+            <div className="tag-filter">
+              <button
+                className={`tag-chip ${!tagFilter ? "on" : ""}`}
+                onClick={() => setTagFilter(null)}
+              >
+                Todas
+              </button>
+              {allTags.map((tag) => (
+                <button
+                  key={tag}
+                  className={`tag-chip ${tagFilter === tag ? "on" : ""}`}
+                  onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          )}
+          {filteredPdf.length === 0 ? (
+            <div className="empty">No hay plantillas que coincidan.</div>
+          ) : (
+            <div className="card-grid">
+              {filteredPdf.map((t) => {
+                const active = workspace.active_template === t.name;
+                return (
+                  <div key={`${t.name}-${t.builtin}`} className={`card ${active ? "tpl-active" : ""}`}>
+                    <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+                      <i
+                        className="ti ti-file-type-pdf"
+                        style={{ color: "var(--accent)", fontSize: 18 }}
+                      />
+                      <strong>{t.title || t.name}</strong>
+                      {active && (
+                        <span className="sev-badge" style={{ background: "var(--accent)" }}>
+                          Activa
+                        </span>
+                      )}
+                    </div>
+                    <p className="muted" style={{ margin: "0 0 8px", minHeight: 30 }}>
+                      {t.description || "Plantilla de PDF."}
+                    </p>
+                    {t.tags.length > 0 && (
+                      <div className="tag-list" style={{ marginBottom: 10 }}>
+                        {t.tags.map((tag) => (
+                          <span key={tag} className="mini-tag">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="row" style={{ justifyContent: "space-between" }}>
+                      <span className="faint" style={{ fontSize: 11 }}>
+                        {t.builtin ? "incluida" : "tu libreria"}
+                      </span>
+                      <div className="row" style={{ gap: 6 }}>
+                        {!t.builtin && (
+                          <button className="btn small" title="Editar" onClick={() => setEditing(t.name)}>
+                            <i className="ti ti-pencil" />
+                          </button>
+                        )}
+                        <button className="btn small" title="Duplicar" onClick={() => duplicate(t.name)}>
+                          <i className="ti ti-copy" />
+                        </button>
+                        <button
+                          className={`btn small ${active ? "" : "primary"}`}
+                          disabled={active}
+                          onClick={() => applyTemplate(t.name)}
+                        >
+                          {active ? "En uso" : "Usar"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
 
       {tab === "findings" && (
         <>
@@ -158,7 +289,70 @@ export function TemplateLibrary({ projectId }: Props) {
           }}
         />
       )}
+
+      {editing && (
+        <TemplateEditor
+          name={editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            await reload();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/** Editor del codigo fuente .typ de una plantilla (nivel avanzado). */
+function TemplateEditor({
+  name,
+  onClose,
+  onSaved,
+}: {
+  name: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { guard } = useToast();
+  const [source, setSource] = useState<string | null>(null);
+
+  useEffect(() => {
+    guard(api.readTemplateSource(name)).then((s) => setSource(s ?? ""));
+  }, [guard, name]);
+
+  async function save() {
+    if (source === null) return;
+    const done = await guard(api.saveTemplateSource(name, source), "Plantilla guardada");
+    if (done !== undefined) onSaved();
+  }
+
+  return (
+    <Modal
+      title={`Editar plantilla: ${name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="btn primary" onClick={save} disabled={source === null}>
+            Guardar
+          </button>
+        </>
+      }
+    >
+      <p className="faint" style={{ fontSize: 12, marginTop: 0 }}>
+        Codigo Typst. Se guarda en tu libreria. Consume el mismo data.json.
+      </p>
+      <textarea
+        className="textarea mono"
+        style={{ width: "100%", minHeight: 360, fontSize: 12 }}
+        value={source ?? "Cargando..."}
+        onChange={(e) => setSource(e.target.value)}
+        spellCheck={false}
+      />
+    </Modal>
   );
 }
 
