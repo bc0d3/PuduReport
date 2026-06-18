@@ -79,15 +79,23 @@
   size: 10.5pt, weight: "bold", fill: luma(45), it,
 ))
 
-// Bloques de codigo: la sintaxis resalta legible sobre fondo claro con borde.
+// Bloques de codigo: fondo oscuro con resaltado de sintaxis. La etiqueta de
+// lenguaje (```http, ```sql...) se muestra como cabecera del bloque.
+#set raw(theme: "code-dark.tmTheme")
 #show raw.where(block: true): it => block(
-  fill: luma(247),
-  stroke: 0.5pt + luma(215),
-  radius: 3pt,
-  inset: 9pt,
   width: 100%,
-  text(size: 8.5pt, it),
-)
+  fill: rgb("#1e1f24"),
+  radius: 4pt,
+  clip: true,
+  stroke: 0.5pt + rgb("#2c2d34"),
+)[
+  #if it.lang != none [
+    #block(width: 100%, fill: rgb("#2c2d34"), inset: (x: 9pt, y: 3pt))[
+      #text(size: 7pt, weight: "bold", fill: rgb("#9aa0aa"), tracking: 0.4pt, upper(it.lang))
+    ]
+  ]
+  #block(inset: 9pt, text(size: 8.5pt, fill: rgb("#e6e6e6"), it))
+]
 
 // Tablas minimalistas (solo lineas horizontales, estilo booktabs).
 #set table(stroke: (_, y) => if y == 0 {

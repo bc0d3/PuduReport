@@ -36,7 +36,6 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [pdfTemplates, setPdfTemplates] = useState<PdfTemplate[]>([]);
   const [query, setQuery] = useState("");
-  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [instantiating, setInstantiating] = useState<FindingTemplate | null>(null);
   const [creatingTemplate, setCreatingTemplate] = useState(false);
@@ -77,7 +76,6 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
           <tr>
             <th>Plantilla</th>
             <th>Descripcion</th>
-            <th>Tags</th>
             <th className="ta-right">Acciones</th>
           </tr>
         </thead>
@@ -95,17 +93,6 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
                   <span className="tpl-id">{t.name}</span>
                 </td>
                 <td className="tpl-desc">{t.description || "Plantilla de PDF."}</td>
-                <td>
-                  {t.tags.length > 0 && (
-                    <div className="tag-list">
-                      {t.tags.map((tag) => (
-                        <span key={tag} className="mini-tag">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </td>
                 <td>
                   <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
                     {!t.builtin && (
@@ -149,18 +136,14 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
     }
   }
 
-  const allTags = [...new Set(pdfTemplates.flatMap((t) => t.tags))].sort();
   const q = query.trim().toLowerCase();
-  const filteredPdf = pdfTemplates.filter((t) => {
-    const matchesQuery =
+  const filteredPdf = pdfTemplates.filter(
+    (t) =>
       q === "" ||
       t.title.toLowerCase().includes(q) ||
       t.name.toLowerCase().includes(q) ||
-      t.description.toLowerCase().includes(q) ||
-      t.tags.some((tag) => tag.toLowerCase().includes(q));
-    const matchesTag = !tagFilter || t.tags.includes(tagFilter);
-    return matchesQuery && matchesTag;
-  });
+      t.description.toLowerCase().includes(q),
+  );
   const builtinPdf = filteredPdf.filter((t) => t.builtin);
   const userPdf = filteredPdf.filter((t) => !t.builtin);
 
@@ -219,30 +202,11 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
           <div className="field" style={{ maxWidth: 360, marginTop: 8, marginBottom: 8 }}>
             <input
               className="input"
-              placeholder="Buscar por nombre, descripcion o tag..."
+              placeholder="Buscar por nombre o descripcion..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          {allTags.length > 0 && (
-            <div className="tag-filter">
-              <button
-                className={`tag-chip ${!tagFilter ? "on" : ""}`}
-                onClick={() => setTagFilter(null)}
-              >
-                Todas
-              </button>
-              {allTags.map((tag) => (
-                <button
-                  key={tag}
-                  className={`tag-chip ${tagFilter === tag ? "on" : ""}`}
-                  onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          )}
           {filteredPdf.length === 0 ? (
             <div className="empty">No hay plantillas que coincidan.</div>
           ) : (
@@ -264,7 +228,7 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
                 <span className="faint">Vienen en el compilado de PuduReport</span>
               </div>
               {builtinPdf.length === 0 ? (
-                <div className="empty">Ninguna incluida coincide con el filtro.</div>
+                <div className="empty">Ninguna incluida coincide con la busqueda.</div>
               ) : (
                 pdfTable(builtinPdf)
               )}

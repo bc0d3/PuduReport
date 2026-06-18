@@ -50,6 +50,23 @@
   #block(above: 1em, below: 0.5em)[#it]
 ]
 
+// Bloques de codigo: fondo oscuro con resaltado + etiqueta de lenguaje.
+#set raw(theme: "code-dark.tmTheme")
+#show raw.where(block: true): it => block(
+  width: 100%,
+  fill: rgb("#1e1f24"),
+  radius: 4pt,
+  clip: true,
+  stroke: 0.5pt + rgb("#2c2d34"),
+)[
+  #if it.lang != none [
+    #block(width: 100%, fill: rgb("#2c2d34"), inset: (x: 9pt, y: 3pt))[
+      #text(size: 7pt, weight: "bold", fill: rgb("#9aa0aa"), tracking: 0.4pt, upper(it.lang))
+    ]
+  ]
+  #block(inset: 9pt, text(size: 8.5pt, fill: rgb("#e6e6e6"), it))
+]
+
 // --- Portada (layout configurable) ---
 #let cover() = {
   let layout = ws.branding.cover_layout

@@ -97,6 +97,28 @@ export interface WorkspaceMeta {
   watermark: Watermark;
 }
 
+/** Un archivo con cambios sin commitear (relativo al workspace). */
+export interface GitChange {
+  path: string;
+  /** "new" | "modified" | "deleted" | "renamed". */
+  status: string;
+}
+
+/** Estado git del proyecto. */
+export interface GitState {
+  initialized: boolean;
+  changes: GitChange[];
+}
+
+/** Un commit del historial. */
+export interface GitCommit {
+  hash: string;
+  message: string;
+  author: string;
+  /** Segundos Unix. */
+  timestamp: number;
+}
+
 /** Workspace reciente para la pantalla de bienvenida. */
 export interface RecentWorkspace {
   path: string;

@@ -484,12 +484,16 @@ i.ti {
 .ProseMirror p {
   margin: 0.4em 0;
 }
+/* Bloque de codigo: siempre oscuro, con resaltado de sintaxis (lowlight). */
 .ProseMirror pre {
-  background: var(--bg-subtle);
-  padding: 10px 12px;
+  background: #1e1f24;
+  color: #e6e6e6;
+  padding: 11px 13px;
   border-radius: 6px;
+  border: 1px solid #2c2d34;
   font-family: var(--mono);
   font-size: 12.5px;
+  line-height: 1.5;
   overflow-x: auto;
 }
 .ProseMirror code {
@@ -502,6 +506,54 @@ i.ti {
 .ProseMirror pre code {
   background: none;
   padding: 0;
+  color: inherit;
+}
+/* Tokens highlight.js (tema oscuro, igual en modo claro y oscuro de la app). */
+.ProseMirror pre .hljs-comment,
+.ProseMirror pre .hljs-quote {
+  color: #7f848e;
+  font-style: italic;
+}
+.ProseMirror pre .hljs-keyword,
+.ProseMirror pre .hljs-selector-tag,
+.ProseMirror pre .hljs-literal,
+.ProseMirror pre .hljs-section {
+  color: #c678dd;
+}
+.ProseMirror pre .hljs-string,
+.ProseMirror pre .hljs-attr,
+.ProseMirror pre .hljs-meta-string {
+  color: #98c379;
+}
+.ProseMirror pre .hljs-number,
+.ProseMirror pre .hljs-built_in,
+.ProseMirror pre .hljs-class .hljs-title,
+.ProseMirror pre .hljs-params {
+  color: #d19a66;
+}
+.ProseMirror pre .hljs-title,
+.ProseMirror pre .hljs-function .hljs-title,
+.ProseMirror pre .hljs-symbol {
+  color: #61afef;
+}
+.ProseMirror pre .hljs-tag,
+.ProseMirror pre .hljs-name,
+.ProseMirror pre .hljs-variable,
+.ProseMirror pre .hljs-template-variable {
+  color: #e06c75;
+}
+.ProseMirror pre .hljs-type,
+.ProseMirror pre .hljs-attribute,
+.ProseMirror pre .hljs-meta {
+  color: #56b6c2;
+}
+.md-lang {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 3px 4px;
 }
 .ProseMirror ul,
 .ProseMirror ol {
@@ -751,6 +803,85 @@ i.ti {
   border-radius: 4px;
   padding: 2px 7px;
   font-size: 10px;
+}
+
+/* Vista de historial git del proyecto */
+.git-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 4px 0 8px;
+}
+.git-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.git-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.git-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.git-row:last-child {
+  border-bottom: none;
+}
+.git-chip {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: #ffffff;
+}
+.git-path {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.git-dot {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin: 0 3px;
+}
+.git-commit-msg {
+  flex: 1;
+  min-width: 0;
+}
+.git-commit-msg .m {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.git-commit-msg .meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.git-hash {
+  flex-shrink: 0;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 /* Pantalla de bienvenida (launcher estilo IDE) */

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>name</key>
+  <string>PuduReport Dark</string>
+  <key>settings</key>
+  <array>
+    <dict>
+      <key>settings</key>
+      <dict>
+        <key>background</key>
+        <string>#1E1F24</string>
+        <key>foreground</key>
+        <string>#E6E6E6</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>comment, punctuation.definition.comment</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#7F848E</string>
+        <key>fontStyle</key>
+        <string>italic</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>keyword, storage, storage.type, keyword.control, keyword.operator</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#C678DD</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>string, string.quoted, string.regexp, punctuation.definition.string</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#98C379</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>constant.numeric, constant.language, constant.character</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#D19A66</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>entity.name.function, support.function, meta.function-call</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#61AFEF</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>variable, entity.name.tag, support.type.property-name, meta.attribute</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#E06C75</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>support.type, support.class, entity.other.attribute-name, keyword.other, constant.other</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#56B6C2</string>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>

@@ -660,6 +660,20 @@ fn git_commit(state: State<AppState>, message: String) -> Result<(), String> {
     git::commit(&root, &message).map_err(|e| e.to_string())
 }
 
+/// Estado git (cambios sin commitear) de un proyecto.
+#[tauri::command]
+fn git_status(state: State<AppState>, project_id: String) -> Result<git::GitState, String> {
+    let root = current_root(&state)?;
+    git::status(&root, &project_id).map_err(|e| e.to_string())
+}
+
+/// Historial de commits que tocan un proyecto (mas reciente primero).
+#[tauri::command]
+fn git_log(state: State<AppState>, project_id: String) -> Result<Vec<git::GitCommit>, String> {
+    let root = current_root(&state)?;
+    git::log(&root, &project_id, 50).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -705,6 +719,8 @@ pub fn run() {
             reveal_path,
             git_init,
             git_commit,
+            git_status,
+            git_log,
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar la aplicacion Tauri");

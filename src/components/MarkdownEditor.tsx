@@ -1,12 +1,60 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import { createLowlight } from "lowlight";
+import bash from "highlight.js/lib/languages/bash";
+import go from "highlight.js/lib/languages/go";
+import http from "highlight.js/lib/languages/http";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import php from "highlight.js/lib/languages/php";
+import powershell from "highlight.js/lib/languages/powershell";
+import python from "highlight.js/lib/languages/python";
+import sql from "highlight.js/lib/languages/sql";
+import typescript from "highlight.js/lib/languages/typescript";
+import xml from "highlight.js/lib/languages/xml";
+import yaml from "highlight.js/lib/languages/yaml";
 import { Markdown } from "tiptap-markdown";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import * as api from "../lib/api";
+
+// Resaltado de sintaxis para los bloques de codigo (se empaqueta, sin red).
+const lowlight = createLowlight();
+lowlight.register({
+  bash,
+  go,
+  http,
+  javascript,
+  json,
+  php,
+  powershell,
+  python,
+  sql,
+  typescript,
+  xml,
+  yaml,
+});
+
+// Lenguajes ofrecidos en el selector (valor = id de highlight.js, "" = texto plano).
+const CODE_LANGS: { value: string; label: string }[] = [
+  { value: "", label: "Texto plano" },
+  { value: "bash", label: "Bash / shell" },
+  { value: "http", label: "HTTP" },
+  { value: "javascript", label: "JavaScript" },
+  { value: "typescript", label: "TypeScript" },
+  { value: "python", label: "Python" },
+  { value: "php", label: "PHP" },
+  { value: "powershell", label: "PowerShell" },
+  { value: "go", label: "Go" },
+  { value: "sql", label: "SQL" },
+  { value: "json", label: "JSON" },
+  { value: "xml", label: "HTML / XML" },
+  { value: "yaml", label: "YAML" },
+];
 
 interface Props {
   /** Contenido markdown inicial. El componente debe re-montarse (key) al cambiar de seccion. */
@@ -47,7 +95,7 @@ function normalizeImages(md: string): string {
 }
 
 function extFromFile(file: File): string {
-  const fromName = file.name.includes(".") ? file.name.split(".").pop() ?? "" : "";
+  const fromName = file.name.includes(".") ? (file.name.split(".").pop() ?? "") : "";
   if (fromName) return fromName;
   const fromType = file.type.split("/")[1] ?? "";
   return fromType || "bin";
@@ -111,7 +159,9 @@ export function MarkdownEditor({ value, onChange, placeholder, assetBase, projec
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      // codeBlock del StarterKit se reemplaza por la version con resaltado.
+      StarterKit.configure({ codeBlock: false }),
+      CodeBlockLowlight.configure({ lowlight }),
       Markdown.configure({ html: false, transformPastedText: true, transformCopiedText: true }),
       Placeholder.configure({ placeholder: placeholder ?? "Escribe aqui..." }),
       AssetImage.configure({ inline: false }),
@@ -167,7 +217,7 @@ function Toolbar({
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const btn = (label: string, isActive: boolean, action: () => void, title: string) => (
+  const btn = (label: ReactNode, isActive: boolean, action: () => void, title: string) => (
     <button
       className={isActive ? "active" : ""}
       title={title}
@@ -182,7 +232,12 @@ function Toolbar({
 
   return (
     <div className="md-toolbar">
-      {btn("B", editor.isActive("bold"), () => editor.chain().focus().toggleBold().run(), "Negrita")}
+      {btn(
+        "B",
+        editor.isActive("bold"),
+        () => editor.chain().focus().toggleBold().run(),
+        "Negrita",
+      )}
       {btn(
         "I",
         editor.isActive("italic"),
@@ -224,6 +279,54 @@ function Toolbar({
         editor.isActive("code"),
         () => editor.chain().focus().toggleCode().run(),
         "Codigo en linea",
+      )}
+      {btn(
+        <i className="ti ti-quote" />,
+        editor.isActive("blockquote"),
+        () => editor.chain().focus().toggleBlockquote().run(),
+        "Cita",
+      )}
+      {btn(
+        <i className="ti ti-separator-horizontal" />,
+        false,
+        () => editor.chain().focus().setHorizontalRule().run(),
+        "Linea divisoria",
+      )}
+      {btn(
+        <i className="ti ti-link" />,
+        editor.isActive("link"),
+        () => {
+          if (editor.isActive("link")) {
+            editor.chain().focus().unsetLink().run();
+            return;
+          }
+          const url = window.prompt("URL del enlace:");
+          if (url) editor.chain().focus().toggleLink({ href: url }).run();
+        },
+        "Enlace",
+      )}
+      {editor.isActive("codeBlock") && (
+        <>
+          <span className="md-sep" />
+          <select
+            className="md-lang"
+            title="Lenguaje del bloque de codigo"
+            value={String(editor.getAttributes("codeBlock").language ?? "")}
+            onChange={(e) =>
+              editor
+                .chain()
+                .focus()
+                .updateAttributes("codeBlock", { language: e.target.value })
+                .run()
+            }
+          >
+            {CODE_LANGS.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </>
       )}
       {editor.isActive("image") && (
         <>

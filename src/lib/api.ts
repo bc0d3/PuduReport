@@ -6,6 +6,8 @@ import type {
   CvssVersion,
   Finding,
   FindingTemplate,
+  GitCommit,
+  GitState,
   PdfTemplate,
   ProjectMeta,
   ProjectSummary,
@@ -201,4 +203,14 @@ export function gitInit(): Promise<void> {
 
 export function gitCommit(message: string): Promise<void> {
   return invoke("git_commit", { message });
+}
+
+/** Cambios sin commitear de un proyecto. */
+export function gitStatus(projectId: string): Promise<GitState> {
+  return invoke("git_status", { projectId });
+}
+
+/** Historial de commits que tocan un proyecto. */
+export function gitLog(projectId: string): Promise<GitCommit[]> {
+  return invoke("git_log", { projectId });
 }

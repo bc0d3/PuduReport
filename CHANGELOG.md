@@ -2,6 +2,27 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.2] - 2026-06-18
+
+### Added
+- Tipo de proyecto elegido al crearlo (pentest, red team, examen OSCP, examen HTB, informe ejecutivo, documento libre, retest): define el formulario, el scaffold de secciones y la plantilla por defecto.
+- Modo examen para OSCP/HTB: severidad cualitativa manual sin CVSS, campo OSID y nombre del PDF segun la convencion de submission (OSCP-OS-<OSID>-Exam-Report.pdf).
+- Plantilla OSCP rediseniada al estilo OffSec (portada full-bleed, numeracion, header/footer).
+- Nuevas plantillas: informe ejecutivo (sin hallazgos), documento libre y retest (estado de remediacion). Pentest unifica infraestructura y red team.
+- Exportar tambien un informe ejecutivo secundario desde el mismo proyecto (checkbox al exportar).
+- Pantalla de bienvenida estilo IDE: lista de workspaces recientes con buscador, nuevo/abrir y boton para cambiar de workspace.
+- Editor de codigo enriquecido: bloques con resaltado de sintaxis y selector de lenguaje (HTTP, SQL, JavaScript, Bash, Python, etc.), mas opciones de formato (cita, linea divisoria, enlace).
+- Bloques de codigo en el PDF con fondo oscuro, resaltado y etiqueta de lenguaje.
+- Vista de Historial git por proyecto: cambios sin guardar y commits anteriores, con boton para guardar version.
+
+### Changed
+- La plantilla del PDF pasa a definirse por proyecto (derivada del tipo, con override por proyecto) en vez de a nivel workspace.
+- Pestaña de plantillas como tabla en dos secciones (tu libreria / incluidas) con buscador.
+- Menu lateral con icono y etiqueta de texto en cada item.
+
+### Removed
+- Plantillas bug-bounty e infraestructura (cubiertas por pentest y por el branding).
+
 ## [0.0.1] - 2026-06-17
 
 Primer beta.

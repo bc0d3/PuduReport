@@ -7,6 +7,7 @@ import { Welcome } from "./screens/Welcome";
 import { Projects } from "./screens/Projects";
 import { CoverEditor } from "./screens/CoverEditor";
 import { PdfPreview } from "./screens/PdfPreview";
+import { History } from "./screens/History";
 import { Settings } from "./screens/Settings";
 import { FindingEditor } from "./views/FindingEditor";
 import { ReportBuilder } from "./views/ReportBuilder";
@@ -164,6 +165,9 @@ function AppInner() {
         )}
         {view === "preview" && (
           <PdfPreview projectId={activeProjectId} onPickProject={() => setView("proyectos")} />
+        )}
+        {view === "historial" && (
+          <History projectId={activeProjectId} onPickProject={() => setView("proyectos")} />
         )}
         {view === "ajustes" && (
           <Settings

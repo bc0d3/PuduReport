@@ -255,6 +255,13 @@ fn prepare_build(
     let report_typ = build_dir.join("report.typ");
     std::fs::copy(&template, &report_typ)?;
 
+    // Copiar el tema de color para bloques de codigo (lo usan las plantillas via
+    // `set raw(theme: "code-dark.tmTheme")`); debe quedar junto a report.typ.
+    let theme = templates_dir.join("code-dark.tmTheme");
+    if theme.exists() {
+        std::fs::copy(&theme, build_dir.join("code-dark.tmTheme"))?;
+    }
+
     // Copiar los assets del proyecto junto a report.typ para que las imagenes
     // referenciadas como "assets/<uuid>.png" en markdown resuelvan en Typst.
     let src_assets = root.join(project_id).join("assets");

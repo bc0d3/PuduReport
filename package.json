@@ -1,6 +1,6 @@
 {
   "name": "pudureport",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Editor local-first de reportes de pentest con generacion de PDF via Typst",
   "license": "GPL-3.0-only",
   "type": "module",
@@ -20,12 +20,14 @@
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "@tauri-apps/plugin-fs": "^2.2.0",
     "@tauri-apps/plugin-store": "^2.2.0",
+    "@tiptap/extension-code-block-lowlight": "^2.27.2",
     "@tiptap/extension-image": "^2.27.2",
     "@tiptap/extension-link": "^2.27.2",
     "@tiptap/extension-placeholder": "^2.10.3",
     "@tiptap/pm": "^2.10.3",
     "@tiptap/react": "^2.10.3",
     "@tiptap/starter-kit": "^2.10.3",
+    "lowlight": "^3.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tiptap-markdown": "^0.8.10"

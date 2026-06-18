@@ -6,6 +6,7 @@ export type View =
   | "plantillas"
   | "portada"
   | "preview"
+  | "historial"
   | "ajustes";
 
 interface RailItem {
@@ -25,6 +26,7 @@ const TOP: RailItem[] = [
   { view: "plantillas", icon: "ti-template", title: "Plantillas", label: "Plantillas" },
   { view: "portada", icon: "ti-layout-cards", title: "Portada", label: "Portada" },
   { view: "preview", icon: "ti-eye", title: "Vista previa PDF", label: "Vista previa" },
+  { view: "historial", icon: "ti-history", title: "Historial (git)", label: "Historial" },
 ];
 
 interface Props {
