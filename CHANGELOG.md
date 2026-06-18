@@ -2,7 +2,7 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
-## [0.0.2] - 2026-06-18
+## [0.0.3] - 2026-06-18
 
 ### Added
 - Tipo de proyecto elegido al crearlo (pentest, red team, examen OSCP, examen HTB, informe ejecutivo, documento libre, retest): define el formulario, el scaffold de secciones y la plantilla por defecto.
@@ -14,6 +14,7 @@ Todo cambio notable se documenta en este archivo. El formato sigue Keep a Change
 - Editor de codigo enriquecido: bloques con resaltado de sintaxis y selector de lenguaje (HTTP, SQL, JavaScript, Bash, Python, etc.), mas opciones de formato (cita, linea divisoria, enlace).
 - Bloques de codigo en el PDF con fondo oscuro, resaltado y etiqueta de lenguaje.
 - Vista de Historial git por proyecto: cambios sin guardar y commits anteriores, con boton para guardar version.
+- Borrar proyectos desde la tabla de Proyectos, con confirmacion; si se borra el proyecto activo la app pasa a otro.
 
 ### Changed
 - La plantilla del PDF pasa a definirse por proyecto (derivada del tipo, con override por proyecto) en vez de a nivel workspace.
