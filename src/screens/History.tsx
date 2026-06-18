@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import * as api from "../lib/api";
 import type { GitChange, GitCommit, GitState } from "../lib/types";
+import { PromptDialog } from "../components/PromptDialog";
 import { useToast } from "../components/Toast";
 
 interface Props {
@@ -31,6 +32,7 @@ export function History({ projectId, onPickProject }: Props) {
   const { guard } = useToast();
   const [state, setState] = useState<GitState | null>(null);
   const [commits, setCommits] = useState<GitCommit[]>([]);
+  const [commitOpen, setCommitOpen] = useState(false);
 
   const reload = useCallback(async () => {
     if (!projectId) return;
@@ -51,9 +53,7 @@ export function History({ projectId, onPickProject }: Props) {
     if (done !== undefined) reload();
   }
 
-  async function handleCommit() {
-    const msg = window.prompt("Mensaje de la version:");
-    if (!msg) return;
+  async function doCommit(msg: string) {
     const done = await guard(api.gitCommit(msg), "Version guardada");
     if (done !== undefined) reload();
   }
@@ -84,7 +84,11 @@ export function History({ projectId, onPickProject }: Props) {
           <p className="sub">Versiones de este proyecto en el workspace (git local).</p>
         </div>
         {state?.initialized && (
-          <button className="btn primary" onClick={handleCommit} disabled={changes.length === 0}>
+          <button
+            className="btn primary"
+            onClick={() => setCommitOpen(true)}
+            disabled={changes.length === 0}
+          >
             <i className="ti ti-git-commit" />
             Guardar version
           </button>
@@ -152,6 +156,17 @@ export function History({ projectId, onPickProject }: Props) {
           </>
         )}
       </div>
+
+      {commitOpen && (
+        <PromptDialog
+          title="Guardar version"
+          label="Mensaje de la version"
+          placeholder="Que cambiaste"
+          confirmLabel="Guardar"
+          onConfirm={doCommit}
+          onClose={() => setCommitOpen(false)}
+        />
+      )}
     </>
   );
 }

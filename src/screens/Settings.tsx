@@ -1,6 +1,7 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import * as api from "../lib/api";
 import type { WorkspaceMeta } from "../lib/types";
+import { PromptDialog } from "../components/PromptDialog";
 import { useToast } from "../components/Toast";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 export function Settings({ workspace, workspacePath, dark, onSetDark, onWorkspaceSaved }: Props) {
   const { guard } = useToast();
   const saveTimer = useRef<number | undefined>(undefined);
+  const [commitOpen, setCommitOpen] = useState(false);
 
   function saveWorkspace(next: WorkspaceMeta) {
     onWorkspaceSaved(next);
@@ -24,9 +26,8 @@ export function Settings({ workspace, workspacePath, dark, onSetDark, onWorkspac
   async function gitInit() {
     await guard(api.gitInit(), "Repositorio git inicializado");
   }
-  async function gitCommit() {
-    const msg = window.prompt("Mensaje del commit:", "Actualiza reportes");
-    if (msg) await guard(api.gitCommit(msg), "Commit creado");
+  async function doGitCommit(msg: string) {
+    await guard(api.gitCommit(msg), "Commit creado");
   }
 
   return (
@@ -59,7 +60,7 @@ export function Settings({ workspace, workspacePath, dark, onSetDark, onWorkspac
               <button className="btn small" onClick={gitInit}>
                 Inicializar
               </button>
-              <button className="btn small" onClick={gitCommit}>
+              <button className="btn small" onClick={() => setCommitOpen(true)}>
                 Commit
               </button>
             </div>
@@ -132,6 +133,18 @@ export function Settings({ workspace, workspacePath, dark, onSetDark, onWorkspac
           </div>
         </div>
       </div>
+
+      {commitOpen && (
+        <PromptDialog
+          title="Commit"
+          label="Mensaje del commit"
+          placeholder="Actualiza reportes"
+          initialValue="Actualiza reportes"
+          confirmLabel="Crear commit"
+          onConfirm={doGitCommit}
+          onClose={() => setCommitOpen(false)}
+        />
+      )}
     </>
   );
 }

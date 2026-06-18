@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import * as api from "../lib/api";
 import type { RecentWorkspace, WorkspaceMeta } from "../lib/types";
+import { PromptDialog } from "../components/PromptDialog";
 import { useToast } from "../components/Toast";
 
 interface Props {
@@ -27,6 +28,8 @@ export function Welcome({ onOpened, dark, onToggleTheme }: Props) {
   const { guard } = useToast();
   const [recents, setRecents] = useState<RecentWorkspace[]>([]);
   const [query, setQuery] = useState("");
+  // Carpeta elegida para un workspace nuevo, a la espera del nombre.
+  const [newPath, setNewPath] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const list = await guard(api.listRecentWorkspaces());
@@ -44,11 +47,13 @@ export function Welcome({ onOpened, dark, onToggleTheme }: Props) {
 
   async function handleNew() {
     const path = await guard(api.pickWorkspace());
-    if (!path) return;
-    const name = window.prompt("Nombre del workspace:", "Mi workspace");
-    if (!name) return;
-    const meta = await guard(api.createWorkspace(path, name), "Workspace creado");
-    if (meta) onOpened(meta, path);
+    if (path) setNewPath(path);
+  }
+
+  async function doCreate(name: string) {
+    if (!newPath) return;
+    const meta = await guard(api.createWorkspace(newPath, name), "Workspace creado");
+    if (meta) onOpened(meta, newPath);
   }
 
   async function handleOpen() {
@@ -156,6 +161,18 @@ export function Welcome({ onOpened, dark, onToggleTheme }: Props) {
           </div>
         )}
       </main>
+
+      {newPath && (
+        <PromptDialog
+          title="Nuevo workspace"
+          label="Nombre del workspace"
+          placeholder="Mi workspace"
+          initialValue="Mi workspace"
+          confirmLabel="Crear"
+          onConfirm={doCreate}
+          onClose={() => setNewPath(null)}
+        />
+      )}
     </div>
   );
 }
