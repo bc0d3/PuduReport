@@ -372,12 +372,17 @@ fn collect_typ(dir: &std::path::Path, builtin: bool, out: &mut Vec<PdfTemplate>)
                 if let Some(stem) = path.file_stem() {
                     let name = stem.to_string_lossy().to_string();
                     // Metadata sidecar opcional.
-                    let meta: TemplateMeta = std::fs::read_to_string(dir.join(format!("{name}.meta.yaml")))
-                        .ok()
-                        .and_then(|c| serde_yaml::from_str(&c).ok())
-                        .unwrap_or_default();
+                    let meta: TemplateMeta =
+                        std::fs::read_to_string(dir.join(format!("{name}.meta.yaml")))
+                            .ok()
+                            .and_then(|c| serde_yaml::from_str(&c).ok())
+                            .unwrap_or_default();
                     out.push(PdfTemplate {
-                        title: if meta.title.is_empty() { name.clone() } else { meta.title },
+                        title: if meta.title.is_empty() {
+                            name.clone()
+                        } else {
+                            meta.title
+                        },
                         description: if meta.description.is_empty() {
                             first_comment(&path)
                         } else {
@@ -442,7 +447,11 @@ fn duplicate_template(
 
 /// Lee el codigo fuente .typ de una plantilla (para editarla).
 #[tauri::command]
-fn read_template_source(app: AppHandle, state: State<AppState>, name: String) -> Result<String, String> {
+fn read_template_source(
+    app: AppHandle,
+    state: State<AppState>,
+    name: String,
+) -> Result<String, String> {
     let root = current_root(&state)?;
     let user = user_templates_dir(&root).join(format!("{name}.typ"));
     let path = if user.exists() {
@@ -455,7 +464,11 @@ fn read_template_source(app: AppHandle, state: State<AppState>, name: String) ->
 
 /// Guarda el codigo fuente .typ en la libreria del usuario.
 #[tauri::command]
-fn save_template_source(state: State<AppState>, name: String, content: String) -> Result<(), String> {
+fn save_template_source(
+    state: State<AppState>,
+    name: String,
+    content: String,
+) -> Result<(), String> {
     if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
         return Err(format!("nombre invalido: {name}"));
     }
