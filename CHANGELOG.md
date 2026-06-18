@@ -2,6 +2,14 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.5] - 2026-06-18
+
+### Added
+- Aviso de responsabilidad (descargo legal) en el README y en la pantalla Ajustes: herramienta gratuita bajo GPL-3.0, sin garantia, responsabilidad del usuario.
+
+### Changed
+- La confirmacion al borrar hallazgos y proyectos ahora usa un dialogo del propio diseno en vez del cartel nativo del sistema.
+
 ## [0.0.4] - 2026-06-18
 
 ### Fixed
