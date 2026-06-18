@@ -2,6 +2,11 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.4] - 2026-06-18
+
+### Fixed
+- En la app instalada no aparecia ninguna plantilla y la generacion de PDF fallaba: las plantillas empaquetadas se buscaban en la ruta equivocada del bundle. Ahora se resuelven correctamente (incluido el tema de color del codigo).
+
 ## [0.0.3] - 2026-06-18
 
 ### Added
