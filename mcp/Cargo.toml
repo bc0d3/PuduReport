@@ -1,0 +1,19 @@
+[package]
+name = "pudureport-mcp"
+version = "0.0.5"
+description = "Servidor MCP de PuduReport: expone el workspace por stdio para que la IA del usuario lea y mejore reportes. No embebe ningun LLM."
+license = "GPL-3.0-only"
+edition = "2021"
+rust-version = "1.93"
+
+[[bin]]
+name = "pudureport-mcp"
+path = "src/main.rs"
+
+[dependencies]
+pudureport-core = { path = "../core" }
+rmcp = { version = "1.7.0", features = ["server", "transport-io"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "io-std"] }
