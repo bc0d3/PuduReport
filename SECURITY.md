@@ -44,6 +44,10 @@ Cuanto mas reproducible sea el reporte, mas rapido lo podemos validar y corregir
 - El pipeline de generacion de PDF y el manejo de assets.
 - Cualquier via que permita escribir o leer fuera del workspace, ejecutar codigo, o filtrar datos del equipo.
 
+Para el modelo de seguridad del servidor MCP (`pudureport-mcp`) y su
+autoevaluacion ASVS + checklist OWASP LLM Top 10, ver
+[docs/mcp-security-assessment.md](docs/mcp-security-assessment.md).
+
 **Fuera de alcance** (comportamiento conocido / por diseno):
 
 - El contenido que el propio usuario escribe en sus reportes.
