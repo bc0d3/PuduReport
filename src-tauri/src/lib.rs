@@ -687,24 +687,24 @@ fn git_log(state: State<AppState>, project_id: String) -> Result<Vec<git::GitCom
     git::log(&root, &project_id, 50).map_err(|e| e.to_string())
 }
 
-/// Estado de la integracion con el cliente MCP (ej. Claude Desktop).
+/// Estado de la integracion con un cliente MCP ("desktop" | "code").
 #[tauri::command]
-fn mcp_status(state: State<AppState>) -> Result<mcp::McpStatus, String> {
+fn mcp_status(state: State<AppState>, client: String) -> Result<mcp::McpStatus, String> {
     let root = current_root(&state)?;
-    mcp::status(&root)
+    mcp::status(mcp::McpClient::parse(&client)?, &root)
 }
 
-/// Conecta el workspace abierto al cliente MCP (escribe la entrada mcpServers).
+/// Conecta el workspace abierto al cliente MCP indicado.
 #[tauri::command]
-fn mcp_connect(state: State<AppState>) -> Result<(), String> {
+fn mcp_connect(state: State<AppState>, client: String) -> Result<(), String> {
     let root = current_root(&state)?;
-    mcp::connect(&root)
+    mcp::connect(mcp::McpClient::parse(&client)?, &root)
 }
 
-/// Desconecta: quita la entrada de PuduReport del config del cliente MCP.
+/// Desconecta: quita la entrada de PuduReport del cliente MCP indicado.
 #[tauri::command]
-fn mcp_disconnect() -> Result<(), String> {
-    mcp::disconnect()
+fn mcp_disconnect(client: String) -> Result<(), String> {
+    mcp::disconnect(mcp::McpClient::parse(&client)?)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

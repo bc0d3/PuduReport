@@ -1,15 +1,20 @@
-//! Integracion con clientes MCP (ej. Claude Desktop).
+//! Integracion con clientes MCP (Claude Desktop y Claude Code).
 //!
-//! Escribe/quita la entrada `mcpServers` en el config del cliente para conectar
-//! el binario `pudureport-mcp` scoped al workspace abierto. Todo reversible: el
-//! boton "Desconectar" quita la entrada. No toca ninguna otra entrada del config.
+//! Conecta el binario `pudureport-mcp` (scoped al workspace abierto) al cliente
+//! de IA del usuario. Todo reversible: "Desconectar" quita la entrada.
+//!
+//! - **Claude Desktop**: se escribe/quita la entrada `mcpServers` en
+//!   `claude_desktop_config.json` (merge cuidadoso, sin tocar otras entradas).
+//! - **Claude Code**: se usa su CLI (`claude mcp add/remove`), porque Claude Code
+//!   reescribe `~/.claude.json` constantemente y editarlo a mano podria pisarse
+//!   con sus escrituras. El status se lee del archivo (solo lectura, sin race).
 //!
 //! Importante (CLAUDE.md, "Servidor MCP"): conectar expone el TEXTO de los
-//! hallazgos al cliente de IA del usuario. El consentimiento se pide en la GUI
-//! antes de llamar a `connect`.
+//! hallazgos al cliente de IA. El consentimiento se pide en la GUI antes.
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -17,7 +22,25 @@ use serde_json::{json, Value};
 /// Clave de la entrada en `mcpServers`. Identifica este servidor en el config.
 const SERVER_KEY: &str = "pudureport";
 
-/// Estado de la integracion con el cliente MCP, para mostrar en la GUI.
+/// Cliente MCP soportado.
+#[derive(Clone, Copy)]
+pub enum McpClient {
+    Desktop,
+    Code,
+}
+
+impl McpClient {
+    /// Parsea el identificador que llega desde el frontend.
+    pub fn parse(s: &str) -> Result<Self, String> {
+        match s {
+            "desktop" => Ok(McpClient::Desktop),
+            "code" => Ok(McpClient::Code),
+            other => Err(format!("cliente MCP desconocido: {other}")),
+        }
+    }
+}
+
+/// Estado de la integracion con un cliente MCP, para mostrar en la GUI.
 #[derive(Serialize)]
 pub struct McpStatus {
     /// El config del cliente ya tiene la entrada de PuduReport.
@@ -28,15 +51,30 @@ pub struct McpStatus {
     pub config_path: String,
     /// Se encontro el binario `pudureport-mcp` junto a la app.
     pub binary_found: bool,
+    /// Para Claude Code: se encontro el CLI `claude` para conectar/desconectar.
+    /// Para Claude Desktop siempre es true (no necesita CLI).
+    pub cli_available: bool,
 }
 
-/// Ruta del `claude_desktop_config.json` segun el OS. `dirs::config_dir()`
-/// resuelve a `~/Library/Application Support` (macOS), `%APPDATA%` (Windows) y
-/// `~/.config` (Linux), que son las ubicaciones del config de Claude Desktop.
-fn claude_config_path() -> Result<PathBuf, String> {
-    let base = dirs::config_dir()
-        .ok_or_else(|| "no se pudo determinar el directorio de configuracion".to_string())?;
-    Ok(base.join("Claude").join("claude_desktop_config.json"))
+/// Ruta del config del cliente segun el OS.
+/// - Desktop: `dirs::config_dir()/Claude/claude_desktop_config.json`
+///   (`~/Library/Application Support` en macOS, `%APPDATA%` en Windows,
+///   `~/.config` en Linux).
+/// - Code: `~/.claude.json`.
+fn config_path(client: McpClient) -> Result<PathBuf, String> {
+    match client {
+        McpClient::Desktop => {
+            let base = dirs::config_dir().ok_or_else(|| {
+                "no se pudo determinar el directorio de configuracion".to_string()
+            })?;
+            Ok(base.join("Claude").join("claude_desktop_config.json"))
+        }
+        McpClient::Code => {
+            let home =
+                dirs::home_dir().ok_or_else(|| "no se pudo determinar el HOME".to_string())?;
+            Ok(home.join(".claude.json"))
+        }
+    }
 }
 
 /// Localiza el binario `pudureport-mcp` junto al ejecutable de la app (como
@@ -60,6 +98,35 @@ fn resolve_mcp_binary() -> Result<PathBuf, String> {
             candidate.display()
         ))
     }
+}
+
+/// Localiza el CLI `claude` de Claude Code. Las apps de GUI no heredan el PATH
+/// del shell, asi que se prueban las ubicaciones tipicas de instalacion.
+fn resolve_claude_cli() -> Result<PathBuf, String> {
+    let exe = if cfg!(windows) {
+        "claude.exe"
+    } else {
+        "claude"
+    };
+    if let Some(home) = dirs::home_dir() {
+        for rel in [".local/bin", ".claude/local"] {
+            let p = home.join(rel).join(exe);
+            if p.is_file() {
+                return Ok(p);
+            }
+        }
+    }
+    for dir in ["/opt/homebrew/bin", "/usr/local/bin"] {
+        let p = Path::new(dir).join(exe);
+        if p.is_file() {
+            return Ok(p);
+        }
+    }
+    Err(
+        "no se encontro el CLI de Claude Code (claude). Instalalo o conectalo a mano \
+         con: claude mcp add pudureport -s user -- <ruta-pudureport-mcp> <workspace>"
+            .to_string(),
+    )
 }
 
 /// Lee el config del cliente como JSON. Si no existe, devuelve un objeto vacio.
@@ -86,9 +153,15 @@ fn write_config(path: &Path, root: &Value) -> Result<(), String> {
 }
 
 /// Devuelve el estado actual de la integracion para el workspace dado.
-pub fn status(workspace: &Path) -> Result<McpStatus, String> {
-    let config_path = claude_config_path()?;
+/// El status se obtiene leyendo el config (sin escribir), igual para ambos
+/// clientes: ambos guardan `mcpServers.pudureport` con el workspace en `args[0]`.
+pub fn status(client: McpClient, workspace: &Path) -> Result<McpStatus, String> {
+    let config_path = config_path(client)?;
     let binary_found = resolve_mcp_binary().is_ok();
+    let cli_available = match client {
+        McpClient::Desktop => true,
+        McpClient::Code => resolve_claude_cli().is_ok(),
+    };
     let root = read_config(&config_path).unwrap_or_else(|_| json!({}));
     let entry = root.get("mcpServers").and_then(|s| s.get(SERVER_KEY));
     let installed = entry.is_some();
@@ -104,16 +177,32 @@ pub fn status(workspace: &Path) -> Result<McpStatus, String> {
         points_to_current,
         config_path: config_path.display().to_string(),
         binary_found,
+        cli_available,
     })
 }
 
-/// Conecta: agrega/actualiza la entrada de PuduReport apuntando al workspace.
-/// No toca otras entradas del config.
-pub fn connect(workspace: &Path) -> Result<(), String> {
+/// Conecta el workspace al cliente. No toca otras entradas del config.
+pub fn connect(client: McpClient, workspace: &Path) -> Result<(), String> {
     let binary = resolve_mcp_binary()?;
-    let config_path = claude_config_path()?;
-    let mut root = read_config(&config_path)?;
+    match client {
+        McpClient::Desktop => connect_desktop(&binary, workspace),
+        McpClient::Code => connect_code(&binary, workspace),
+    }
+}
 
+/// Desconecta: quita la entrada de PuduReport del cliente (reversible).
+pub fn disconnect(client: McpClient) -> Result<(), String> {
+    match client {
+        McpClient::Desktop => disconnect_desktop(),
+        McpClient::Code => disconnect_code(),
+    }
+}
+
+// --- Claude Desktop: merge directo del JSON ---
+
+fn connect_desktop(binary: &Path, workspace: &Path) -> Result<(), String> {
+    let path = config_path(McpClient::Desktop)?;
+    let mut root = read_config(&path)?;
     let obj = root
         .as_object_mut()
         .ok_or_else(|| "el config del cliente no es un objeto JSON".to_string())?;
@@ -122,7 +211,6 @@ pub fn connect(workspace: &Path) -> Result<(), String> {
         .or_insert_with(|| json!({}))
         .as_object_mut()
         .ok_or_else(|| "mcpServers no es un objeto JSON".to_string())?;
-
     servers.insert(
         SERVER_KEY.to_string(),
         json!({
@@ -130,68 +218,106 @@ pub fn connect(workspace: &Path) -> Result<(), String> {
             "args": [workspace.to_string_lossy()],
         }),
     );
-    write_config(&config_path, &root)
+    write_config(&path, &root)
 }
 
-/// Desconecta: quita la entrada de PuduReport del config (reversible).
-pub fn disconnect() -> Result<(), String> {
-    let config_path = claude_config_path()?;
-    if !config_path.exists() {
+fn disconnect_desktop() -> Result<(), String> {
+    let path = config_path(McpClient::Desktop)?;
+    if !path.exists() {
         return Ok(());
     }
-    let mut root = read_config(&config_path)?;
+    let mut root = read_config(&path)?;
     if let Some(servers) = root.get_mut("mcpServers").and_then(|s| s.as_object_mut()) {
         servers.remove(SERVER_KEY);
     }
-    write_config(&config_path, &root)
+    write_config(&path, &root)
+}
+
+// --- Claude Code: a traves de su CLI (evita el race con sus escrituras) ---
+
+fn run_claude(cli: &Path, args: &[&str]) -> Result<std::process::Output, String> {
+    Command::new(cli)
+        .args(args)
+        .output()
+        .map_err(|e| e.to_string())
+}
+
+fn connect_code(binary: &Path, workspace: &Path) -> Result<(), String> {
+    let cli = resolve_claude_cli()?;
+    let bin = binary.to_string_lossy().to_string();
+    let ws = workspace.to_string_lossy().to_string();
+    // Quitar primero (claude mcp add falla si ya existe); se ignora el error.
+    let _ = run_claude(&cli, &["mcp", "remove", SERVER_KEY, "-s", "user"]);
+    let out = run_claude(
+        &cli,
+        &["mcp", "add", SERVER_KEY, "-s", "user", "--", &bin, &ws],
+    )?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+fn disconnect_code() -> Result<(), String> {
+    let cli = resolve_claude_cli()?;
+    let out = run_claude(&cli, &["mcp", "remove", SERVER_KEY, "-s", "user"])?;
+    // `remove` de algo que no existe devuelve error; se considera ya desconectado.
+    let _ = out;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// connect/disconnect sobre un config falso, preservando otras entradas.
     #[test]
-    fn connect_and_disconnect_preserve_other_servers() {
+    fn config_paths_por_cliente() {
+        let desktop = config_path(McpClient::Desktop).unwrap();
+        assert!(desktop.ends_with("Claude/claude_desktop_config.json"));
+        let code = config_path(McpClient::Code).unwrap();
+        assert!(code.ends_with(".claude.json"));
+    }
+
+    #[test]
+    fn parse_cliente() {
+        assert!(matches!(
+            McpClient::parse("desktop"),
+            Ok(McpClient::Desktop)
+        ));
+        assert!(matches!(McpClient::parse("code"), Ok(McpClient::Code)));
+        assert!(McpClient::parse("otro").is_err());
+    }
+
+    /// El merge de Claude Desktop preserva otras entradas y no pisa JSON invalido.
+    #[test]
+    fn desktop_merge_preserva_otras_entradas() {
         let tmp = std::env::temp_dir().join(format!("pudu-mcp-cfg-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
         let cfg = tmp.join("claude_desktop_config.json");
-        // Config previo con otro servidor que no debe tocarse.
         write_config(
             &cfg,
             &json!({ "mcpServers": { "otro": { "command": "x" } } }),
         )
         .unwrap();
 
-        // Simula connect a mano (resolve_mcp_binary depende del ejecutable real).
+        // Simula el insert de connect_desktop (resolve_mcp_binary depende del exe).
         let mut root = read_config(&cfg).unwrap();
-        let servers = root
-            .as_object_mut()
+        root.as_object_mut()
             .unwrap()
             .entry("mcpServers")
             .or_insert_with(|| json!({}))
             .as_object_mut()
-            .unwrap();
-        servers.insert(
-            SERVER_KEY.to_string(),
-            json!({ "command": "bin", "args": ["/ws"] }),
-        );
+            .unwrap()
+            .insert(
+                SERVER_KEY.to_string(),
+                json!({ "command": "bin", "args": ["/ws"] }),
+            );
         write_config(&cfg, &root).unwrap();
 
         let after = read_config(&cfg).unwrap();
         assert!(after["mcpServers"][SERVER_KEY].is_object());
-        assert_eq!(after["mcpServers"]["otro"]["command"], "x");
-
-        // Quitar la entrada deja el resto intacto.
-        let mut root = read_config(&cfg).unwrap();
-        root.get_mut("mcpServers")
-            .and_then(|s| s.as_object_mut())
-            .unwrap()
-            .remove(SERVER_KEY);
-        write_config(&cfg, &root).unwrap();
-        let after = read_config(&cfg).unwrap();
-        assert!(after["mcpServers"][SERVER_KEY].is_null());
         assert_eq!(after["mcpServers"]["otro"]["command"], "x");
 
         let _ = fs::remove_dir_all(&tmp);

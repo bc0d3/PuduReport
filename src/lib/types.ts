@@ -176,7 +176,10 @@ export interface CvssResult {
   vector: string;
 }
 
-/** Estado de la integracion con el cliente MCP (ej. Claude Desktop). */
+/** Cliente MCP soportado por la integracion. */
+export type McpClient = "desktop" | "code";
+
+/** Estado de la integracion con un cliente MCP. */
 export interface McpStatus {
   /** El config del cliente ya tiene la entrada de PuduReport. */
   installed: boolean;
@@ -186,4 +189,6 @@ export interface McpStatus {
   config_path: string;
   /** Se encontro el binario pudureport-mcp junto a la app. */
   binary_found: boolean;
+  /** Para Claude Code: se encontro el CLI `claude`. Desktop siempre true. */
+  cli_available: boolean;
 }

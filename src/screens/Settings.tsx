@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import * as api from "../lib/api";
-import type { McpStatus, WorkspaceMeta } from "../lib/types";
+import type { WorkspaceMeta } from "../lib/types";
 import { PromptDialog } from "../components/PromptDialog";
-import { ConfirmDialog } from "../components/ConfirmDialog";
+import { McpClientCard } from "../components/McpClientCard";
 import { useToast } from "../components/Toast";
 
 interface Props {
@@ -17,8 +17,6 @@ export function Settings({ workspace, workspacePath, dark, onSetDark, onWorkspac
   const { guard } = useToast();
   const saveTimer = useRef<number | undefined>(undefined);
   const [commitOpen, setCommitOpen] = useState(false);
-  const [mcp, setMcp] = useState<McpStatus | null>(null);
-  const [consentOpen, setConsentOpen] = useState(false);
 
   function saveWorkspace(next: WorkspaceMeta) {
     onWorkspaceSaved(next);
@@ -31,24 +29,6 @@ export function Settings({ workspace, workspacePath, dark, onSetDark, onWorkspac
   }
   async function doGitCommit(msg: string) {
     await guard(api.gitCommit(msg), "Commit creado");
-  }
-
-  const reloadMcp = useCallback(async () => {
-    const status = await guard(api.mcpStatus());
-    if (status !== undefined) setMcp(status);
-  }, [guard]);
-
-  useEffect(() => {
-    void reloadMcp();
-  }, [reloadMcp, workspacePath]);
-
-  async function doConnect() {
-    const done = await guard(api.mcpConnect(), "Conectado al cliente MCP");
-    if (done !== undefined) reloadMcp();
-  }
-  async function doDisconnect() {
-    const done = await guard(api.mcpDisconnect(), "Desconectado del cliente MCP");
-    if (done !== undefined) reloadMcp();
   }
 
   return (
@@ -88,61 +68,21 @@ export function Settings({ workspace, workspacePath, dark, onSetDark, onWorkspac
           </div>
         </div>
 
-        <div className="card">
-          <div className="row" style={{ gap: 10, alignItems: "flex-start" }}>
-            <i className="ti ti-robot" style={{ color: "var(--accent)" }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <strong>Conectar a Claude Desktop (MCP)</strong>
-              <p className="faint" style={{ fontSize: 12, margin: "6px 0 0", lineHeight: 1.5 }}>
-                Permite que tu cliente de IA lea y mejore el texto de los hallazgos de este
-                workspace. No expone evidencias (imagenes ni archivos), solo texto. PuduReport no
-                manda nada a ningun lado: el cliente lanza el servidor local por stdio.
-              </p>
+        <McpClientCard
+          client="desktop"
+          title="Conectar a Claude Desktop (MCP)"
+          installLabel="Instalar en Claude Desktop"
+          note="Despues de instalar, reinicia Claude Desktop por completo (Cmd+Q y abrir de nuevo) para que cargue el servidor."
+          workspacePath={workspacePath}
+        />
 
-              {mcp?.config_path && (
-                <div className="mono faint" style={{ fontSize: 11, marginTop: 8 }}>
-                  {mcp.config_path}
-                </div>
-              )}
-
-              <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                {mcp && !mcp.binary_found && (
-                  <span className="faint" style={{ fontSize: 12 }}>
-                    Binario pudureport-mcp no encontrado junto a la app.
-                  </span>
-                )}
-                {mcp?.binary_found && mcp.installed && mcp.points_to_current && (
-                  <>
-                    <span style={{ fontSize: 12, color: "var(--accent)" }}>
-                      <i className="ti ti-circle-check" /> Conectado a este workspace
-                    </span>
-                    <button className="btn small" onClick={doDisconnect}>
-                      Desconectar
-                    </button>
-                  </>
-                )}
-                {mcp?.binary_found && mcp.installed && !mcp.points_to_current && (
-                  <>
-                    <span className="faint" style={{ fontSize: 12 }}>
-                      Conectado, pero a otro workspace.
-                    </span>
-                    <button className="btn small primary" onClick={() => setConsentOpen(true)}>
-                      Apuntar a este
-                    </button>
-                    <button className="btn small" onClick={doDisconnect}>
-                      Desconectar
-                    </button>
-                  </>
-                )}
-                {mcp?.binary_found && !mcp.installed && (
-                  <button className="btn small primary" onClick={() => setConsentOpen(true)}>
-                    Instalar en Claude Desktop
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <McpClientCard
+          client="code"
+          title="Conectar a Claude Code (MCP)"
+          installLabel="Instalar en Claude Code"
+          note="Usa el CLI de Claude Code (scope user). Reinicia tu sesion de Claude Code para que el servidor aparezca."
+          workspacePath={workspacePath}
+        />
 
         <div className="card">
           <div className="row">
@@ -220,22 +160,6 @@ export function Settings({ workspace, workspacePath, dark, onSetDark, onWorkspac
           confirmLabel="Crear commit"
           onConfirm={doGitCommit}
           onClose={() => setCommitOpen(false)}
-        />
-      )}
-
-      {consentOpen && (
-        <ConfirmDialog
-          title="Conectar al cliente de IA"
-          message={
-            "Al conectar, el TEXTO de los hallazgos de este workspace queda accesible para tu " +
-            "cliente de IA (ej. Claude Desktop). Si el cliente usa un modelo en la nube, ese texto " +
-            "SALE del equipo. Para trabajo bajo NDA, usa un modelo local (ej. Ollama). Las " +
-            "evidencias (imagenes y archivos) nunca se exponen. Aceptas el riesgo y continuas?"
-          }
-          confirmLabel="Acepto el riesgo y conectar"
-          danger={false}
-          onConfirm={doConnect}
-          onClose={() => setConsentOpen(false)}
         />
       )}
     </>

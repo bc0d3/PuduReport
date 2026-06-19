@@ -8,6 +8,7 @@ import type {
   FindingTemplate,
   GitCommit,
   GitState,
+  McpClient,
   McpStatus,
   PdfTemplate,
   ProjectMeta,
@@ -221,19 +222,19 @@ export function gitLog(projectId: string): Promise<GitCommit[]> {
   return invoke("git_log", { projectId });
 }
 
-// --- Integracion MCP (Claude Desktop u otro cliente) ---
+// --- Integracion MCP (Claude Desktop / Claude Code) ---
 
-/** Estado de la integracion con el cliente MCP para el workspace abierto. */
-export function mcpStatus(): Promise<McpStatus> {
-  return invoke("mcp_status");
+/** Estado de la integracion con un cliente MCP para el workspace abierto. */
+export function mcpStatus(client: McpClient): Promise<McpStatus> {
+  return invoke("mcp_status", { client });
 }
 
-/** Conecta el workspace abierto al cliente MCP (escribe la entrada mcpServers). */
-export function mcpConnect(): Promise<void> {
-  return invoke("mcp_connect");
+/** Conecta el workspace abierto al cliente MCP indicado. */
+export function mcpConnect(client: McpClient): Promise<void> {
+  return invoke("mcp_connect", { client });
 }
 
-/** Desconecta: quita la entrada de PuduReport del config del cliente MCP. */
-export function mcpDisconnect(): Promise<void> {
-  return invoke("mcp_disconnect");
+/** Desconecta: quita la entrada de PuduReport del cliente MCP indicado. */
+export function mcpDisconnect(client: McpClient): Promise<void> {
+  return invoke("mcp_disconnect", { client });
 }
