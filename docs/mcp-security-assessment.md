@@ -61,7 +61,7 @@ referencia el codigo.
 | V7 Manejo de errores y logging | Parcial | Parcial | Los errores se devuelven tipados al cliente (`McpError::invalid_params` / `internal_error`) sin volcar rutas internas sensibles mas alla del workspace. No hay logging a disco (menos datos en reposo); contrapartida: no hay trazabilidad de auditoria. Aceptable para un binario local de un solo usuario. |
 | V8 Proteccion de datos | Si | Cumple | Minimizacion: solo se expone texto y metadata; nunca bytes de assets/evidencias (no existe herramienta que los lea). El consentimiento explicito advierte que el texto puede salir del equipo segun el cliente. |
 | V9 Comunicaciones | N/A | N/A | Sin comunicaciones de red propias. |
-| V10 Codigo malicioso | Parcial | Parcial | Dependencias acotadas y pineadas via `Cargo.lock`; toolchain fijo (1.93.0). Pendiente: `cargo audit` periodico en CI. |
+| V10 Codigo malicioso | Si | Cumple | Dependencias acotadas y pineadas via `Cargo.lock`; toolchain fijo (1.93.0). `cargo audit` (RUSTSEC) corre en CI (job `audit` en `.github/workflows/ci.yml`): falla ante una vulnerabilidad; los warnings unmaintained/unsound de la cadena GTK/Tauri se reportan sin bloquear. |
 | V11 Logica de negocio | Si | Cumple | Escrituras acotadas y reversibles (git-diffables); sin operaciones destructivas expuestas. |
 | V12 Archivos y recursos | Si | Cumple | Toda ruta de archivo pasa por `validate_id`; las escrituras van al `.md` del hallazgo dentro del workspace. Sin subida ni lectura de binarios. |
 | V13 API y servicios web | Parcial | Cumple a nivel local | La "API" es JSON-RPC por stdio. Entrada validada por schema; sin endpoints de red. Conceptos de rate-limiting/CORS no aplican (sin red). |
@@ -76,7 +76,7 @@ cliente (donde corre el modelo); aca se documenta la postura del servidor.
 | --- | --- | --- | --- |
 | LLM01 | Prompt Injection (incl. indirecta) | El texto del reporte que la IA lee NO es confiable y puede traer inyeccion indirecta. No se resuelve del lado servidor (el modelo corre en el cliente). Mitigacion: minima agencia (sin operaciones destructivas) + revision humana del git diff. | Si. Riesgo asumido; se gestiona con revision humana. |
 | LLM02 | Divulgacion de informacion sensible | Solo se expone texto, nunca bytes de assets. El texto puede traer datos sensibles: el consentimiento lo advierte y recomienda modelo local (Ollama) para NDA. Modo "scrub" (placeholders) pendiente. | Parcial. El texto puede salir del equipo si el cliente usa nube (decision informada del usuario). |
-| LLM03 | Supply chain | Dependencias pineadas (`Cargo.lock`), toolchain fijo (1.93.0), SDK oficial `rmcp`. Pendiente: `cargo audit` en CI. | Bajo. |
+| LLM03 | Supply chain | Dependencias pineadas (`Cargo.lock`), toolchain fijo (1.93.0), SDK oficial `rmcp`, `cargo audit` (RUSTSEC) en CI. | Bajo. |
 | LLM04 | Data / model poisoning | N/A. El servidor no entrena ni ajusta modelos. | N/A. |
 | LLM05 | Manejo inadecuado de la salida | El servidor no ejecuta la salida del modelo: las escrituras del modelo pasan por validacion de schema, `validate_id` y derivacion de severidad antes de tocar el `.md`. | Bajo. |
 | LLM06 | Agencia excesiva | Herramientas de minima agencia: sin borrar, sin escribir config/plantillas, sin assets; writes acotados al texto de hallazgos y reversibles (git). | Bajo. |
@@ -105,7 +105,7 @@ NDA y aclara que las evidencias nunca se exponen. La accion es reversible
 - [x] Minima agencia (sin borrados, sin config/plantillas).
 - [x] Consentimiento explicito al conectar, reversible.
 - [x] Esta autoevaluacion ASVS (L1-L2) + checklist LLM Top 10.
-- [ ] `cargo audit` periodico en CI (supply chain).
+- [x] `cargo audit` (RUSTSEC) en CI (supply chain).
 - [ ] Modo "scrub" (placeholders para IPs/nombres antes de exponer).
 - [ ] Logging/auditoria opcional de las escrituras del MCP.
 

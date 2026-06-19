@@ -44,6 +44,8 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Colocar sidecar de Typst
         run: node scripts/fetch-typst.mjs
+      - name: Compilar sidecar del servidor MCP
+        run: node scripts/build-mcp-sidecar.mjs
       - name: Frontend dist (requerido por generate_context)
         run: |
           npm ci
@@ -54,3 +56,15 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: tests
         run: cargo test --workspace
+
+  # Auditoria de seguridad de las dependencias (RUSTSEC). Falla si aparece una
+  # vulnerabilidad; los warnings (unmaintained/unsound) se reportan sin bloquear.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.93.0
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
