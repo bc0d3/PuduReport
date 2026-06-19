@@ -18,10 +18,13 @@ export function CwePicker({ current, onPick, onClose }: Props) {
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return COMMON_CWES;
-    // Permite buscar "89", "cwe-89" o "sql".
+    // Permite buscar "89", "cwe-89", "sql" o una sigla ("xss", "idor").
     const num = q.replace(/^cwe-?/, "");
     return COMMON_CWES.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.id.toLowerCase().replace("cwe-", "").includes(num),
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.aliases?.some((a) => a.toLowerCase().includes(q)) ||
+        c.id.toLowerCase().replace("cwe-", "").includes(num),
     );
   }, [query]);
 
