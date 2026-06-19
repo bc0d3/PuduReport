@@ -434,6 +434,55 @@ i.ti {
   font-weight: 600;
 }
 
+/* --- Selector de CWE --- */
+.cwe-input-row {
+  display: flex;
+  gap: 6px;
+}
+.cwe-input-row .input {
+  flex: 1;
+  min-width: 0;
+}
+.cwe-popover {
+  width: 520px;
+}
+.cwe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.cwe-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 7px 9px;
+  color: var(--text-secondary);
+}
+.cwe-item:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+.cwe-item.active {
+  border-color: var(--accent);
+}
+.cwe-item .cwe-id {
+  flex-shrink: 0;
+  width: 78px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.cwe-item .cwe-name {
+  font-size: 13px;
+}
+
 /* --- Editor markdown (TipTap) --- */
 .md-toolbar {
   display: flex;

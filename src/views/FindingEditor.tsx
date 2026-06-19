@@ -14,6 +14,7 @@ import { typeInfo } from "../lib/projectTypes";
 import { Sidebar } from "../components/Sidebar";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { CvssCalculator } from "../components/CvssCalculator";
+import { CwePicker } from "../components/CwePicker";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 
@@ -58,6 +59,7 @@ export function FindingEditor({
   const [current, setCurrent] = useState<Finding | null>(null);
   const [sections, setSections] = useState<Record<string, string>>({});
   const [calcOpen, setCalcOpen] = useState(false);
+  const [cweOpen, setCweOpen] = useState(false);
   const [affectedInput, setAffectedInput] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
 
@@ -295,13 +297,21 @@ export function FindingEditor({
             {!examMode && (
               <div>
                 <label className="field-label-top">CWE</label>
-                <input
-                  className="input"
-                  style={{ width: "100%" }}
-                  placeholder="CWE-89"
-                  value={current.meta.cwe}
-                  onChange={(e) => patchMeta((m) => ({ ...m, cwe: e.target.value }))}
-                />
+                <div className="cwe-input-row">
+                  <input
+                    className="input"
+                    placeholder="CWE-89"
+                    value={current.meta.cwe}
+                    onChange={(e) => patchMeta((m) => ({ ...m, cwe: e.target.value }))}
+                  />
+                  <button
+                    className="btn small"
+                    title="Elegir de la lista de CWE mas usados"
+                    onClick={() => setCweOpen(true)}
+                  >
+                    <i className="ti ti-list-search" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -379,6 +389,14 @@ export function FindingEditor({
           initialVector={current.meta.cvss_vector}
           onApply={applyCvss}
           onClose={() => setCalcOpen(false)}
+        />
+      )}
+
+      {cweOpen && current && (
+        <CwePicker
+          current={current.meta.cwe}
+          onPick={(cweId) => patchMeta((m) => ({ ...m, cwe: cweId }))}
+          onClose={() => setCweOpen(false)}
         />
       )}
 
