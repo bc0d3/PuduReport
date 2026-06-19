@@ -2,6 +2,20 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.6] - 2026-06-18
+
+### Added
+- Servidor MCP (`pudureport-mcp`): permite que un cliente de IA (Claude Desktop u otro) lea los proyectos e hallazgos y mejore su texto, todo local por stdio sin que los datos salgan del equipo (las evidencias nunca se exponen). Boton "Instalar en Claude Desktop" en Ajustes, con aviso de consentimiento y opcion de desconectar.
+- Selector de CWE con los mas usados (ranking de HackerOne), buscable por numero, nombre o sigla (XSS, IDOR, SSRF...). Un hallazgo puede tener varios CWE.
+- Campos opcionales Gerencia y Area del cliente, visibles en la portada del reporte.
+- Vista de codigo markdown en el editor del reporte, con alternar entre Markdown y vista renderizada.
+
+### Fixed
+- "Guardar version" (commit git) y la creacion de un workspace no respondian en algunos casos: se reemplazo el dialogo nativo del sistema (poco confiable en la webview de la app) por uno propio.
+
+### Security
+- Auditoria de dependencias (cargo audit / RUSTSEC) en CI y autoevaluacion de seguridad del servidor MCP (ASVS + OWASP LLM Top 10), documentada en `docs/mcp-security-assessment.md`.
+
 ## [0.0.5] - 2026-06-18
 
 ### Added

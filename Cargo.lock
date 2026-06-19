@@ -2457,7 +2457,7 @@ dependencies = [
 
 [[package]]
 name = "pudureport"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2482,7 +2482,7 @@ dependencies = [
 
 [[package]]
 name = "pudureport-core"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "pulldown-cmark",
  "serde",
@@ -2493,7 +2493,7 @@ dependencies = [
 
 [[package]]
 name = "pudureport-mcp"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "pudureport-core",
  "rmcp",
