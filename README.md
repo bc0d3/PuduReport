@@ -4,9 +4,15 @@
 
 # PuduReport
 
+<!--
+  Badges estaticos: el repo es privado y shields.io no puede leer repos privados
+  (el badge dinamico de version/CI da "repo not found"). Cuando el repo sea
+  publico, se pueden volver dinamicos:
+    version: https://img.shields.io/github/v/tag/bc0d3/PuduReport?label=version&sort=semver
+    CI:      https://github.com/bc0d3/PuduReport/actions/workflows/ci.yml/badge.svg?branch=main
+-->
 <p align="center">
-  <a href="https://github.com/bc0d3/PuduReport/releases"><img src="https://img.shields.io/github/v/tag/bc0d3/PuduReport?label=version&amp;sort=semver&amp;color=1f6fb2" alt="Version" /></a>
-  <a href="https://github.com/bc0d3/PuduReport/actions/workflows/ci.yml"><img src="https://github.com/bc0d3/PuduReport/actions/workflows/ci.yml/badge.svg?branch=main" alt="Estado de CI (main)" /></a>
+  <a href="https://github.com/bc0d3/PuduReport/releases"><img src="https://img.shields.io/badge/version-v0.0.6-1f6fb2" alt="Version" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-GPL--3.0-blue" alt="Licencia GPL-3.0" /></a>
   <img src="https://img.shields.io/badge/plataformas-macOS%20%7C%20Windows%20%7C%20Linux-555" alt="Plataformas" />
   <a href="https://ko-fi.com/bc0d3"><img src="https://img.shields.io/badge/Ko--fi-apoyar-FF5E5B?logo=ko-fi&amp;logoColor=white" alt="Apoyar en Ko-fi" /></a>
