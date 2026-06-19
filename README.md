@@ -4,6 +4,16 @@
 
 # PuduReport
 
+<p align="center">
+  <a href="https://github.com/bc0d3/PuduReport/releases"><img src="https://img.shields.io/github/v/tag/bc0d3/PuduReport?label=version&amp;sort=semver&amp;color=1f6fb2" alt="Version" /></a>
+  <a href="https://github.com/bc0d3/PuduReport/actions/workflows/ci.yml"><img src="https://github.com/bc0d3/PuduReport/actions/workflows/ci.yml/badge.svg?branch=main" alt="Estado de CI (main)" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-GPL--3.0-blue" alt="Licencia GPL-3.0" /></a>
+  <img src="https://img.shields.io/badge/plataformas-macOS%20%7C%20Windows%20%7C%20Linux-555" alt="Plataformas" />
+  <a href="https://ko-fi.com/bc0d3"><img src="https://img.shields.io/badge/Ko--fi-apoyar-FF5E5B?logo=ko-fi&amp;logoColor=white" alt="Apoyar en Ko-fi" /></a>
+</p>
+
+<p align="center"><sub>Rama <code>main</code>: version estable (produccion). El desarrollo ocurre en <code>dev</code>.</sub></p>
+
 Aplicacion de escritorio local-first para redactar reportes de vulnerabilidades y generar PDF profesionales. Pensada para pentesters y bug hunters. Funciona offline, sin servidor y sin que los datos salgan de tu equipo.
 
 ## Caracteristicas
@@ -71,6 +81,14 @@ Reconocemos publicamente a quien reporte (Hall of Fame). Gracias por ayudar.
 PuduReport es una herramienta gratuita y de codigo abierto, provista "tal cual" (as is), sin garantia de ningun tipo, segun la licencia GPL-3.0 (ver secciones 15 y 16 de LICENSE).
 
 El usuario es el unico responsable del uso que le da a la herramienta, del contenido que ingresa y de los reportes que genera. PuduReport esta pensada para documentar pruebas de seguridad autorizadas; cualquier uso fuera de ese marco es responsabilidad exclusiva de quien la utiliza. Los autores no se responsabilizan por danos ni uso indebido.
+
+## Apoyar el proyecto
+
+PuduReport es gratuito y de codigo abierto (GPL-3.0), desarrollado en tiempo libre. Si te resulta util y quieres ayudar a sostener el desarrollo, puedes invitarme un cafe. Es totalmente opcional y se agradece mucho.
+
+<p align="center">
+  <a href="https://ko-fi.com/bc0d3"><img src="https://img.shields.io/badge/Ko--fi-Invitame%20un%20cafe-FF5E5B?logo=ko-fi&amp;logoColor=white" alt="Apoyar en Ko-fi" /></a>
+</p>
 
 ## Licencia
 
