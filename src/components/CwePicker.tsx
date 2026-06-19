@@ -2,17 +2,19 @@ import { useMemo, useState } from "react";
 import { COMMON_CWES } from "../lib/cwe";
 
 interface Props {
-  /** Valor actual del CWE, para resaltar el seleccionado. */
-  current?: string;
-  onPick: (cweId: string) => void;
+  /** CWE ya seleccionados, para resaltarlos. */
+  selected: string[];
+  /** Agrega o quita un CWE de la seleccion. */
+  onToggle: (cweId: string) => void;
   onClose: () => void;
 }
 
 /**
  * Selector de los CWE mas usados. Filtra por numero o por nombre para no tener
- * que buscar el CWE a mano. El editor igual permite escribir un CWE libre.
+ * que buscar el CWE a mano. Permite elegir varios (no se cierra al tocar uno);
+ * el editor igual acepta escribir un CWE libre.
  */
-export function CwePicker({ current, onPick, onClose }: Props) {
+export function CwePicker({ selected, onToggle, onClose }: Props) {
   const [query, setQuery] = useState("");
 
   const results = useMemo(() => {
@@ -28,11 +30,6 @@ export function CwePicker({ current, onPick, onClose }: Props) {
     );
   }, [query]);
 
-  function pick(id: string) {
-    onPick(id);
-    onClose();
-  }
-
   return (
     <div className="popover-backdrop" onClick={onClose}>
       <div className="popover cwe-popover" onClick={(e) => e.stopPropagation()}>
@@ -44,26 +41,32 @@ export function CwePicker({ current, onPick, onClose }: Props) {
           placeholder="Buscar por numero o nombre (ej. 89, sql, xss)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && results.length > 0) pick(results[0].id);
-          }}
         />
         <div className="cwe-list">
-          {results.map((c) => (
-            <button
-              key={c.id}
-              className={`cwe-item${c.id === current ? " active" : ""}`}
-              onClick={() => pick(c.id)}
-            >
-              <span className="cwe-id">{c.id}</span>
-              <span className="cwe-name">{c.name}</span>
-            </button>
-          ))}
+          {results.map((c) => {
+            const active = selected.includes(c.id);
+            return (
+              <button
+                key={c.id}
+                className={`cwe-item${active ? " active" : ""}`}
+                onClick={() => onToggle(c.id)}
+              >
+                <i className={`ti ${active ? "ti-check" : "ti-plus"} cwe-mark`} />
+                <span className="cwe-id">{c.id}</span>
+                <span className="cwe-name">{c.name}</span>
+              </button>
+            );
+          })}
           {results.length === 0 && (
             <p className="sub" style={{ padding: "8px 2px" }}>
               Sin coincidencias. Se puede escribir el CWE a mano en el campo.
             </p>
           )}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+          <button className="btn primary" onClick={onClose}>
+            Listo
+          </button>
         </div>
       </div>
     </div>

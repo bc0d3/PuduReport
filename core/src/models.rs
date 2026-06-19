@@ -4,7 +4,28 @@
 //! reflejarse alli. Los archivos en disco (.md/.yaml) son la fuente de verdad;
 //! estos structs describen su forma serializada.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Deserializa el campo `cwe` aceptando tanto el formato viejo (un string, ej
+/// `cwe: CWE-89`) como el nuevo (una lista). Mantiene compatibilidad con los
+/// hallazgos ya escritos en disco. Descarta entradas vacias.
+fn de_cwe<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+    }
+    let value = OneOrMany::deserialize(deserializer)?;
+    let list = match value {
+        OneOrMany::One(s) => vec![s],
+        OneOrMany::Many(items) => items,
+    };
+    Ok(list.into_iter().filter(|s| !s.trim().is_empty()).collect())
+}
 
 /// Severidad cualitativa derivada del puntaje CVSS.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -69,8 +90,10 @@ pub struct FindingMeta {
     pub cvss: String,
     #[serde(default)]
     pub cvss_vector: String,
-    #[serde(default)]
-    pub cwe: String,
+    /// Identificadores CWE del hallazgo (puede tener varios). Acepta el formato
+    /// viejo de un solo string al leer archivos previos (ver `de_cwe`).
+    #[serde(default, deserialize_with = "de_cwe")]
+    pub cwe: Vec<String>,
     #[serde(default)]
     pub status: FindingStatus,
     #[serde(default)]
@@ -300,4 +323,27 @@ pub struct CvssResult {
     pub score: f64,
     pub severity: Severity,
     pub vector: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cwe_acepta_string_viejo_y_lista_nueva() {
+        // Formato viejo: un solo string (hallazgos ya escritos en disco).
+        let viejo: FindingMeta = serde_yaml::from_str("title: x\ncwe: CWE-89\n").unwrap();
+        assert_eq!(viejo.cwe, vec!["CWE-89".to_string()]);
+
+        // Formato nuevo: lista de CWE.
+        let nuevo: FindingMeta =
+            serde_yaml::from_str("title: x\ncwe:\n- CWE-89\n- CWE-200\n").unwrap();
+        assert_eq!(nuevo.cwe, vec!["CWE-89".to_string(), "CWE-200".to_string()]);
+
+        // Vacio o ausente: lista vacia (no un string vacio).
+        let vacio: FindingMeta = serde_yaml::from_str("title: x\ncwe: ''\n").unwrap();
+        assert!(vacio.cwe.is_empty());
+        let ausente: FindingMeta = serde_yaml::from_str("title: x\n").unwrap();
+        assert!(ausente.cwe.is_empty());
+    }
 }

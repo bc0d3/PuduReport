@@ -18,7 +18,8 @@ export interface FindingMeta {
   /** Puntaje numerico como string, ej "8.1". Vacio si no hay vector. */
   cvss: string;
   cvss_vector: string;
-  cwe: string;
+  /** Identificadores CWE del hallazgo (puede tener varios). */
+  cwe: string[];
   status: FindingStatus;
   affected: string[];
 }

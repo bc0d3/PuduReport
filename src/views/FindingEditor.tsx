@@ -60,6 +60,7 @@ export function FindingEditor({
   const [sections, setSections] = useState<Record<string, string>>({});
   const [calcOpen, setCalcOpen] = useState(false);
   const [cweOpen, setCweOpen] = useState(false);
+  const [cweInput, setCweInput] = useState("");
   const [affectedInput, setAffectedInput] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
 
@@ -179,6 +180,20 @@ export function FindingEditor({
     setAffectedInput("");
   }
 
+  function addCwe() {
+    const value = cweInput.trim();
+    if (!value) return;
+    patchMeta((m) => (m.cwe.includes(value) ? m : { ...m, cwe: [...m.cwe, value] }));
+    setCweInput("");
+  }
+
+  function toggleCwe(id: string) {
+    patchMeta((m) => ({
+      ...m,
+      cwe: m.cwe.includes(id) ? m.cwe.filter((c) => c !== id) : [...m.cwe, id],
+    }));
+  }
+
   if (!projectId) {
     return (
       <div className="center-screen">
@@ -294,27 +309,50 @@ export function FindingEditor({
                 ))}
               </select>
             </div>
-            {!examMode && (
-              <div>
-                <label className="field-label-top">CWE</label>
-                <div className="cwe-input-row">
-                  <input
-                    className="input"
-                    placeholder="CWE-89"
-                    value={current.meta.cwe}
-                    onChange={(e) => patchMeta((m) => ({ ...m, cwe: e.target.value }))}
-                  />
-                  <button
-                    className="btn small"
-                    title="Elegir de la lista de CWE mas usados"
-                    onClick={() => setCweOpen(true)}
-                  >
-                    <i className="ti ti-list-search" />
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
+
+          {!examMode && (
+            <div className="field" style={{ marginBottom: 14 }}>
+              <label>CWE</label>
+              <div className="tag-list" style={{ marginBottom: 6 }}>
+                {current.meta.cwe.map((c, i) => (
+                  <span className="tag" key={`${c}-${i}`}>
+                    {c}
+                    <button
+                      onClick={() =>
+                        patchMeta((m) => ({
+                          ...m,
+                          cwe: m.cwe.filter((_, idx) => idx !== i),
+                        }))
+                      }
+                    >
+                      <i className="ti ti-x" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="inline-form">
+                <input
+                  className="input"
+                  placeholder="CWE-89"
+                  value={cweInput}
+                  onChange={(e) => setCweInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addCwe()}
+                  style={{ flex: 1 }}
+                />
+                <button className="btn small" onClick={addCwe}>
+                  Agregar
+                </button>
+                <button
+                  className="btn small"
+                  title="Elegir de la lista de CWE mas usados"
+                  onClick={() => setCweOpen(true)}
+                >
+                  <i className="ti ti-list-search" />
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="field" style={{ marginBottom: 14 }}>
             <label>Activos afectados</label>
@@ -394,8 +432,8 @@ export function FindingEditor({
 
       {cweOpen && current && (
         <CwePicker
-          current={current.meta.cwe}
-          onPick={(cweId) => patchMeta((m) => ({ ...m, cwe: cweId }))}
+          selected={current.meta.cwe}
+          onToggle={toggleCwe}
           onClose={() => setCweOpen(false)}
         />
       )}

@@ -86,8 +86,8 @@ struct CreateFindingArgs {
     cvss_version: Option<String>,
     /// Severidad cualitativa, SOLO para tipos de examen (oscp/htb).
     severity: Option<String>,
-    /// Identificador CWE, por ejemplo "CWE-89".
-    cwe: Option<String>,
+    /// Identificadores CWE, por ejemplo ["CWE-89", "CWE-200"].
+    cwe: Option<Vec<String>>,
     /// Estado de remediacion: open | fixed | accepted | wontfix.
     status: Option<String>,
     /// Recursos afectados (URLs, hosts, endpoints).
@@ -113,8 +113,8 @@ struct UpdateFindingArgs {
     cvss_version: Option<String>,
     /// Severidad cualitativa, SOLO para tipos de examen (oscp/htb).
     severity: Option<String>,
-    /// Identificador CWE.
-    cwe: Option<String>,
+    /// Identificadores CWE, por ejemplo ["CWE-89", "CWE-200"].
+    cwe: Option<Vec<String>>,
     /// Estado de remediacion: open | fixed | accepted | wontfix.
     status: Option<String>,
     /// Recursos afectados (URLs, hosts, endpoints).
@@ -549,7 +549,7 @@ mod tests {
                 cvss_vector: Some("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N".into()),
                 cvss_version: Some("3.1".into()),
                 severity: None,
-                cwe: Some("CWE-89".into()),
+                cwe: Some(vec!["CWE-89".into()]),
                 status: Some("open".into()),
                 affected: Some(vec!["https://app.acme.com/login".into()]),
             }))
@@ -558,7 +558,7 @@ mod tests {
         );
         assert_eq!(value["meta"]["severity"], "critical");
         assert_eq!(value["meta"]["cvss"], "9.1");
-        assert_eq!(value["meta"]["cwe"], "CWE-89");
+        assert_eq!(value["meta"]["cwe"][0], "CWE-89");
         let _ = std::fs::remove_dir_all(&root);
     }
 

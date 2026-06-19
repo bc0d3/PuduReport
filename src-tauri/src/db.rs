@@ -75,7 +75,7 @@ pub fn reindex(root: &Path) -> Result<()> {
                     finding.id,
                     finding.meta.title,
                     severity,
-                    finding.meta.cwe,
+                    finding.meta.cwe.join(", "),
                     finding.body,
                 ],
             )?;

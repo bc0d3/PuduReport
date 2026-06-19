@@ -156,7 +156,8 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
                 cvss: f.meta.cvss,
                 cvss_version: version_str(f.meta.cvss_version),
                 cvss_vector: f.meta.cvss_vector,
-                cwe: f.meta.cwe,
+                // La plantilla muestra los CWE en un chip; se unen por coma.
+                cwe: f.meta.cwe.join(", "),
                 status: status_str(f.meta.status),
                 affected: f.meta.affected,
                 body: markdown::to_typst(&f.body),

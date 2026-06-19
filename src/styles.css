@@ -435,14 +435,6 @@ i.ti {
 }
 
 /* --- Selector de CWE --- */
-.cwe-input-row {
-  display: flex;
-  gap: 6px;
-}
-.cwe-input-row .input {
-  flex: 1;
-  min-width: 0;
-}
 .cwe-popover {
   width: 520px;
 }
@@ -471,6 +463,16 @@ i.ti {
 }
 .cwe-item.active {
   border-color: var(--accent);
+}
+.cwe-item .cwe-mark {
+  flex-shrink: 0;
+  width: 14px;
+  font-size: 12px;
+  opacity: 0.55;
+}
+.cwe-item.active .cwe-mark {
+  color: var(--accent);
+  opacity: 1;
 }
 .cwe-item .cwe-id {
   flex-shrink: 0;

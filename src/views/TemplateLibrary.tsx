@@ -246,7 +246,9 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
                 <div className="row" style={{ gap: 10 }}>
                   <SeverityBadge severity={t.meta.severity} />
                   <strong>{t.meta.title}</strong>
-                  {t.meta.cwe && <span className="faint">{t.meta.cwe}</span>}
+                  {t.meta.cwe.length > 0 && (
+                    <span className="faint">{t.meta.cwe.join(", ")}</span>
+                  )}
                 </div>
                 <button
                   className="btn small"
@@ -450,7 +452,7 @@ function TemplateForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =
         cvss_version: "3.1",
         cvss: "",
         cvss_vector: "",
-        cwe,
+        cwe: cwe.trim() ? [cwe.trim()] : [],
         status: "open",
         affected: [],
       },
