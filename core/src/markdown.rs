@@ -15,8 +15,10 @@ pub fn to_typst(markdown: &str) -> String {
     let parser = Parser::new(markdown);
     let mut out = String::new();
     let mut list_stack: Vec<Option<u64>> = Vec::new();
-    // Dentro de un bloque de codigo (raw) el texto va literal, sin escapar.
-    let mut in_code_block = false;
+    // Buffer del bloque de codigo: (lenguaje, contenido). El fence se calcula al
+    // cerrar (ver code_block_typst) para que ninguna racha de backticks del
+    // contenido cierre el raw de Typst antes de tiempo (evita inyeccion de markup).
+    let mut code_block: Option<(String, String)> = None;
     // Para imagenes: capturamos url + alt (que puede llevar el ancho, ej "60%")
     // y emitimos #image(..) al cerrar.
     let mut image_url: Option<String> = None;
@@ -28,29 +30,33 @@ pub fn to_typst(markdown: &str) -> String {
                 image_url = Some(dest_url.to_string());
                 image_alt.clear();
             }
-            Event::Start(tag) => {
-                if matches!(tag, Tag::CodeBlock(_)) {
-                    in_code_block = true;
-                }
-                start_tag(&mut out, &mut list_stack, tag);
+            Event::Start(Tag::CodeBlock(kind)) => {
+                let lang = match kind {
+                    CodeBlockKind::Fenced(l) => l.to_string(),
+                    CodeBlockKind::Indented => String::new(),
+                };
+                code_block = Some((lang, String::new()));
             }
+            Event::Start(tag) => start_tag(&mut out, &mut list_stack, tag),
             Event::End(TagEnd::Image) => {
                 if let Some(url) = image_url.take() {
                     out.push_str(&image_typst(&url, &image_alt));
                 }
             }
-            Event::End(tag) => {
-                if matches!(tag, TagEnd::CodeBlock) {
-                    in_code_block = false;
+            Event::End(TagEnd::CodeBlock) => {
+                if let Some((lang, content)) = code_block.take() {
+                    out.push_str(&code_block_typst(&lang, &content));
                 }
-                end_tag(&mut out, &mut list_stack, tag);
             }
+            Event::End(tag) => end_tag(&mut out, &mut list_stack, tag),
             Event::Text(text) => {
-                if image_url.is_some() {
+                if let Some((_, content)) = code_block.as_mut() {
+                    // Dentro de un bloque de codigo el texto va literal (se
+                    // encierra en un raw con fence suficientemente largo al cerrar).
+                    content.push_str(&text);
+                } else if image_url.is_some() {
                     // Texto dentro de una imagen: es el alt (lleva el ancho).
                     image_alt.push_str(&text);
-                } else if in_code_block {
-                    out.push_str(&text);
                 } else {
                     out.push_str(&escape(&text));
                 }
@@ -93,15 +99,8 @@ fn start_tag(out: &mut String, list_stack: &mut Vec<Option<u64>>, tag: Tag) {
                 _ => out.push_str("- "),
             }
         }
-        Tag::CodeBlock(kind) => {
-            let lang = match kind {
-                CodeBlockKind::Fenced(l) => l.to_string(),
-                CodeBlockKind::Indented => String::new(),
-            };
-            out.push_str("```");
-            out.push_str(&lang);
-            out.push('\n');
-        }
+        // Los bloques de codigo se bufferean en el bucle principal (el fence se
+        // calcula al cerrar para que el contenido no pueda romper el raw).
         Tag::Link { dest_url, .. } => {
             out.push_str(&format!("#link(\"{}\")[", escape_string(&dest_url)));
         }
@@ -122,7 +121,6 @@ fn end_tag(out: &mut String, list_stack: &mut Vec<Option<u64>>, tag: TagEnd) {
             out.push('\n');
         }
         TagEnd::Item => out.push('\n'),
-        TagEnd::CodeBlock => out.push_str("```\n\n"),
         TagEnd::Link => out.push(']'),
         TagEnd::BlockQuote(_) => out.push_str("\n]\n\n"),
         _ => {}
@@ -141,11 +139,14 @@ fn heading_depth(level: HeadingLevel) -> usize {
 }
 
 /// Escapa caracteres con significado especial en markup de Typst.
+///
+/// Incluye `/` porque en Typst `//` y `/* */` son comentarios: sin escapar, la
+/// prosa con `//` (o un `http://` suelto) desapareceria del PDF.
 fn escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for ch in text.chars() {
         match ch {
-            '\\' | '#' | '$' | '*' | '_' | '`' | '<' | '>' | '@' | '[' | ']' => {
+            '\\' | '#' | '$' | '*' | '_' | '`' | '<' | '>' | '@' | '[' | ']' | '/' => {
                 out.push('\\');
                 out.push(ch);
             }
@@ -153,6 +154,31 @@ fn escape(text: &str) -> String {
         }
     }
     out
+}
+
+/// Longitud de la racha mas larga de backticks consecutivos en `s`.
+fn longest_backtick_run(s: &str) -> usize {
+    let mut max = 0;
+    let mut cur = 0;
+    for ch in s.chars() {
+        if ch == '`' {
+            cur += 1;
+            max = max.max(cur);
+        } else {
+            cur = 0;
+        }
+    }
+    max
+}
+
+/// Emite un bloque de codigo raw de Typst. El fence usa mas backticks que
+/// cualquier racha del contenido (Typst lo permite), de modo que el contenido
+/// no pueda cerrar el raw antes de tiempo e inyectar markup/codigo.
+fn code_block_typst(lang: &str, content: &str) -> String {
+    let fence = "`".repeat(longest_backtick_run(content).max(2) + 1);
+    // El contenido suele venir con un salto final; se normaliza a uno solo.
+    let body = content.strip_suffix('\n').unwrap_or(content);
+    format!("{fence}{lang}\n{body}\n{fence}\n\n")
 }
 
 /// Escapa una cadena para usar dentro de comillas dobles de Typst.
@@ -224,6 +250,32 @@ mod tests {
         let out = to_typst("precio #1 con $5");
         assert!(out.contains("\\#1"));
         assert!(out.contains("\\$5"));
+    }
+
+    #[test]
+    fn escapes_slash_to_avoid_typst_comments() {
+        // En Typst `//` es comentario: sin escapar, "b" desapareceria del PDF.
+        let out = to_typst("ver http://acme.com y a//b");
+        assert!(out.contains("http:\\/\\/acme.com"));
+        assert!(out.contains("a\\/\\/b"));
+    }
+
+    #[test]
+    fn code_block_fence_outgrows_content_backticks() {
+        // Un bloque cuyo contenido trae ``` (fence markdown de 4) no debe poder
+        // cerrar el raw de Typst antes de tiempo: el fence emitido es mas largo.
+        let out = to_typst("````\n```\n#sys\n````");
+        // Todo el bloque queda envuelto en un fence de 4 backticks; el ``` y el
+        // #sys del contenido quedan literales adentro, no como markup de Typst.
+        assert!(
+            out.starts_with("````"),
+            "fence debe ser de 4+ backticks: {out}"
+        );
+        assert!(
+            out.ends_with("````"),
+            "debe cerrar con el mismo fence: {out}"
+        );
+        assert!(out.contains("```\n#sys"), "el ``` interno queda literal");
     }
 
     #[test]
