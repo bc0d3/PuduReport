@@ -53,10 +53,12 @@ src-tauri/
     db.rs                 indice SQLite (reindexable)
     git.rs                init/commit sobre el workspace del usuario
     models.rs             tipos serializables compartidos con el frontend
-  binaries/               sidecar typst-<target-triple> (gitignored, se baja por release)
+  binaries/               sidecars typst-* y pudureport-mcp-* (gitignored, se generan por release)
   tauri.conf.json         config Tauri (CSP, assetProtocol, bundle, sidecar)
+mcp/                      crate pudureport-mcp: servidor MCP por stdio (lee/edita hallazgos)
 templates/                plantillas .typ base (pentest, oscp, htb, ejecutivo, documento-libre, retest)
 scripts/fetch-typst.mjs   baja el sidecar de Typst por plataforma
+scripts/build-mcp-sidecar.mjs  compila el sidecar pudureport-mcp por plataforma
 .github/workflows/        ci.yml (fmt/clippy/lint/tests/build) y release.yml (tags v*)
 ```
 
@@ -66,8 +68,9 @@ Requisitos: **Node 20+**, **Rust estable**, dependencias de Tauri para tu SO.
 
 ```bash
 npm install
-node scripts/fetch-typst.mjs   # coloca el sidecar de Typst para tu plataforma
-npm run tauri dev              # levanta Vite + compila Rust + abre la ventana nativa
+node scripts/fetch-typst.mjs        # coloca el sidecar de Typst para tu plataforma
+node scripts/build-mcp-sidecar.mjs  # compila el sidecar del servidor MCP (requerido por externalBin)
+npm run tauri dev                   # levanta Vite + compila Rust + abre la ventana nativa
 ```
 
 Para desarrollo basta con tener `typst` en el PATH: el backend lo resuelve por `PUDU_TYPST_BIN`, sidecar junto al ejecutable, o PATH.

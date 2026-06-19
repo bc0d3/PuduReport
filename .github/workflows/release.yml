@@ -52,6 +52,9 @@ jobs:
       - name: Colocar sidecar de Typst
         run: node scripts/fetch-typst.mjs ${{ matrix.target }}
 
+      - name: Compilar sidecar del servidor MCP
+        run: node scripts/build-mcp-sidecar.mjs ${{ matrix.target }}
+
       - run: npm ci
 
       - name: Build y publicar release (draft)

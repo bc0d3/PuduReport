@@ -41,6 +41,6 @@
       "icons/icon.ico"
     ],
     "resources": ["../templates/*"],
-    "externalBin": ["binaries/typst"]
+    "externalBin": ["binaries/typst", "binaries/pudureport-mcp"]
   }
 }

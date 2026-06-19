@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "mcp:sidecar": "node scripts/build-mcp-sidecar.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
