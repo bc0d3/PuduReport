@@ -6,6 +6,7 @@
 
 mod db;
 mod git;
+mod mcp;
 mod pdf;
 
 use std::path::PathBuf;
@@ -686,6 +687,26 @@ fn git_log(state: State<AppState>, project_id: String) -> Result<Vec<git::GitCom
     git::log(&root, &project_id, 50).map_err(|e| e.to_string())
 }
 
+/// Estado de la integracion con el cliente MCP (ej. Claude Desktop).
+#[tauri::command]
+fn mcp_status(state: State<AppState>) -> Result<mcp::McpStatus, String> {
+    let root = current_root(&state)?;
+    mcp::status(&root)
+}
+
+/// Conecta el workspace abierto al cliente MCP (escribe la entrada mcpServers).
+#[tauri::command]
+fn mcp_connect(state: State<AppState>) -> Result<(), String> {
+    let root = current_root(&state)?;
+    mcp::connect(&root)
+}
+
+/// Desconecta: quita la entrada de PuduReport del config del cliente MCP.
+#[tauri::command]
+fn mcp_disconnect() -> Result<(), String> {
+    mcp::disconnect()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -734,6 +755,9 @@ pub fn run() {
             git_commit,
             git_status,
             git_log,
+            mcp_status,
+            mcp_connect,
+            mcp_disconnect,
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar la aplicacion Tauri");

@@ -174,3 +174,15 @@ export interface CvssResult {
   severity: Severity;
   vector: string;
 }
+
+/** Estado de la integracion con el cliente MCP (ej. Claude Desktop). */
+export interface McpStatus {
+  /** El config del cliente ya tiene la entrada de PuduReport. */
+  installed: boolean;
+  /** La entrada apunta al workspace actualmente abierto. */
+  points_to_current: boolean;
+  /** Ruta del config del cliente. */
+  config_path: string;
+  /** Se encontro el binario pudureport-mcp junto a la app. */
+  binary_found: boolean;
+}
