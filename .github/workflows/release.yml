@@ -57,6 +57,23 @@ jobs:
 
       - run: npm ci
 
+      # Notas del release = seccion del CHANGELOG para esta version (vX.Y.Z).
+      - name: Extraer notas del CHANGELOG
+        id: notes
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes=$(awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" {flag=1; next}
+            /^## \[/ {flag=0}
+            flag {print}
+          ' CHANGELOG.md)
+          {
+            echo "body<<CHANGELOG_EOF"
+            echo "$notes"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build y publicar release (draft)
         uses: tauri-apps/tauri-action@v0
         env:
@@ -66,6 +83,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "PuduReport ${{ github.ref_name }}"
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
