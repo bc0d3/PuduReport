@@ -93,7 +93,7 @@ El usuario es el unico responsable del uso que le da a la herramienta, del conte
 PuduReport es gratuito y de codigo abierto (GPL-3.0), desarrollado en tiempo libre. Si te resulta util y quieres ayudar a sostener el desarrollo, puedes invitarme un cafe. Es totalmente opcional y se agradece mucho.
 
 <p align="center">
-  <a href="https://ko-fi.com/bc0d3"><img src="https://img.shields.io/badge/Ko--fi-Invitame%20un%20cafe-FF5E5B?logo=ko-fi&amp;logoColor=white" alt="Apoyar en Ko-fi" /></a>
+  <a href="https://ko-fi.com/R4W421O9QC"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Invitame un cafe en Ko-fi" height="36" /></a>
 </p>
 
 ## Licencia
