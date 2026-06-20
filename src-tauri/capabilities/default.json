@@ -6,7 +6,6 @@
   "permissions": [
     "core:default",
     "dialog:default",
-    "fs:default",
     "store:default"
   ]
 }
