@@ -13,6 +13,18 @@
 #let project = data.project
 #let brand = rgb(ws.branding.primary_color)
 
+// Fuentes: la del branding primero (si se definio), con el sistema de respaldo.
+#let body-font = if ws.branding.at("body_font", default: "") != "" {
+  (ws.branding.body_font, "Helvetica Neue", "Arial", "Liberation Sans")
+} else {
+  ("Helvetica Neue", "Arial", "Liberation Sans")
+}
+#let mono-font = if ws.branding.at("mono_font", default: "") != "" {
+  (ws.branding.mono_font, "JetBrains Mono", "SF Mono", "monospace")
+} else {
+  ("JetBrains Mono", "SF Mono", "monospace")
+}
+
 // --- Configuracion de pagina + marca de agua ---
 #let watermark = ws.watermark
 #set page(
@@ -34,7 +46,8 @@
     #ws.watermark.text #h(1fr) #project.client #h(1fr) #counter(page).display("1 / 1", both: true)
   ],
 )
-#set text(font: ("Helvetica Neue", "Arial", "Liberation Sans"), size: 10.5pt, lang: "es")
+#set text(font: body-font, size: 10.5pt, lang: "es")
+#show raw: set text(font: mono-font)
 #set par(justify: true, leading: 0.65em)
 #set heading(numbering: none)
 

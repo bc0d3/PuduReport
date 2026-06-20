@@ -231,6 +231,13 @@ pub struct Branding {
     /// Si cada hallazgo arranca en su propia pagina en el PDF.
     #[serde(default = "default_true")]
     pub findings_page_break: bool,
+    /// Fuente del cuerpo del reporte. Vacio = usa la del sistema por defecto de
+    /// la plantilla. Si se define, se usa primero con el sistema como respaldo.
+    #[serde(default)]
+    pub body_font: String,
+    /// Fuente del codigo/vectores (monoespaciada). Vacio = la del sistema.
+    #[serde(default)]
+    pub mono_font: String,
 }
 
 fn default_scrim() -> f64 {
@@ -255,6 +262,8 @@ impl Default for Branding {
             cover_layout: default_cover_layout(),
             cover_scrim: default_scrim(),
             findings_page_break: true,
+            body_font: String::new(),
+            mono_font: String::new(),
         }
     }
 }

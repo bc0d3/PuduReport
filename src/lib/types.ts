@@ -93,6 +93,10 @@ export interface Branding {
   cover_scrim: number;
   /** Cada hallazgo en su propia pagina. */
   findings_page_break: boolean;
+  /** Fuente del cuerpo del reporte. Vacio = la del sistema por defecto. */
+  body_font: string;
+  /** Fuente del codigo/vectores (monoespaciada). Vacio = la del sistema. */
+  mono_font: string;
 }
 
 /** workspace.yaml. Solo identidad visual; la plantilla y el tipo viven en el proyecto. */

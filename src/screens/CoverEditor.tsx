@@ -2,6 +2,7 @@ import { useCallback, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import * as api from "../lib/api";
 import type { WorkspaceMeta } from "../lib/types";
+import { BODY_FONT_SUGGESTIONS, MONO_FONT_SUGGESTIONS } from "../lib/fonts";
 import { useToast } from "../components/Toast";
 
 interface Props {
@@ -237,6 +238,51 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
                 }
               />
             </div>
+
+            <span className="field-label-top">tipografia</span>
+            <div className="field" style={{ marginBottom: 8 }}>
+              <label>Fuente del cuerpo</label>
+              <input
+                className="input"
+                list="body-fonts"
+                placeholder="Por defecto (Helvetica Neue / Arial)"
+                value={workspace.branding.body_font}
+                onChange={(e) =>
+                  save(
+                    { ...workspace, branding: { ...workspace.branding, body_font: e.target.value } },
+                    true,
+                  )
+                }
+              />
+              <datalist id="body-fonts">
+                {BODY_FONT_SUGGESTIONS.map((f) => (
+                  <option key={f} value={f} />
+                ))}
+              </datalist>
+            </div>
+            <div className="field">
+              <label>Fuente del codigo</label>
+              <input
+                className="input"
+                list="mono-fonts"
+                placeholder="Por defecto (JetBrains Mono / mono del sistema)"
+                value={workspace.branding.mono_font}
+                onChange={(e) =>
+                  save(
+                    { ...workspace, branding: { ...workspace.branding, mono_font: e.target.value } },
+                    true,
+                  )
+                }
+              />
+              <datalist id="mono-fonts">
+                {MONO_FONT_SUGGESTIONS.map((f) => (
+                  <option key={f} value={f} />
+                ))}
+              </datalist>
+            </div>
+            <p className="faint" style={{ fontSize: 12, margin: "6px 0 16px" }}>
+              La fuente debe estar instalada en tu equipo; si no, el PDF usa una del sistema.
+            </p>
 
             {/* Marca de agua: on/off, texto, tamano, opacidad */}
             <span className="field-label-top">marca de agua</span>

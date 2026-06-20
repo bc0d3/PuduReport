@@ -12,6 +12,18 @@
 #let project = data.project
 #let brand = rgb("#3a7d1e") // HTB green
 
+// Fuentes: la del branding primero (si se definio), con el sistema de respaldo.
+#let body-font = if ws.branding.at("body_font", default: "") != "" {
+  (ws.branding.body_font, "Helvetica Neue", "Arial", "Liberation Sans")
+} else {
+  ("Helvetica Neue", "Arial", "Liberation Sans")
+}
+#let mono-font = if ws.branding.at("mono_font", default: "") != "" {
+  (ws.branding.mono_font, "JetBrains Mono", "SF Mono", "monospace")
+} else {
+  ("JetBrains Mono", "SF Mono", "monospace")
+}
+
 // --- Colores por severidad ---
 #let sev-color = (
   critical: rgb("#a32d2d"),
@@ -53,7 +65,7 @@
   stroke: 0.5pt + luma(200),
   inset: (x: 6pt, y: 3pt),
   radius: 3pt,
-  text(size: 8pt, fill: luma(60), font: ("JetBrains Mono", "SF Mono", "monospace"), vec),
+  text(size: 8pt, fill: luma(60), font: mono-font, vec),
 )
 
 #let badge(text-content, fill-color) = box(
@@ -85,7 +97,8 @@
     #ws.watermark.text #h(1fr) #project.client #h(1fr) #counter(page).display("1 / 1", both: true)
   ],
 )
-#set text(font: ("Helvetica Neue", "Arial", "Liberation Sans"), size: 10.5pt, lang: "es")
+#set text(font: body-font, size: 10.5pt, lang: "es")
+#show raw: set text(font: mono-font)
 #set par(justify: true, leading: 0.65em)
 // Sin numeracion automatica: los cuerpos de hallazgos traen sus propios
 // encabezados (Descripcion/Impacto/...) y no deben numerarse.

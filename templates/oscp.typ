@@ -14,6 +14,18 @@
 #let project = data.project
 #let brand = rgb(ws.branding.primary_color)
 
+// Fuentes: la del branding primero (si se definio), con el sistema de respaldo.
+#let body-font = if ws.branding.at("body_font", default: "") != "" {
+  (ws.branding.body_font, "Helvetica Neue", "Arial", "Liberation Sans")
+} else {
+  ("Helvetica Neue", "Arial", "Liberation Sans")
+}
+#let mono-font = if ws.branding.at("mono_font", default: "") != "" {
+  (ws.branding.mono_font, "JetBrains Mono", "SF Mono", "monospace")
+} else {
+  ("JetBrains Mono", "SF Mono", "monospace")
+}
+
 #let sev-color = (
   critical: rgb("#a32d2d"),
   high: rgb("#c2410c"),
@@ -53,7 +65,7 @@
   stroke: 0.5pt + luma(200),
   inset: (x: 6pt, y: 3pt),
   radius: 3pt,
-  text(size: 8pt, fill: luma(60), font: ("JetBrains Mono", "SF Mono", "monospace"), vec),
+  text(size: 8pt, fill: luma(60), font: mono-font, vec),
 )
 #let badge(text-content, fill-color) = box(
   fill: fill-color,
@@ -66,7 +78,8 @@
 #let report-title = "Offensive Security Certified Professional Exam Report"
 
 // --- Tipografia y headings numerados (estilo examen) ---
-#set text(font: ("Helvetica Neue", "Arial"), size: 10.5pt, lang: "es")
+#set text(font: body-font, size: 10.5pt, lang: "es")
+#show raw: set text(font: mono-font)
 #set par(justify: true, leading: 0.65em)
 #set heading(numbering: "1.1")
 #show heading.where(level: 1): it => block(above: 1.4em, below: 0.6em, text(

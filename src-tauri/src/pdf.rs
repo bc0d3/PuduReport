@@ -479,6 +479,14 @@ mod tests {
                 .into();
         workspace::write_finding(&tmp, &pid, &finding).unwrap();
 
+        // Fuentes custom en el branding: ejercita la rama de fuente elegida (no
+        // solo el fallback) en todas las plantillas. Si la fuente no existe,
+        // Typst cae al respaldo, pero la sintaxis del template se valida igual.
+        let mut wsm = workspace::read_workspace_meta(&tmp).unwrap();
+        wsm.branding.body_font = "Times New Roman".into();
+        wsm.branding.mono_font = "Courier New".into();
+        workspace::write_workspace_meta(&tmp, &wsm).unwrap();
+
         // Gerencia y area pobladas: ejercita la linea opcional de la portada
         // en todas las plantillas (la rama que las muestra).
         let mut p = workspace::read_project_meta(&tmp, &pid).unwrap();
