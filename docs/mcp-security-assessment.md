@@ -10,7 +10,7 @@ frameworks reconocidos y se documenta el mapeo. Set de referencia:
 - NIST AI RMF (funcion Govern), para el consentimiento.
 - El threat model propio de MCP.
 
-Diseno completo en `CLAUDE.md`, seccion "Servidor MCP".
+Diseno completo en la documentacion de diseno del proyecto.
 
 ## Que es y que no es
 
@@ -52,7 +52,7 @@ referencia el codigo.
 
 | Capitulo ASVS | Aplicabilidad | Estado | Evidencia / Justificacion |
 | --- | --- | --- | --- |
-| V1 Arquitectura, diseno y threat modeling | Si | Cumple | Threat model documentado aca y en `CLAUDE.md`. Componente aislado, una responsabilidad. |
+| V1 Arquitectura, diseno y threat modeling | Si | Cumple | Threat model documentado aca. Componente aislado, una responsabilidad. |
 | V2 Autenticacion | N/A | N/A | Transporte stdio local, un solo usuario. No hay credenciales ni login. |
 | V3 Gestion de sesiones | N/A | N/A | No hay sesiones: el cliente lanza el proceso y lo termina. |
 | V4 Control de acceso | Si | Cumple | Acceso restringido por construccion del transporte (solo el usuario local que lanza el cliente). Scope a un workspace; sin acceso al resto del disco. |

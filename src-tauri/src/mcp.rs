@@ -9,8 +9,8 @@
 //!   reescribe `~/.claude.json` constantemente y editarlo a mano podria pisarse
 //!   con sus escrituras. El status se lee del archivo (solo lectura, sin race).
 //!
-//! Importante (CLAUDE.md, "Servidor MCP"): conectar expone el TEXTO de los
-//! hallazgos al cliente de IA. El consentimiento se pide en la GUI antes.
+//! Importante: conectar expone el TEXTO de los hallazgos al cliente de IA. El
+//! consentimiento se pide en la GUI antes.
 
 use std::fs;
 use std::path::{Path, PathBuf};

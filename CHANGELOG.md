@@ -5,7 +5,7 @@ Todo cambio notable se documenta en este archivo. El formato sigue Keep a Change
 ## [0.0.6] - 2026-06-18
 
 ### Added
-- Servidor MCP (`pudureport-mcp`): permite que un cliente de IA (Claude Desktop u otro) lea los proyectos e hallazgos y mejore su texto, todo local por stdio sin que los datos salgan del equipo (las evidencias nunca se exponen). Boton "Instalar en Claude Desktop" en Ajustes, con aviso de consentimiento y opcion de desconectar.
+- Servidor MCP (`pudureport-mcp`): permite que tu cliente de IA local lea los proyectos e hallazgos y mejore su texto, todo local por stdio sin que los datos salgan del equipo (las evidencias nunca se exponen). Boton para instalarlo en tu cliente desde Ajustes, con aviso de consentimiento y opcion de desconectar.
 - Selector de CWE con los mas usados (ranking de HackerOne), buscable por numero, nombre o sigla (XSS, IDOR, SSRF...). Un hallazgo puede tener varios CWE.
 - Campos opcionales Gerencia y Area del cliente, visibles en la portada del reporte.
 - Vista de codigo markdown en el editor del reporte, con alternar entre Markdown y vista renderizada.

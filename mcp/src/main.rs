@@ -3,7 +3,7 @@
 //! Expone el workspace por stdio (JSON-RPC) para que la IA del usuario lea y
 //! mejore reportes. No embebe ningun LLM ni abre puertos de red: el cliente MCP
 //! lanza este proceso y le habla por pipes, asi que solo el usuario local
-//! accede (ver CLAUDE.md, seccion "Servidor MCP").
+//! accede (ver README.dev.md).
 //!
 //! Alcance actual (Fase 2): leer proyectos e hallazgos y modificar el TEXTO de
 //! los hallazgos (crear vulnerabilidades, mejorar redaccion/campos). No edita
