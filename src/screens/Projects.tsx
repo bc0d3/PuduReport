@@ -4,6 +4,7 @@ import type { ProjectSummary, WorkspaceMeta } from "../lib/types";
 import { PROJECT_TYPES, typeInfo } from "../lib/projectTypes";
 import { Modal } from "../components/Modal";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { Dashboard } from "../components/Dashboard";
 import { useToast } from "../components/Toast";
 
 interface Props {
@@ -87,6 +88,8 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
       <div className="view" style={{ paddingTop: 16 }}>
         {projects.length === 0 ? (
           <div className="empty">No hay proyectos todavia. Crea uno o carga el de ejemplo.</div>
+        ) : welcome ? (
+          <Dashboard onSelect={onSelect} refreshDep={projects.length} />
         ) : (
           <>
             <div className="field" style={{ maxWidth: 360, marginBottom: 10 }}>

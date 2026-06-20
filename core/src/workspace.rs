@@ -22,7 +22,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::models::{
-    Finding, FindingMeta, FindingTemplate, ProjectMeta, ProjectSummary, Snippet, WorkspaceMeta,
+    Finding, FindingMeta, FindingStatus, FindingTemplate, ProjectMeta, ProjectStats,
+    ProjectSummary, SeverityCounts, Snippet, WorkspaceMeta, WorkspaceStats,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -204,6 +205,44 @@ pub fn list_projects(root: &Path) -> Result<Vec<ProjectSummary>> {
     }
     out.sort_by_key(|a| a.name.to_lowercase());
     Ok(out)
+}
+
+/// Agrega los conteos del workspace para el dashboard de Inicio: total de
+/// proyectos/hallazgos, hallazgos abiertos y la distribucion por severidad
+/// (global y por proyecto).
+pub fn workspace_stats(root: &Path) -> Result<WorkspaceStats> {
+    let summaries = list_projects(root)?;
+    let mut total_findings = 0;
+    let mut open_findings = 0;
+    let mut severity = SeverityCounts::default();
+    let mut projects = Vec::new();
+    for s in &summaries {
+        let findings = list_findings(root, &s.id)?;
+        let mut psev = SeverityCounts::default();
+        for f in &findings {
+            psev.add(f.meta.severity);
+            severity.add(f.meta.severity);
+            if matches!(f.meta.status, FindingStatus::Open) {
+                open_findings += 1;
+            }
+        }
+        total_findings += findings.len();
+        projects.push(ProjectStats {
+            id: s.id.clone(),
+            name: s.name.clone(),
+            client: s.client.clone(),
+            project_type: s.project_type.clone(),
+            total: findings.len(),
+            severity: psev,
+        });
+    }
+    Ok(WorkspaceStats {
+        total_projects: summaries.len(),
+        total_findings,
+        open_findings,
+        severity,
+        projects,
+    })
 }
 
 /// Crea un proyecto nuevo del tipo indicado. El tipo define el scaffold de
@@ -1047,6 +1086,28 @@ mod tests {
         assert!(findings
             .iter()
             .any(|f| f.meta.severity == crate::models::Severity::Critical));
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn workspace_stats_agrega_severidades() {
+        let tmp = std::env::temp_dir().join(format!("pudu-stats-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        create_workspace(&tmp, "WS").unwrap();
+        create_example_project(&tmp).unwrap();
+
+        let stats = workspace_stats(&tmp).unwrap();
+        assert_eq!(stats.total_projects, 1);
+        assert_eq!(stats.total_findings, 3);
+        // El proyecto de ejemplo tiene 1 critica, 1 alta y 1 baja, todas abiertas.
+        assert_eq!(stats.severity.critical, 1);
+        assert_eq!(stats.severity.high, 1);
+        assert_eq!(stats.severity.low, 1);
+        assert_eq!(stats.open_findings, 3);
+        assert_eq!(stats.projects.len(), 1);
+        assert_eq!(stats.projects[0].total, 3);
+        assert_eq!(stats.projects[0].severity.critical, 1);
 
         let _ = fs::remove_dir_all(&tmp);
     }

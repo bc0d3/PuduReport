@@ -434,6 +434,111 @@ i.ti {
   font-weight: 600;
 }
 
+/* --- Dashboard de Inicio --- */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.dash-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+.stat-card {
+  background: var(--bg-subtle);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+}
+.stat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.stat-value {
+  font-size: 26px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.dash-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.sev-bar {
+  display: flex;
+  height: 14px;
+  gap: 2px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.sev-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.sev-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sev-legend b {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.dash-proj {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.dash-proj:hover {
+  background: var(--bg-subtle);
+}
+.dash-proj > .ti {
+  color: var(--text-muted);
+  font-size: 18px;
+}
+.dash-proj-name {
+  flex: 1;
+  min-width: 0;
+}
+.dash-badges {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.dash-badge-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.dash-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dash-badge-n {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 /* --- Selector de CWE --- */
 .cwe-popover {
   width: 520px;

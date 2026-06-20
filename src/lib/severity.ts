@@ -16,4 +16,13 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
   info: "Informativa",
 };
 
+/** Letra del badge compacto (inicial de la etiqueta en espaniol). */
+export const SEVERITY_LETTER: Record<Severity, string> = {
+  critical: "C",
+  high: "A",
+  medium: "M",
+  low: "B",
+  info: "I",
+};
+
 export const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low", "info"];

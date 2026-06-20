@@ -13,6 +13,7 @@ import type {
   PdfTemplate,
   ProjectMeta,
   ProjectSummary,
+  WorkspaceStats,
   RecentWorkspace,
   Snippet,
   WorkspaceMeta,
@@ -55,6 +56,11 @@ export function saveWorkspaceMeta(meta: WorkspaceMeta): Promise<void> {
 }
 
 // --- Proyectos ---
+
+/** Resumen del workspace para el dashboard de Inicio (totales + severidades). */
+export function workspaceStats(): Promise<WorkspaceStats> {
+  return invoke("workspace_stats");
+}
 
 export function listProjects(): Promise<ProjectSummary[]> {
   return invoke("list_projects");

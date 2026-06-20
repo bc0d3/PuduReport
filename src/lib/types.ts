@@ -176,6 +176,34 @@ export interface CvssResult {
   vector: string;
 }
 
+/** Conteo de hallazgos por severidad. */
+export interface SeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
+}
+
+/** Estadisticas de un proyecto para el dashboard. */
+export interface ProjectStats {
+  id: string;
+  name: string;
+  client: string;
+  project_type: string;
+  total: number;
+  severity: SeverityCounts;
+}
+
+/** Resumen del workspace para el dashboard de Inicio. */
+export interface WorkspaceStats {
+  total_projects: number;
+  total_findings: number;
+  open_findings: number;
+  severity: SeverityCounts;
+  projects: ProjectStats[];
+}
+
 /** Cliente MCP soportado por la integracion. */
 export type McpClient = "desktop" | "code";
 

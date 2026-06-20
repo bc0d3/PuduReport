@@ -325,6 +325,51 @@ pub struct CvssResult {
     pub vector: String,
 }
 
+/// Conteo de hallazgos por severidad (para el dashboard de Inicio).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeverityCounts {
+    pub critical: usize,
+    pub high: usize,
+    pub medium: usize,
+    pub low: usize,
+    pub info: usize,
+}
+
+impl SeverityCounts {
+    /// Incrementa el contador de la severidad dada.
+    pub fn add(&mut self, severity: Severity) {
+        match severity {
+            Severity::Critical => self.critical += 1,
+            Severity::High => self.high += 1,
+            Severity::Medium => self.medium += 1,
+            Severity::Low => self.low += 1,
+            Severity::Info => self.info += 1,
+        }
+    }
+}
+
+/// Estadisticas de un proyecto para el dashboard.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProjectStats {
+    pub id: String,
+    pub name: String,
+    pub client: String,
+    pub project_type: String,
+    pub total: usize,
+    pub severity: SeverityCounts,
+}
+
+/// Resumen del workspace para el dashboard de Inicio.
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkspaceStats {
+    pub total_projects: usize,
+    pub total_findings: usize,
+    /// Hallazgos en estado "open" en todo el workspace.
+    pub open_findings: usize,
+    pub severity: SeverityCounts,
+    pub projects: Vec<ProjectStats>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

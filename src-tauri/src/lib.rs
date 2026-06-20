@@ -19,7 +19,7 @@ use tauri_plugin_store::StoreExt;
 // Logica compartida en el crate pudureport-core.
 use pudureport_core::models::{
     CvssResult, CvssVersion, Finding, FindingTemplate, PdfTemplate, ProjectMeta, ProjectSummary,
-    Snippet, WorkspaceMeta,
+    Snippet, WorkspaceMeta, WorkspaceStats,
 };
 use pudureport_core::{cvss, workspace};
 
@@ -219,6 +219,13 @@ fn save_workspace_meta(state: State<AppState>, meta: WorkspaceMeta) -> Result<()
 // ---------------------------------------------------------------------------
 // Proyectos
 // ---------------------------------------------------------------------------
+
+/// Resumen del workspace para el dashboard de Inicio (totales + severidades).
+#[tauri::command]
+fn workspace_stats(state: State<AppState>) -> Result<WorkspaceStats, String> {
+    let root = current_root(&state)?;
+    workspace::workspace_stats(&root).map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 fn list_projects(state: State<AppState>) -> Result<Vec<ProjectSummary>, String> {
@@ -754,6 +761,7 @@ pub fn run() {
             open_workspace,
             create_workspace,
             save_workspace_meta,
+            workspace_stats,
             list_projects,
             create_project,
             create_example_project,
