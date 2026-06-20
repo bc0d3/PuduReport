@@ -2,6 +2,17 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.7] - 2026-06-20
+
+### Added
+- Dashboard en la pantalla de Inicio: al abrir el workspace se ve un resumen del trabajo (total de proyectos y hallazgos, distribucion por severidad, y el desglose por proyecto con su conteo por severidad). Un clic en un proyecto lo abre.
+- La integracion MCP ahora permite conectar el servidor de PuduReport a mas de un cliente de IA local (instalar y desconectar por cliente desde Ajustes), para que tu asistente lea y mejore el texto de los hallazgos. Todo local; las evidencias nunca se exponen.
+
+### Security
+- Se corrige una posible inyeccion de markup en la conversion de markdown a Typst: un bloque de codigo preparado podia cerrar el bloque y hacer que se evaluara codigo de plantilla al generar el PDF (confinado al workspace). Se neutraliza con un delimitador de longitud dinamica.
+- La prosa con `//` ya no desaparece del PDF (Typst la tomaba como comentario).
+- Hardening: validacion anti path-traversal consistente en la edicion de plantillas, apertura de archivos confinada al workspace, y actualizacion de la dependencia git2 (avisos RUSTSEC).
+
 ## [0.0.6] - 2026-06-18
 
 ### Added
