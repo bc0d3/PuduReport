@@ -63,7 +63,7 @@ pub fn status(root: &Path, project_id: &str) -> Result<GitState> {
     let prefix = format!("{project_id}/");
     let mut changes = Vec::new();
     for entry in statuses.iter() {
-        let Some(path) = entry.path() else { continue };
+        let Ok(path) = entry.path() else { continue };
         if !path.starts_with(&prefix) {
             continue;
         }
@@ -140,7 +140,12 @@ pub fn log(root: &Path, project_id: &str, limit: usize) -> Result<Vec<GitCommit>
         }
         out.push(GitCommit {
             hash: oid.to_string().chars().take(7).collect(),
-            message: commit.summary().unwrap_or("(sin mensaje)").to_string(),
+            message: commit
+                .summary()
+                .ok()
+                .flatten()
+                .unwrap_or("(sin mensaje)")
+                .to_string(),
             author: commit.author().name().unwrap_or("?").to_string(),
             timestamp: commit.time().seconds(),
         });

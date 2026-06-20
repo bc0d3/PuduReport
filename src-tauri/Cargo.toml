@@ -33,7 +33,7 @@ thiserror = "2"
 anyhow = "1"
 dirs = "5"
 regex = "1"
-git2 = { version = "0.19", default-features = false }
+git2 = { version = "0.21", default-features = false }
 pulldown-cmark = { version = "0.12", default-features = false }
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }

@@ -501,6 +501,34 @@ fn user_templates_dir(root: &std::path::Path) -> std::path::PathBuf {
     root.join("library/templates")
 }
 
+/// Valida el nombre de una plantilla .typ contra path traversal (mismo criterio
+/// que validate_id de core: sin separadores ni `..`).
+fn validate_template_name(name: &str) -> Result<(), String> {
+    if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err(format!("nombre de plantilla invalido: {name}"));
+    }
+    Ok(())
+}
+
+/// Canonicaliza `path` y verifica que quede dentro del workspace abierto. Evita
+/// que el webview abra o revele rutas arbitrarias del sistema con el opener.
+fn ensure_within_workspace(
+    state: &State<AppState>,
+    path: &str,
+) -> Result<std::path::PathBuf, String> {
+    let root = current_root(state)?
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    let target = std::path::Path::new(path)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    if target.starts_with(&root) {
+        Ok(target)
+    } else {
+        Err("la ruta esta fuera del workspace".to_string())
+    }
+}
+
 /// Duplica una plantilla (builtin o de la libreria) a la libreria del usuario
 /// para poder editarla. Devuelve el nuevo nombre.
 #[tauri::command]
@@ -509,6 +537,7 @@ fn duplicate_template(
     state: State<AppState>,
     name: String,
 ) -> Result<String, String> {
+    validate_template_name(&name)?;
     let root = current_root(&state)?;
     // Buscar el origen: primero libreria del usuario, luego builtin.
     let src = {
@@ -550,6 +579,7 @@ fn read_template_source(
     state: State<AppState>,
     name: String,
 ) -> Result<String, String> {
+    validate_template_name(&name)?;
     let root = current_root(&state)?;
     let user = user_templates_dir(&root).join(format!("{name}.typ"));
     let path = if user.exists() {
@@ -567,9 +597,7 @@ fn save_template_source(
     name: String,
     content: String,
 ) -> Result<(), String> {
-    if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
-        return Err(format!("nombre invalido: {name}"));
-    }
+    validate_template_name(&name)?;
     let root = current_root(&state)?;
     let dir = user_templates_dir(&root);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -646,15 +674,19 @@ async fn preview_pdf(app: AppHandle, project_id: String) -> Result<Vec<String>, 
 }
 
 /// Abre un archivo con la aplicacion por defecto del sistema (ej. el PDF).
+/// Solo se permiten rutas dentro del workspace abierto.
 #[tauri::command]
-fn open_path(path: String) -> Result<(), String> {
-    opener::open(&path).map_err(|e| e.to_string())
+fn open_path(state: State<AppState>, path: String) -> Result<(), String> {
+    let target = ensure_within_workspace(&state, &path)?;
+    opener::open(&target).map_err(|e| e.to_string())
 }
 
 /// Abre el explorador de archivos mostrando el archivo (revela la carpeta).
+/// Solo se permiten rutas dentro del workspace abierto.
 #[tauri::command]
-fn reveal_path(path: String) -> Result<(), String> {
-    opener::reveal(&path).map_err(|e| e.to_string())
+fn reveal_path(state: State<AppState>, path: String) -> Result<(), String> {
+    let target = ensure_within_workspace(&state, &path)?;
+    opener::reveal(&target).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
