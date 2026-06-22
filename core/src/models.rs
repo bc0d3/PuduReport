@@ -415,6 +415,48 @@ impl Default for Watermark {
     }
 }
 
+/// Elemento posicionado libremente en la portada-lienzo (cover_layout =
+/// "canvas"). Coordenadas normalizadas 0..1 sobre el AREA DE PAGINA COMPLETA
+/// (A4, sin margenes): la portada-canvas se dibuja con margin: 0pt, asi el
+/// editor (que muestra un rectangulo A4 completo) y el PDF coinciden 1:1.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoverElement {
+    /// "logo" | "title" | "client" | "subtitle" | "period" | "text" | "image".
+    pub kind: String,
+    /// Esquina superior-izquierda, normalizada 0..1 (x = fraccion del ancho).
+    pub x: f64,
+    pub y: f64,
+    /// Ancho normalizado 0..1. Para texto, ancho del cuadro; para logo/image,
+    /// ancho de la imagen.
+    pub w: f64,
+    /// Tamano de fuente en puntos (kinds de texto). 0 = default por kind.
+    #[serde(default)]
+    pub font_size: f64,
+    /// "left" | "center" | "right" (texto).
+    #[serde(default = "default_align")]
+    pub align: String,
+    /// Color del texto (hex). Vacio = color por kind.
+    #[serde(default)]
+    pub color: String,
+    /// "normal" | "bold" (texto).
+    #[serde(default = "default_weight")]
+    pub weight: String,
+    /// Contenido literal (solo kind "text").
+    #[serde(default)]
+    pub content: String,
+    /// Ruta root-relative del asset (solo kind "image"): "/branding/<uuid>.png".
+    #[serde(default)]
+    pub src: String,
+}
+
+fn default_align() -> String {
+    "left".to_string()
+}
+
+fn default_weight() -> String {
+    "normal".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Branding {
     #[serde(default)]
@@ -424,6 +466,11 @@ pub struct Branding {
     pub cover_background: String,
     #[serde(default = "default_primary_color")]
     pub primary_color: String,
+    /// Color del TITULO de la portada. Vacio = usa el color del layout (acento
+    /// del reporte, o blanco en "Completa"). No cambia el fondo ni el cuerpo;
+    /// permite un titulo de portada de otro color (ej. blanco sobre fondo oscuro).
+    #[serde(default)]
+    pub cover_color: String,
     #[serde(default = "default_cover_layout")]
     pub cover_layout: String,
     /// Opacidad de la capa oscura sobre la imagen de fondo (0.0 - 1.0).
@@ -454,6 +501,10 @@ pub struct Branding {
     /// Mostrar la linea decorativa de acento en la portada.
     #[serde(default = "default_true")]
     pub cover_show_accent: bool,
+    /// Elementos del lienzo libre de portada (cover_layout = "canvas"). Vacio =
+    /// el branch canvas cae a un layout por defecto.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cover_elements: Vec<CoverElement>,
 }
 
 fn default_scrim() -> f64 {
@@ -475,6 +526,7 @@ impl Default for Branding {
             logo_path: String::new(),
             cover_background: String::new(),
             primary_color: default_primary_color(),
+            cover_color: String::new(),
             cover_layout: default_cover_layout(),
             cover_scrim: default_scrim(),
             findings_page_break: true,
@@ -485,6 +537,7 @@ impl Default for Branding {
             cover_show_period: true,
             cover_show_org: true,
             cover_show_accent: true,
+            cover_elements: Vec::new(),
         }
     }
 }
@@ -632,6 +685,24 @@ mod tests {
         assert!(viejo.cover_show_org);
         assert!(viejo.cover_show_accent);
         assert!(viejo.cover_subtitle.is_empty());
+        assert!(viejo.cover_elements.is_empty());
+        assert!(viejo.cover_color.is_empty());
+    }
+
+    #[test]
+    fn branding_canvas_deserializa_elementos() {
+        let yaml = "cover_layout: canvas\ncover_elements:\n- {kind: title, x: 0.1, y: 0.2, w: 0.7}\n- {kind: text, x: 0.1, y: 0.5, w: 0.4, content: Hola, align: center}\n";
+        let b: Branding = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(b.cover_layout, "canvas");
+        assert_eq!(b.cover_elements.len(), 2);
+        // Defaults por campo ausente.
+        assert_eq!(b.cover_elements[0].align, "left");
+        assert_eq!(b.cover_elements[0].weight, "normal");
+        assert_eq!(b.cover_elements[0].font_size, 0.0);
+        // Campos presentes.
+        assert_eq!(b.cover_elements[1].kind, "text");
+        assert_eq!(b.cover_elements[1].content, "Hola");
+        assert_eq!(b.cover_elements[1].align, "center");
     }
 
     fn sec(key: &str) -> ReportSection {

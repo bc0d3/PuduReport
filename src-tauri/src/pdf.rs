@@ -617,6 +617,48 @@ mod tests {
         project.layout = Vec::new();
         workspace::write_project_meta(&tmp, &pid, &project).unwrap();
 
+        // Portada-lienzo (cover_layout = "canvas"): compila con elementos
+        // posicionados en absoluto (place) en las plantillas con cover().
+        let ce =
+            |kind: &str, x: f64, y: f64, content: &str| pudureport_core::models::CoverElement {
+                kind: kind.to_string(),
+                x,
+                y,
+                w: 0.6,
+                font_size: 16.0,
+                align: "left".to_string(),
+                color: String::new(),
+                weight: "normal".to_string(),
+                content: content.to_string(),
+                src: String::new(),
+            };
+        let mut wsm = workspace::read_workspace_meta(&tmp).unwrap();
+        wsm.branding.cover_layout = "canvas".to_string();
+        wsm.branding.cover_elements = vec![
+            ce("title", 0.1, 0.3, ""),
+            ce("client", 0.1, 0.42, ""),
+            ce("period", 0.1, 0.8, ""),
+            ce("text", 0.1, 0.88, "Confidencial"),
+        ];
+        workspace::write_workspace_meta(&tmp, &wsm).unwrap();
+        for project_type in ["pentest", "ejecutivo", "documento", "retest", "htb"] {
+            let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();
+            project.project_type = project_type.to_string();
+            project.layout = Vec::new();
+            workspace::write_project_meta(&tmp, &pid, &project).unwrap();
+            let pdfs = generate_pdf(&tmp, &pid, &templates, &typst_bin, false)
+                .unwrap_or_else(|e| panic!("portada canvas fallo {project_type}: {e}"));
+            assert!(
+                std::fs::metadata(&pdfs[0]).unwrap().len() > 1000,
+                "PDF canvas de {project_type} sospechosamente pequeno"
+            );
+        }
+        // Restaurar la portada clasica.
+        let mut wsm = workspace::read_workspace_meta(&tmp).unwrap();
+        wsm.branding.cover_layout = "centered".to_string();
+        wsm.branding.cover_elements = Vec::new();
+        workspace::write_workspace_meta(&tmp, &wsm).unwrap();
+
         // Salida ejecutiva secundaria desde un proyecto de pentest.
         let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();
         project.project_type = "pentest".to_string();

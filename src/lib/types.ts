@@ -108,13 +108,34 @@ export interface Watermark {
   size: number;
 }
 
+/** Elemento del lienzo libre de portada (cover_layout = "canvas"). */
+export interface CoverElement {
+  kind: "logo" | "title" | "client" | "subtitle" | "period" | "text" | "image";
+  /** Coordenadas y ancho normalizados 0..1 sobre el area A4 completa. */
+  x: number;
+  y: number;
+  w: number;
+  /** Tamano de fuente en pt (texto); 0/ausente = default por kind. */
+  font_size?: number;
+  align?: "left" | "center" | "right";
+  /** Color hex; vacio = color por kind. */
+  color?: string;
+  weight?: "normal" | "bold";
+  /** Contenido literal (solo kind "text"). */
+  content?: string;
+  /** Ruta root-relative del asset (solo kind "image"). */
+  src?: string;
+}
+
 export interface Branding {
   logo_path: string;
   /** Imagen de fondo de portada (ruta root-relative); vacio = color de marca. */
   cover_background: string;
   primary_color: string;
+  /** Color del titulo de la portada. Vacio = color del layout (acento del reporte). */
+  cover_color: string;
   /** Disposicion de portada. */
-  cover_layout: "centered" | "sidebar" | "full-bleed" | "minimal";
+  cover_layout: "centered" | "sidebar" | "full-bleed" | "minimal" | "canvas";
   /** Opacidad de la capa oscura sobre la imagen de fondo (0.0 - 1.0). */
   cover_scrim: number;
   /** Cada hallazgo en su propia pagina. */
@@ -133,6 +154,8 @@ export interface Branding {
   cover_show_org: boolean;
   /** Mostrar la linea decorativa de acento en la portada. */
   cover_show_accent: boolean;
+  /** Elementos del lienzo libre de portada (cover_layout = "canvas"). */
+  cover_elements?: CoverElement[];
 }
 
 /** workspace.yaml. Solo identidad visual; la plantilla y el tipo viven en el proyecto. */

@@ -3,6 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import * as api from "../lib/api";
 import type { WorkspaceMeta } from "../lib/types";
 import { BODY_FONT_SUGGESTIONS, MONO_FONT_SUGGESTIONS } from "../lib/fonts";
+import { CoverCanvas, defaultCoverElements } from "./CoverCanvas";
 import { useToast } from "../components/Toast";
 
 interface Props {
@@ -17,6 +18,7 @@ const LAYOUTS: { value: WorkspaceMeta["branding"]["cover_layout"]; label: string
     { value: "sidebar", label: "Lateral", icon: "ti-layout-sidebar" },
     { value: "full-bleed", label: "Completa", icon: "ti-layout-board" },
     { value: "minimal", label: "Minimal", icon: "ti-layout-bottombar" },
+    { value: "canvas", label: "Lienzo (beta)", icon: "ti-layout-grid" },
   ];
 
 const SWATCHES = ["#1f6fb2", "#0f6e56", "#993c1d", "#2c2c2a"];
@@ -72,6 +74,33 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
     if (rel) save({ ...workspace, branding: { ...workspace.branding, [target]: rel } });
   }
 
+  // Sube una imagen y devuelve su ruta root-relative (para el lienzo de portada).
+  async function uploadAsset(): Promise<string | null> {
+    return new Promise((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = async () => {
+        const f = input.files?.[0];
+        if (!f) return resolve(null);
+        const base64 = await readBase64(f);
+        const rel = await guard(api.saveBrandingAsset(extFromFile(f), base64));
+        resolve(rel ?? null);
+      };
+      input.click();
+    });
+  }
+
+  // Cambia la disposicion; al pasar a "canvas" siembra elementos por defecto si
+  // todavia no hay ninguno, para que el lienzo arranque poblado.
+  function selectLayout(value: WorkspaceMeta["branding"]["cover_layout"]) {
+    const branding = { ...workspace.branding, cover_layout: value };
+    if (value === "canvas" && (workspace.branding.cover_elements ?? []).length === 0) {
+      branding.cover_elements = defaultCoverElements(workspace.branding);
+    }
+    save({ ...workspace, branding });
+  }
+
   const brand = workspace.branding.primary_color || "#1f6fb2";
   const logoSrc = resolveBrandingSrc(workspace.branding.logo_path, workspacePath);
   const bgSrc = resolveBrandingSrc(workspace.branding.cover_background, workspacePath);
@@ -94,12 +123,7 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
                 <div
                   key={l.value}
                   className={`cardsel ${workspace.branding.cover_layout === l.value ? "sel" : ""}`}
-                  onClick={() =>
-                    save({
-                      ...workspace,
-                      branding: { ...workspace.branding, cover_layout: l.value },
-                    })
-                  }
+                  onClick={() => selectLayout(l.value)}
                 >
                   <i className={`ti ${l.icon}`} />
                   {l.label}
@@ -213,7 +237,7 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
               </div>
             )}
 
-            <span className="field-label-top">color de marca</span>
+            <span className="field-label-top">color del reporte (acento)</span>
             <div className="swatch-row" style={{ marginBottom: 16 }}>
               {SWATCHES.map((c) => (
                 <span
@@ -237,6 +261,51 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
                   })
                 }
               />
+            </div>
+
+            {/* Color del TITULO de la portada, independiente del color del reporte. */}
+            <span className="field-label-top">color del titulo de portada</span>
+            <div className="swatch-row" style={{ marginBottom: 6 }}>
+              {SWATCHES.map((c) => (
+                <span
+                  key={c}
+                  className={`swatch ${
+                    (workspace.branding.cover_color || "").toLowerCase() === c ? "sel" : ""
+                  }`}
+                  style={{ background: c }}
+                  onClick={() =>
+                    save({ ...workspace, branding: { ...workspace.branding, cover_color: c } })
+                  }
+                />
+              ))}
+              <input
+                type="color"
+                className="swatch"
+                style={{ padding: 0, border: "none" }}
+                value={workspace.branding.cover_color || brand}
+                onChange={(e) =>
+                  save({
+                    ...workspace,
+                    branding: { ...workspace.branding, cover_color: e.target.value },
+                  })
+                }
+              />
+            </div>
+            <div className="row" style={{ marginBottom: 16, minHeight: 22 }}>
+              {workspace.branding.cover_color ? (
+                <button
+                  className="btn small"
+                  onClick={() =>
+                    save({ ...workspace, branding: { ...workspace.branding, cover_color: "" } })
+                  }
+                >
+                  Usar el color del reporte
+                </button>
+              ) : (
+                <span className="faint" style={{ fontSize: 11 }}>
+                  El titulo de la portada usa este color. Vacio = color del reporte.
+                </span>
+              )}
             </div>
 
             <span className="field-label-top">tipografia</span>
@@ -446,9 +515,26 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
             </label>
           </div>
 
-          {/* Vista en miniatura de la portada */}
+          {/* Vista de la portada: lienzo editable o miniatura aproximada */}
           <div style={{ display: "flex", justifyContent: "center" }}>
-            <CoverPreview workspace={workspace} brand={brand} logoSrc={logoSrc} bgSrc={bgSrc} />
+            {workspace.branding.cover_layout === "canvas" ? (
+              <CoverCanvas
+                elements={workspace.branding.cover_elements ?? []}
+                brand={workspace.branding.cover_color || brand}
+                logoSrc={logoSrc}
+                subtitle={workspace.branding.cover_subtitle}
+                resolveSrc={(p) => resolveBrandingSrc(p, workspacePath)}
+                onChange={(els, debounced) =>
+                  save(
+                    { ...workspace, branding: { ...workspace.branding, cover_elements: els } },
+                    debounced,
+                  )
+                }
+                onUploadImage={uploadAsset}
+              />
+            ) : (
+              <CoverPreview workspace={workspace} brand={brand} logoSrc={logoSrc} bgSrc={bgSrc} />
+            )}
           </div>
         </div>
       </div>
@@ -468,6 +554,9 @@ function CoverPreview({
   bgSrc: string;
 }) {
   const b = workspace.branding;
+  // Color de los elementos de la portada (texto, lineas, barras, placeholder):
+  // el de portada si se definio, o el del reporte. El fondo full-bleed NO lo usa.
+  const coverBrand = b.cover_color || brand;
   const layout = workspace.branding.cover_layout;
   const wm = workspace.watermark;
   const hasBg = Boolean(bgSrc);
@@ -510,7 +599,7 @@ function CoverPreview({
         />
       )}
       {/* Barra superior solo en "centrada" */}
-      {!hasBg && layout === "centered" && <div style={{ height: 8, background: brand }} />}
+      {!hasBg && layout === "centered" && <div style={{ height: 8, background: coverBrand }} />}
       <div
         style={{
           position: "relative",
@@ -532,7 +621,7 @@ function CoverPreview({
               top: 0,
               bottom: 0,
               width: 6,
-              background: brand,
+              background: coverBrand,
             }}
           />
         )}
@@ -549,28 +638,32 @@ function CoverPreview({
                 width: 56,
                 height: 56,
                 borderRadius: 8,
-                background: brand + "22",
+                background: coverBrand + "22",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: brand,
+                color: coverBrand,
                 marginBottom: 28,
               }}
             >
               <i className="ti ti-shield-lock" style={{ fontSize: 26 }} />
             </div>
           ))}
-        <div style={{ fontSize: 18, fontWeight: 600 }}>Pentest Aplicacion Web</div>
-        <div style={{ fontSize: 13, color: full ? "#e6edf3" : brand, marginTop: 6 }}>
+        <div style={{ fontSize: 18, fontWeight: 600, color: b.cover_color || "inherit" }}>
+          Pentest Aplicacion Web
+        </div>
+        <div style={{ fontSize: 13, color: full && !b.cover_color ? "#e6edf3" : coverBrand, marginTop: 6 }}>
           Cliente Demo S.A.
         </div>
         {b.cover_subtitle && (
-          <div style={{ fontSize: 12, color: full ? "#e6edf3" : brand, marginTop: 4 }}>
+          <div
+            style={{ fontSize: 12, color: full && !b.cover_color ? "#e6edf3" : coverBrand, marginTop: 4 }}
+          >
             {b.cover_subtitle}
           </div>
         )}
         {b.cover_show_accent && (
-          <div style={{ width: 40, height: 2, background: brand, margin: "14px 0" }} />
+          <div style={{ width: 40, height: 2, background: coverBrand, margin: "14px 0" }} />
         )}
         {b.cover_show_period && (
           <div
