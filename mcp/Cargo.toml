@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 pudureport-core = { path = "../core" }
+dirs = "5"
 rmcp = { version = "1.7.0", features = ["server", "transport-io"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }

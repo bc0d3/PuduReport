@@ -25,11 +25,23 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// Servidor MCP scoped a un unico workspace (la carpeta que el cliente pasa por
-/// argumento o variable de entorno). No ve nada fuera de esa ruta.
+/// De donde sale el workspace que expone el servidor.
+#[derive(Clone)]
+enum WorkspaceSource {
+    /// Workspace fijo: override por entorno (PUDUREPORT_WORKSPACE) o en tests.
+    Fixed(PathBuf),
+    /// Sigue el workspace abierto en la app: lee settings.json del store en cada
+    /// llamada. `fallback` es el argumento de instalacion (legacy), usado solo si
+    /// no hay app/ajustes.
+    Follow { fallback: Option<PathBuf> },
+}
+
+/// Servidor MCP scoped a UN workspace por vez. Por defecto SIGUE el workspace
+/// abierto en la app (lee settings.json en cada llamada), asi refleja en vivo el
+/// que el usuario tiene abierto en el GUI. Nunca ve nada fuera de ese workspace.
 #[derive(Clone)]
 struct PuduReportServer {
-    root: PathBuf,
+    source: WorkspaceSource,
 }
 
 // --- Argumentos de las herramientas ---
@@ -258,8 +270,41 @@ fn apply_severity(
 
 #[tool_router]
 impl PuduReportServer {
+    /// Workspace fijo, solo para tests. Resuelve siempre a esta ruta.
+    #[cfg(test)]
     fn new(root: PathBuf) -> Self {
-        Self { root }
+        Self {
+            source: WorkspaceSource::Fixed(root),
+        }
+    }
+
+    fn from_source(source: WorkspaceSource) -> Self {
+        Self { source }
+    }
+
+    /// Resuelve el workspace ACTUAL en cada llamada. En modo Fixed devuelve la
+    /// ruta dada; en modo Follow devuelve el workspace abierto en la app
+    /// (settings.json del store), o el respaldo si no hay app/ajustes. Asi el MCP
+    /// sigue en vivo el workspace que el usuario abre en el GUI.
+    fn current_root(&self) -> Result<PathBuf, McpError> {
+        match &self.source {
+            WorkspaceSource::Fixed(p) => Ok(p.clone()),
+            WorkspaceSource::Follow { fallback } => {
+                if let Some(p) = app_current_workspace() {
+                    if p.is_dir() {
+                        return Ok(p);
+                    }
+                }
+                if let Some(p) = fallback {
+                    if p.is_dir() {
+                        return Ok(p.clone());
+                    }
+                }
+                Err(internal(
+                    "no hay un workspace disponible: abri uno en PuduReport",
+                ))
+            }
+        }
     }
 
     // --- Lectura ---
@@ -269,11 +314,12 @@ impl PuduReportServer {
         description = "Devuelve informacion basica del workspace: nombre, ruta y cantidad de proyectos."
     )]
     async fn get_workspace_info(&self) -> Result<Json<WorkspaceInfo>, McpError> {
-        let meta = workspace::read_workspace_meta(&self.root).map_err(internal)?;
-        let projects = workspace::list_projects(&self.root).map_err(internal)?;
+        let root = self.current_root()?;
+        let meta = workspace::read_workspace_meta(&root).map_err(internal)?;
+        let projects = workspace::list_projects(&root).map_err(internal)?;
         Ok(Json(WorkspaceInfo {
             name: meta.name,
-            path: self.root.display().to_string(),
+            path: root.display().to_string(),
             project_count: projects.len(),
         }))
     }
@@ -283,7 +329,8 @@ impl PuduReportServer {
         description = "Lista los proyectos del workspace: id, nombre, cliente, tipo y cantidad de hallazgos."
     )]
     async fn list_projects(&self) -> Result<String, McpError> {
-        let projects = workspace::list_projects(&self.root).map_err(internal)?;
+        let root = self.current_root()?;
+        let projects = workspace::list_projects(&root).map_err(internal)?;
         to_json(&projects)
     }
 
@@ -295,7 +342,8 @@ impl PuduReportServer {
         &self,
         Parameters(args): Parameters<ProjectIdArgs>,
     ) -> Result<String, McpError> {
-        let meta = workspace::read_project_meta(&self.root, &args.project_id).map_err(internal)?;
+        let root = self.current_root()?;
+        let meta = workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
         to_json(&meta)
     }
 
@@ -307,7 +355,8 @@ impl PuduReportServer {
         &self,
         Parameters(args): Parameters<ProjectIdArgs>,
     ) -> Result<String, McpError> {
-        let findings = workspace::list_findings(&self.root, &args.project_id).map_err(internal)?;
+        let root = self.current_root()?;
+        let findings = workspace::list_findings(&root, &args.project_id).map_err(internal)?;
         to_json(&findings)
     }
 
@@ -319,8 +368,9 @@ impl PuduReportServer {
         &self,
         Parameters(args): Parameters<FindingIdArgs>,
     ) -> Result<String, McpError> {
-        let finding = workspace::load_finding(&self.root, &args.project_id, &args.finding_id)
-            .map_err(internal)?;
+        let root = self.current_root()?;
+        let finding =
+            workspace::load_finding(&root, &args.project_id, &args.finding_id).map_err(internal)?;
         to_json(&finding)
     }
 
@@ -332,8 +382,9 @@ impl PuduReportServer {
         &self,
         Parameters(args): Parameters<SearchArgs>,
     ) -> Result<String, McpError> {
+        let root = self.current_root()?;
         let needle = args.query.trim().to_lowercase();
-        let findings = workspace::list_findings(&self.root, &args.project_id).map_err(internal)?;
+        let findings = workspace::list_findings(&root, &args.project_id).map_err(internal)?;
         let hits: Vec<Value> = findings
             .iter()
             .filter(|f| {
@@ -362,10 +413,10 @@ impl PuduReportServer {
         &self,
         Parameters(args): Parameters<CreateFindingArgs>,
     ) -> Result<String, McpError> {
-        let project =
-            workspace::read_project_meta(&self.root, &args.project_id).map_err(internal)?;
-        let mut finding = workspace::create_finding(&self.root, &args.project_id, &args.title)
-            .map_err(internal)?;
+        let root = self.current_root()?;
+        let project = workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
+        let mut finding =
+            workspace::create_finding(&root, &args.project_id, &args.title).map_err(internal)?;
         if let Some(body) = args.body {
             finding.body = body;
         }
@@ -385,7 +436,7 @@ impl PuduReportServer {
             args.cvss_vector.as_deref(),
             args.severity.as_deref(),
         )?;
-        workspace::write_finding(&self.root, &args.project_id, &finding).map_err(internal)?;
+        workspace::write_finding(&root, &args.project_id, &finding).map_err(internal)?;
         to_json(&finding)
     }
 
@@ -397,10 +448,10 @@ impl PuduReportServer {
         &self,
         Parameters(args): Parameters<UpdateFindingArgs>,
     ) -> Result<String, McpError> {
-        let project =
-            workspace::read_project_meta(&self.root, &args.project_id).map_err(internal)?;
-        let mut finding = workspace::load_finding(&self.root, &args.project_id, &args.finding_id)
-            .map_err(internal)?;
+        let root = self.current_root()?;
+        let project = workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
+        let mut finding =
+            workspace::load_finding(&root, &args.project_id, &args.finding_id).map_err(internal)?;
         if let Some(title) = args.title {
             finding.meta.title = title;
         }
@@ -423,7 +474,7 @@ impl PuduReportServer {
             args.cvss_vector.as_deref(),
             args.severity.as_deref(),
         )?;
-        workspace::write_finding(&self.root, &args.project_id, &finding).map_err(internal)?;
+        workspace::write_finding(&root, &args.project_id, &finding).map_err(internal)?;
         to_json(&finding)
     }
 
@@ -460,32 +511,49 @@ impl ServerHandler for PuduReportServer {
     }
 }
 
-/// Resuelve la ruta del workspace: primer argumento o variable de entorno
-/// PUDUREPORT_WORKSPACE.
-fn resolve_workspace_root() -> Result<PathBuf, String> {
-    if let Some(arg) = std::env::args().nth(1) {
-        return Ok(PathBuf::from(arg));
+/// Ruta del settings.json del store de la app (tauri-plugin-store).
+/// Cross-plataforma: `config_dir()/com.pudureport.app/settings.json`.
+fn app_settings_path() -> Option<PathBuf> {
+    Some(
+        dirs::config_dir()?
+            .join("com.pudureport.app")
+            .join("settings.json"),
+    )
+}
+
+/// Workspace abierto actualmente en la app, leido de su settings.json
+/// (`workspace_path`). None si no hay app/ajustes o el campo esta vacio.
+fn app_current_workspace() -> Option<PathBuf> {
+    let text = std::fs::read_to_string(app_settings_path()?).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let path = json.get("workspace_path")?.as_str()?;
+    if path.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(path))
     }
+}
+
+/// Decide el origen del workspace. PUDUREPORT_WORKSPACE fija un workspace
+/// (override / testing); de lo contrario sigue el workspace abierto en la app,
+/// usando el argumento de instalacion como respaldo.
+fn build_source() -> WorkspaceSource {
     if let Ok(env) = std::env::var("PUDUREPORT_WORKSPACE") {
         if !env.is_empty() {
-            return Ok(PathBuf::from(env));
+            return WorkspaceSource::Fixed(PathBuf::from(env));
         }
     }
-    Err("falta la ruta del workspace (primer argumento o PUDUREPORT_WORKSPACE)".to_string())
+    let fallback = std::env::args().nth(1).map(PathBuf::from);
+    WorkspaceSource::Follow { fallback }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let root = resolve_workspace_root()?;
-    if !root.is_dir() {
-        return Err(format!(
-            "el workspace no existe o no es una carpeta: {}",
-            root.display()
-        )
-        .into());
-    }
-
-    let service = PuduReportServer::new(root).serve(stdio()).await?;
+    // No se valida un workspace al arrancar: en modo Follow puede no haber uno
+    // abierto todavia. Cada herramienta resuelve el workspace actual al llamarse.
+    let service = PuduReportServer::from_source(build_source())
+        .serve(stdio())
+        .await?;
     service.waiting().await?;
     Ok(())
 }

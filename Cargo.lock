@@ -2495,6 +2495,7 @@ dependencies = [
 name = "pudureport-mcp"
 version = "0.0.7"
 dependencies = [
+ "dirs 5.0.1",
  "pudureport-core",
  "rmcp",
  "schemars 1.2.1",
