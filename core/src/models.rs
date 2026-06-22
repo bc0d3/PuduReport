@@ -124,6 +124,138 @@ fn default_true() -> bool {
     true
 }
 
+/// Bloque del cuerpo del reporte. El cuerpo es una lista ordenada de bloques
+/// (`ProjectMeta::layout`) que la plantilla recorre y renderiza segun `kind`,
+/// paginando solo. La portada (`cover`) tambien es un bloque. El contenido de
+/// prosa vive en `ReportSection`; un bloque `section` lo referencia por
+/// `config["key"]`. Un bloque `text` lleva su contenido en
+/// `config["title"]`/`config["body"]`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReportBlock {
+    /// cover | info | toc | severity | findings_index | section | findings |
+    /// text | pagebreak.
+    pub kind: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Configuracion libre del bloque (ej. {"key": "resumen"} para section,
+    /// {"title":..,"body":..} para text). Mapa serializable y flexible.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub config: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Todos los kinds reconocidos.
+pub const KNOWN_BLOCK_KINDS: [&str; 9] = [
+    "cover",
+    "info",
+    "toc",
+    "severity",
+    "findings_index",
+    "section",
+    "findings",
+    "text",
+    "pagebreak",
+];
+
+/// Kinds estructurales que solo deben aparecer una vez (singletons). `section`,
+/// `text` y `pagebreak` pueden repetirse.
+pub const SINGLETON_BLOCK_KINDS: [&str; 6] = [
+    "cover",
+    "info",
+    "toc",
+    "severity",
+    "findings_index",
+    "findings",
+];
+
+impl ReportBlock {
+    /// Bloque simple sin config (cover, toc, info, severity, findings_index,
+    /// findings, pagebreak).
+    pub fn simple(kind: &str) -> Self {
+        ReportBlock {
+            kind: kind.to_string(),
+            enabled: true,
+            config: serde_json::Map::new(),
+        }
+    }
+
+    /// Bloque de seccion que referencia una `ReportSection` por su key.
+    pub fn section(key: &str) -> Self {
+        let mut config = serde_json::Map::new();
+        config.insert(
+            "key".to_string(),
+            serde_json::Value::String(key.to_string()),
+        );
+        ReportBlock {
+            kind: "section".to_string(),
+            enabled: true,
+            config,
+        }
+    }
+
+    /// Key de la seccion referenciada (solo para `kind == "section"`).
+    pub fn section_key(&self) -> Option<&str> {
+        if self.kind == "section" {
+            self.config.get("key").and_then(|v| v.as_str())
+        } else {
+            None
+        }
+    }
+}
+
+/// Layout por defecto del cuerpo segun el tipo de proyecto. Replica la
+/// estructura historica de cada plantilla para que un proyecto sin layout
+/// explicito genere un PDF identico al de antes de los bloques.
+pub fn default_layout(project_type: &str, sections: &[ReportSection]) -> Vec<ReportBlock> {
+    let sections_blocks = || sections.iter().map(|s| ReportBlock::section(&s.key));
+    let mut blocks: Vec<ReportBlock> = Vec::new();
+    match project_type {
+        // Informe ejecutivo: portada, indice, info, resumen de severidades y
+        // prosa. Sin detalle de hallazgos.
+        "ejecutivo" => {
+            blocks.push(ReportBlock::simple("cover"));
+            blocks.push(ReportBlock::simple("toc"));
+            blocks.push(ReportBlock::simple("info"));
+            blocks.push(ReportBlock::simple("severity"));
+            blocks.extend(sections_blocks());
+        }
+        // Documento libre: portada, indice y prosa.
+        "documento" => {
+            blocks.push(ReportBlock::simple("cover"));
+            blocks.push(ReportBlock::simple("toc"));
+            blocks.extend(sections_blocks());
+        }
+        // Retest: portada, indice, info, indice de hallazgos con estado, prosa y
+        // detalle de verificacion (la plantilla renderiza estos kinds a su modo).
+        "retest" => {
+            blocks.push(ReportBlock::simple("cover"));
+            blocks.push(ReportBlock::simple("toc"));
+            blocks.push(ReportBlock::simple("info"));
+            blocks.push(ReportBlock::simple("findings_index"));
+            blocks.extend(sections_blocks());
+            blocks.push(ReportBlock::simple("findings"));
+        }
+        // OSCP: portada, indice, resumen de severidades, prosa y hallazgos.
+        "oscp" => {
+            blocks.push(ReportBlock::simple("cover"));
+            blocks.push(ReportBlock::simple("toc"));
+            blocks.push(ReportBlock::simple("severity"));
+            blocks.extend(sections_blocks());
+            blocks.push(ReportBlock::simple("findings"));
+        }
+        // pentest, redteam, htb y cualquier desconocido: cuerpo completo.
+        _ => {
+            blocks.push(ReportBlock::simple("cover"));
+            blocks.push(ReportBlock::simple("toc"));
+            blocks.push(ReportBlock::simple("info"));
+            blocks.push(ReportBlock::simple("severity"));
+            blocks.push(ReportBlock::simple("findings_index"));
+            blocks.extend(sections_blocks());
+            blocks.push(ReportBlock::simple("findings"));
+        }
+    }
+    blocks
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TeamMember {
     pub name: String,
@@ -165,8 +297,75 @@ pub struct ProjectMeta {
     pub team: Vec<TeamMember>,
     #[serde(default)]
     pub sections: Vec<ReportSection>,
+    /// Orden/estructura del cuerpo del PDF (lista de bloques). Vacio = usar el
+    /// layout por defecto del tipo; no se escribe a disco mientras este vacio.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layout: Vec<ReportBlock>,
     #[serde(default)]
     pub finding_order: Vec<String>,
+}
+
+impl ProjectMeta {
+    /// Resuelve el layout efectivo del cuerpo, dejandolo consistente con las
+    /// secciones. Idempotente. Si esta vacio usa `default_layout` del tipo; si
+    /// no, sanea el layout guardado (descarta kinds desconocidos y secciones
+    /// colgantes, de-dup de singletons y de secciones, y agrega un bloque por
+    /// cada seccion sin bloque).
+    pub fn reconcile_layout(&mut self) {
+        if self.layout.is_empty() {
+            self.layout = default_layout(&self.project_type, &self.sections);
+            return;
+        }
+
+        let section_keys: std::collections::HashSet<&str> =
+            self.sections.iter().map(|s| s.key.as_str()).collect();
+
+        // 1. Descartar kinds desconocidos y secciones con key invalida/ausente.
+        self.layout.retain(|b| {
+            if b.kind == "section" {
+                b.section_key().is_some_and(|k| section_keys.contains(k))
+            } else {
+                KNOWN_BLOCK_KINDS.contains(&b.kind.as_str())
+            }
+        });
+
+        // 2. De-dup: singletons por kind y secciones por key (text/pagebreak se
+        //    permiten repetidos).
+        let mut seen_singleton: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        let mut seen_section: std::collections::HashSet<String> = std::collections::HashSet::new();
+        self.layout.retain(|b| {
+            if b.kind == "section" {
+                seen_section.insert(b.section_key().unwrap_or_default().to_string())
+            } else if SINGLETON_BLOCK_KINDS.contains(&b.kind.as_str()) {
+                seen_singleton.insert(b.kind.clone())
+            } else {
+                true
+            }
+        });
+
+        // 3. Agregar un section-block por cada seccion sin bloque (antes del
+        //    primer "findings", o al final si no hay).
+        let (missing, pos) = {
+            let present: std::collections::HashSet<&str> =
+                self.layout.iter().filter_map(|b| b.section_key()).collect();
+            let missing: Vec<ReportBlock> = self
+                .sections
+                .iter()
+                .filter(|s| !present.contains(s.key.as_str()))
+                .map(|s| ReportBlock::section(&s.key))
+                .collect();
+            let pos = self
+                .layout
+                .iter()
+                .position(|b| b.kind == "findings")
+                .unwrap_or(self.layout.len());
+            (missing, pos)
+        };
+        for (i, blk) in missing.into_iter().enumerate() {
+            self.layout.insert(pos + i, blk);
+        }
+    }
 }
 
 /// Tipo de proyecto por defecto cuando el archivo no lo trae.
@@ -431,5 +630,124 @@ mod tests {
         assert!(viejo.cover_show_org);
         assert!(viejo.cover_show_accent);
         assert!(viejo.cover_subtitle.is_empty());
+    }
+
+    fn sec(key: &str) -> ReportSection {
+        ReportSection {
+            key: key.to_string(),
+            title: key.to_string(),
+            body: String::new(),
+            enabled: true,
+        }
+    }
+
+    /// Secuencia legible de kinds (las secciones como "section:<key>").
+    fn layout_kinds(layout: &[ReportBlock]) -> Vec<String> {
+        layout
+            .iter()
+            .map(|b| match b.section_key() {
+                Some(k) => format!("section:{k}"),
+                None => b.kind.clone(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn default_layout_por_tipo() {
+        let secs = vec![sec("resumen"), sec("alcance")];
+        let s = "section:resumen";
+        let a = "section:alcance";
+
+        assert_eq!(
+            layout_kinds(&default_layout("pentest", &secs)),
+            vec![
+                "cover",
+                "toc",
+                "info",
+                "severity",
+                "findings_index",
+                s,
+                a,
+                "findings"
+            ]
+        );
+        // redteam y htb comparten el cuerpo completo de pentest.
+        assert_eq!(
+            layout_kinds(&default_layout("redteam", &secs)),
+            layout_kinds(&default_layout("pentest", &secs))
+        );
+        assert_eq!(
+            layout_kinds(&default_layout("htb", &secs)),
+            layout_kinds(&default_layout("pentest", &secs))
+        );
+        assert_eq!(
+            layout_kinds(&default_layout("ejecutivo", &secs)),
+            vec!["cover", "toc", "info", "severity", s, a]
+        );
+        assert_eq!(
+            layout_kinds(&default_layout("documento", &secs)),
+            vec!["cover", "toc", s, a]
+        );
+        assert_eq!(
+            layout_kinds(&default_layout("retest", &secs)),
+            vec!["cover", "toc", "info", "findings_index", s, a, "findings"]
+        );
+        assert_eq!(
+            layout_kinds(&default_layout("oscp", &secs)),
+            vec!["cover", "toc", "severity", s, a, "findings"]
+        );
+    }
+
+    #[test]
+    fn reconcile_layout_vacio_usa_default_del_tipo() {
+        // project.yaml previo a los bloques (sin layout): backward-compat.
+        let mut p: ProjectMeta =
+            serde_yaml::from_str("project_type: oscp\nsections:\n- {key: resumen, title: R}\n")
+                .unwrap();
+        assert!(p.layout.is_empty());
+        p.reconcile_layout();
+        assert_eq!(
+            layout_kinds(&p.layout),
+            vec!["cover", "toc", "severity", "section:resumen", "findings"]
+        );
+        // Idempotente.
+        let antes = p.layout.clone();
+        p.reconcile_layout();
+        assert_eq!(p.layout, antes);
+    }
+
+    #[test]
+    fn reconcile_layout_sanea_y_agrega_secciones() {
+        // Layout custom: kind desconocido, seccion colgante, toc duplicado, y una
+        // seccion (metodologia) sin bloque. text se permite repetido.
+        let mut p: ProjectMeta = serde_yaml::from_str(
+            "sections:\n- {key: resumen, title: R}\n- {key: metodologia, title: M}\nlayout:\n- {kind: toc}\n- {kind: toc}\n- {kind: bogus}\n- {kind: text}\n- {kind: text}\n- {kind: section, config: {key: ghost}}\n- {kind: section, config: {key: resumen}}\n- {kind: findings}\n",
+        )
+        .unwrap();
+        p.reconcile_layout();
+        assert_eq!(
+            layout_kinds(&p.layout),
+            vec![
+                "toc",
+                "text",
+                "text",
+                "section:resumen",
+                "section:metodologia",
+                "findings"
+            ]
+        );
+    }
+
+    #[test]
+    fn report_block_config_roundtrip_yaml() {
+        let b = ReportBlock::section("resumen");
+        let yaml = serde_yaml::to_string(&b).unwrap();
+        let back: ReportBlock = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(back.kind, "section");
+        assert_eq!(back.section_key(), Some("resumen"));
+        assert!(back.enabled);
+        // Un bloque simple no serializa config vacio.
+        let simple = serde_yaml::to_string(&ReportBlock::simple("toc")).unwrap();
+        assert!(!simple.contains("config"));
     }
 }
