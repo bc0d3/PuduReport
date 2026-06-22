@@ -138,113 +138,150 @@
 #let cover-show-period = ws.branding.at("cover_show_period", default: true)
 #let cover-show-org = ws.branding.at("cover_show_org", default: true)
 #let cover-show-accent = ws.branding.at("cover_show_accent", default: true)
-#align(center + horizon)[
-  #if logo != "" and cover-show-logo [#image(logo, width: 5cm)#v(1.2cm)]
-  #text(size: 32pt, weight: "bold", fill: brand, project.name)
-  #v(0.3cm)
-  #text(size: 14pt, fill: gray)[Verificacion de remediacion (retest)]
-  #if cover-show-accent [#v(0.4cm)#line(length: 40%, stroke: 1pt + brand)]
-  #v(0.4cm)
-  #text(size: 18pt, project.client)
-  #if cover-subtitle != "" [#v(0.3cm)#text(size: 13pt, fill: brand, cover-subtitle)]
-  #if org-line != none and cover-show-org [#v(0.3cm)#text(size: 11pt, fill: gray, org-line)]
-  #if cover-show-period [#v(2.5cm)#text(size: 11pt, fill: gray)[Periodo: #project.start_date — #project.end_date]]
-]
-#pagebreak()
+// --- Cuerpo por bloques ---
+// El cuerpo es una lista ordenada de bloques (project.layout). La portada es el
+// bloque "cover". El "severity" del retest muestra el resumen por estado de
+// remediacion; "findings_index" el indice de hallazgos verificados; y
+// "findings" el detalle por hallazgo (con el estado al frente).
+#let cover() = {
+  align(center + horizon)[
+    #if logo != "" and cover-show-logo [#image(logo, width: 5cm)#v(1.2cm)]
+    #text(size: 32pt, weight: "bold", fill: brand, project.name)
+    #v(0.3cm)
+    #text(size: 14pt, fill: gray)[Verificacion de remediacion (retest)]
+    #if cover-show-accent [#v(0.4cm)#line(length: 40%, stroke: 1pt + brand)]
+    #v(0.4cm)
+    #text(size: 18pt, project.client)
+    #if cover-subtitle != "" [#v(0.3cm)#text(size: 13pt, fill: brand, cover-subtitle)]
+    #if org-line != none and cover-show-org [#v(0.3cm)#text(size: 11pt, fill: gray, org-line)]
+    #if cover-show-period [#v(2.5cm)#text(size: 11pt, fill: gray)[Periodo: #project.start_date — #project.end_date]]
+  ]
+  pagebreak()
+}
 
-// --- Indice de contenidos ---
-#outline(title: [Indice de contenidos], depth: 2, indent: 1em)
-#pagebreak()
+#let block-toc() = {
+  outline(title: [Indice de contenidos], depth: 2, indent: 1em)
+  pagebreak()
+}
 
-// --- Informacion del proyecto ---
-#heading(numbering: none)[Informacion del proyecto]
-#grid(
-  columns: (auto, 1fr),
-  row-gutter: 6pt,
-  column-gutter: 12pt,
-  [*Cliente:*], project.client,
-  [*Periodo:*], [#project.start_date — #project.end_date],
-  [*Equipo:*],
-  if project.team.len() > 0 {
-    project.team.map(m => m.name + " (" + m.role + ")").join(", ")
-  } else [—],
-)
-
-// --- Resumen por estado de remediacion ---
-#let st-count(s) = data.findings.filter(f => f.status == s).len()
-#v(0.5cm)
-#heading(numbering: none)[Estado de remediacion]
-#table(
-  columns: (1fr, 1fr, 1fr, 1fr),
-  align: center + horizon,
-  stroke: 0.5pt + gray,
-  table.header(
-    badge("Corregido", status-color.fixed),
-    badge("Abierto", status-color.open),
-    badge("Aceptado", status-color.accepted),
-    badge("No corregido", status-color.wontfix),
-  ),
-  text(weight: "bold", str(st-count("fixed"))),
-  text(weight: "bold", str(st-count("open"))),
-  text(weight: "bold", str(st-count("accepted"))),
-  text(weight: "bold", str(st-count("wontfix"))),
-)
-
-// --- Indice de hallazgos con su estado ---
-#if data.findings.len() > 0 {
-  v(0.5cm)
-  heading(numbering: none)[Hallazgos verificados]
-  table(
-    columns: (auto, 1fr, auto, auto),
-    align: (center + horizon, left + horizon, center + horizon, center + horizon),
-    stroke: 0.5pt + luma(220),
-    table.header([*\#*], [*Hallazgo*], [*Severidad*], [*Estado*]),
-    ..data.findings.enumerate().map(((i, f)) => (
-      str(i + 1),
-      f.title,
-      badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info)),
-      status-badge(f.status),
-    )).flatten(),
+#let block-info() = {
+  heading(numbering: none)[Informacion del proyecto]
+  grid(
+    columns: (auto, 1fr),
+    row-gutter: 6pt,
+    column-gutter: 12pt,
+    [*Cliente:*], project.client,
+    [*Periodo:*], [#project.start_date — #project.end_date],
+    [*Equipo:*],
+    if project.team.len() > 0 {
+      project.team.map(m => m.name + " (" + m.role + ")").join(", ")
+    } else [—],
   )
 }
 
-// --- Secciones de prosa (alcance del retest, conclusiones...) ---
-#for section in project.sections {
-  if section.body.trim() != "" {
-    heading(level: 1, numbering: none, section.title)
+#let block-severity() = {
+  let st-count(s) = data.findings.filter(f => f.status == s).len()
+  v(0.5cm)
+  heading(numbering: none)[Estado de remediacion]
+  table(
+    columns: (1fr, 1fr, 1fr, 1fr),
+    align: center + horizon,
+    stroke: 0.5pt + gray,
+    table.header(
+      badge("Corregido", status-color.fixed),
+      badge("Abierto", status-color.open),
+      badge("Aceptado", status-color.accepted),
+      badge("No corregido", status-color.wontfix),
+    ),
+    text(weight: "bold", str(st-count("fixed"))),
+    text(weight: "bold", str(st-count("open"))),
+    text(weight: "bold", str(st-count("accepted"))),
+    text(weight: "bold", str(st-count("wontfix"))),
+  )
+}
+
+#let block-findings-index() = {
+  if data.findings.len() > 0 {
+    v(0.5cm)
+    heading(numbering: none)[Hallazgos verificados]
+    table(
+      columns: (auto, 1fr, auto, auto),
+      align: (center + horizon, left + horizon, center + horizon, center + horizon),
+      stroke: 0.5pt + luma(220),
+      table.header([*\#*], [*Hallazgo*], [*Severidad*], [*Estado*]),
+      ..data.findings.enumerate().map(((i, f)) => (
+        str(i + 1),
+        f.title,
+        badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info)),
+        status-badge(f.status),
+      )).flatten(),
+    )
+  }
+}
+
+#let block-section(key) = {
+  let s = project.sections.find(x => x.key == key)
+  if s != none and s.body.trim() != "" {
+    heading(level: 1, numbering: none, s.title)
     {
       set heading(outlined: false)
-      eval(section.body, mode: "markup")
+      eval(s.body, mode: "markup")
     }
   }
 }
 
-// --- Detalle por hallazgo (estado al frente) ---
-#pagebreak()
-#heading(level: 1, numbering: none)[Detalle de verificacion]
-
-#for (i, f) in data.findings.enumerate() {
-  let color = status-color.at(f.status, default: rgb("#78716c"))
-  if i > 0 and ws.branding.findings_page_break { pagebreak() }
-  block(
-    breakable: false,
-    width: 100%,
-    inset: (left: 10pt),
-    stroke: (left: 3pt + color),
-  )[
-    #heading(level: 2, numbering: none, str(i + 1) + ". " + f.title)
-    #status-badge(f.status)
-    #h(6pt)
-    #badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info))
-  ]
-
-  if f.affected.len() > 0 {
-    block(above: 6pt)[*Activos afectados:* #f.affected.map(a => raw(a)).join(", ")]
-  }
-  v(4pt)
-  {
+#let block-text(b) = {
+  let cfg = b.at("config", default: (:))
+  let title = cfg.at("title", default: "")
+  let body = cfg.at("body", default: "")
+  if title != "" { heading(level: 1, numbering: none, title) }
+  if body != "" {
     set heading(outlined: false)
-    eval(f.body, mode: "markup")
+    eval(body, mode: "markup")
   }
-  v(0.6cm)
 }
+
+#let block-findings() = {
+  pagebreak()
+  heading(level: 1, numbering: none)[Detalle de verificacion]
+  for (i, f) in data.findings.enumerate() {
+    let color = status-color.at(f.status, default: rgb("#78716c"))
+    if i > 0 and ws.branding.findings_page_break { pagebreak() }
+    block(
+      breakable: false,
+      width: 100%,
+      inset: (left: 10pt),
+      stroke: (left: 3pt + color),
+    )[
+      #heading(level: 2, numbering: none, str(i + 1) + ". " + f.title)
+      #status-badge(f.status)
+      #h(6pt)
+      #badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info))
+    ]
+
+    if f.affected.len() > 0 {
+      block(above: 6pt)[*Activos afectados:* #f.affected.map(a => raw(a)).join(", ")]
+    }
+    v(4pt)
+    {
+      set heading(outlined: false)
+      eval(f.body, mode: "markup")
+    }
+    v(0.6cm)
+  }
+}
+
+#let render-block(b) = {
+  if b.enabled {
+    let k = b.kind
+    if k == "cover" { cover() } else if k == "toc" { block-toc() } else if k == "info" {
+      block-info()
+    } else if k == "severity" { block-severity() } else if k == "findings_index" {
+      block-findings-index()
+    } else if k == "findings" { block-findings() } else if k == "section" {
+      block-section(b.at("config", default: (:)).at("key", default: none))
+    } else if k == "text" { block-text(b) } else if k == "pagebreak" { pagebreak() }
+  }
+}
+
+#for b in project.layout { render-block(b) }

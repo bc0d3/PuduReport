@@ -165,80 +165,109 @@
   pagebreak()
 }
 
-#cover()
+// --- Cuerpo por bloques ---
+// El cuerpo es una lista ordenada de bloques (project.layout). La portada es el
+// bloque "cover". El informe ejecutivo no lleva detalle de hallazgos.
 
-// --- Indice de contenidos ---
-#outline(title: [Indice de contenidos], depth: 2, indent: 1em)
-#pagebreak()
-
-// --- Informacion del documento ---
-#heading(numbering: none)[Informacion del documento]
-#grid(
-  columns: (auto, 1fr),
-  row-gutter: 6pt,
-  column-gutter: 12pt,
-  [*Cliente:*], project.client,
-  [*Periodo:*], [#project.start_date — #project.end_date],
-  [*Equipo:*],
-  if project.team.len() > 0 {
-    project.team.map(m => m.name + " (" + m.role + ")").join(", ")
-  } else [—],
-)
-
-#if project.scope.len() > 0 [
-  #v(0.4cm)
-  *Alcance:*
-  #list(..project.scope.map(s => [#raw(s)]))
-]
-
-// --- Resumen de severidades (solo si hay hallazgos) ---
-// Cuando este informe se genera como salida ejecutiva de un pentest, muestra los
-// conteos por severidad (no el detalle). En un ejecutivo puro, no hay hallazgos
-// y esta seccion no aparece.
-#let counts = data.severity_counts
-#let total = counts.critical + counts.high + counts.medium + counts.low + counts.info
-#if total > 0 {
-  let sev-color = (
-    critical: rgb("#a32d2d"),
-    high: rgb("#c2410c"),
-    medium: rgb("#ba7517"),
-    low: rgb("#639922"),
-    info: rgb("#78716c"),
-  )
-  let badge(label, fill-color) = box(
-    fill: fill-color,
-    inset: (x: 7pt, y: 3pt),
-    radius: 3pt,
-    text(fill: white, weight: "bold", size: 8pt, upper(label)),
-  )
-  v(0.5cm)
-  heading(numbering: none)[Resumen de severidades]
-  table(
-    columns: (1fr, 1fr, 1fr, 1fr, 1fr),
-    align: center + horizon,
-    stroke: 0.5pt + gray,
-    table.header(
-      badge("Critica", sev-color.critical),
-      badge("Alta", sev-color.high),
-      badge("Media", sev-color.medium),
-      badge("Baja", sev-color.low),
-      badge("Info", sev-color.info),
-    ),
-    text(weight: "bold", str(counts.critical)),
-    text(weight: "bold", str(counts.high)),
-    text(weight: "bold", str(counts.medium)),
-    text(weight: "bold", str(counts.low)),
-    text(weight: "bold", str(counts.info)),
-  )
+#let block-toc() = {
+  outline(title: [Indice de contenidos], depth: 2, indent: 1em)
+  pagebreak()
 }
 
-// --- Secciones de prosa (el contenido del informe) ---
-#for section in project.sections {
-  if section.body.trim() != "" {
-    heading(level: 1, numbering: none, section.title)
+#let block-info() = {
+  heading(numbering: none)[Informacion del documento]
+  grid(
+    columns: (auto, 1fr),
+    row-gutter: 6pt,
+    column-gutter: 12pt,
+    [*Cliente:*], project.client,
+    [*Periodo:*], [#project.start_date — #project.end_date],
+    [*Equipo:*],
+    if project.team.len() > 0 {
+      project.team.map(m => m.name + " (" + m.role + ")").join(", ")
+    } else [—],
+  )
+  if project.scope.len() > 0 {
+    v(0.4cm)
+    [*Alcance:*]
+    list(..project.scope.map(s => [#raw(s)]))
+  }
+}
+
+// Resumen de severidades: solo si hay hallazgos (salida ejecutiva de un pentest).
+// En un ejecutivo puro no hay hallazgos y no aparece.
+#let block-severity() = {
+  let counts = data.severity_counts
+  let total = counts.critical + counts.high + counts.medium + counts.low + counts.info
+  if total > 0 {
+    let sev-color = (
+      critical: rgb("#a32d2d"),
+      high: rgb("#c2410c"),
+      medium: rgb("#ba7517"),
+      low: rgb("#639922"),
+      info: rgb("#78716c"),
+    )
+    let badge(label, fill-color) = box(
+      fill: fill-color,
+      inset: (x: 7pt, y: 3pt),
+      radius: 3pt,
+      text(fill: white, weight: "bold", size: 8pt, upper(label)),
+    )
+    v(0.5cm)
+    heading(numbering: none)[Resumen de severidades]
+    table(
+      columns: (1fr, 1fr, 1fr, 1fr, 1fr),
+      align: center + horizon,
+      stroke: 0.5pt + gray,
+      table.header(
+        badge("Critica", sev-color.critical),
+        badge("Alta", sev-color.high),
+        badge("Media", sev-color.medium),
+        badge("Baja", sev-color.low),
+        badge("Info", sev-color.info),
+      ),
+      text(weight: "bold", str(counts.critical)),
+      text(weight: "bold", str(counts.high)),
+      text(weight: "bold", str(counts.medium)),
+      text(weight: "bold", str(counts.low)),
+      text(weight: "bold", str(counts.info)),
+    )
+  }
+}
+
+// Seccion de prosa referenciada por su key (las desactivadas no llegan).
+#let block-section(key) = {
+  let s = project.sections.find(x => x.key == key)
+  if s != none and s.body.trim() != "" {
+    heading(level: 1, numbering: none, s.title)
     {
       set heading(outlined: false)
-      eval(section.body, mode: "markup")
+      eval(s.body, mode: "markup")
     }
   }
 }
+
+// Bloque de texto libre: titulo opcional + cuerpo (ya convertido a markup).
+#let block-text(b) = {
+  let cfg = b.at("config", default: (:))
+  let title = cfg.at("title", default: "")
+  let body = cfg.at("body", default: "")
+  if title != "" { heading(level: 1, numbering: none, title) }
+  if body != "" {
+    set heading(outlined: false)
+    eval(body, mode: "markup")
+  }
+}
+
+#let render-block(b) = {
+  if b.enabled {
+    let k = b.kind
+    if k == "cover" { cover() } else if k == "toc" { block-toc() } else if k == "info" {
+      block-info()
+    } else if k == "severity" { block-severity() } else if k == "section" {
+      block-section(b.at("config", default: (:)).at("key", default: none))
+    } else if k == "text" { block-text(b) } else if k == "pagebreak" { pagebreak() }
+  }
+}
+
+#for b in project.layout { render-block(b) }

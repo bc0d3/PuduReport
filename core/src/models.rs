@@ -224,12 +224,14 @@ pub fn default_layout(project_type: &str, sections: &[ReportSection]) -> Vec<Rep
             blocks.push(ReportBlock::simple("toc"));
             blocks.extend(sections_blocks());
         }
-        // Retest: portada, indice, info, indice de hallazgos con estado, prosa y
-        // detalle de verificacion (la plantilla renderiza estos kinds a su modo).
+        // Retest: portada, indice, info, resumen por estado (severity), indice de
+        // hallazgos verificados, prosa y detalle de verificacion (la plantilla
+        // renderiza estos kinds a su modo).
         "retest" => {
             blocks.push(ReportBlock::simple("cover"));
             blocks.push(ReportBlock::simple("toc"));
             blocks.push(ReportBlock::simple("info"));
+            blocks.push(ReportBlock::simple("severity"));
             blocks.push(ReportBlock::simple("findings_index"));
             blocks.extend(sections_blocks());
             blocks.push(ReportBlock::simple("findings"));
@@ -690,7 +692,16 @@ mod tests {
         );
         assert_eq!(
             layout_kinds(&default_layout("retest", &secs)),
-            vec!["cover", "toc", "info", "findings_index", s, a, "findings"]
+            vec![
+                "cover",
+                "toc",
+                "info",
+                "severity",
+                "findings_index",
+                s,
+                a,
+                "findings"
+            ]
         );
         assert_eq!(
             layout_kinds(&default_layout("oscp", &secs)),

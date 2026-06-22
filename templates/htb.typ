@@ -218,120 +218,149 @@
   pagebreak()
 }
 
-#cover()
+// --- Cuerpo por bloques ---
+// El cuerpo es una lista ordenada de bloques (project.layout). La portada es el
+// bloque "cover". HTB comparte la estructura del reporte de pentest.
 
-// --- Indice de contenidos (TOC con numeros de pagina) ---
-#outline(title: [Indice de contenidos], depth: 2, indent: 1em)
-#pagebreak()
+#let block-toc() = {
+  outline(title: [Indice de contenidos], depth: 2, indent: 1em)
+  pagebreak()
+}
 
-// --- Equipo y alcance ---
-#heading(numbering: none)[Informacion del proyecto]
-#grid(
-  columns: (auto, 1fr),
-  row-gutter: 6pt,
-  column-gutter: 12pt,
-  [*Cliente:*], project.client,
-  [*Periodo:*], [#project.start_date — #project.end_date],
-  [*Equipo:*],
-  if project.team.len() > 0 {
-    project.team.map(m => m.name + " (" + m.role + ")").join(", ")
-  } else [—],
-)
+#let block-info() = {
+  heading(numbering: none)[Informacion del proyecto]
+  grid(
+    columns: (auto, 1fr),
+    row-gutter: 6pt,
+    column-gutter: 12pt,
+    [*Cliente:*], project.client,
+    [*Periodo:*], [#project.start_date — #project.end_date],
+    [*Equipo:*],
+    if project.team.len() > 0 {
+      project.team.map(m => m.name + " (" + m.role + ")").join(", ")
+    } else [—],
+  )
+  if project.scope.len() > 0 {
+    v(0.4cm)
+    [*Alcance:*]
+    list(..project.scope.map(s => [#raw(s)]))
+  }
+}
 
-#if project.scope.len() > 0 [
-  #v(0.4cm)
-  *Alcance:*
-  #list(..project.scope.map(s => [#raw(s)]))
-]
-
-// --- Resumen de severidades ---
-#let counts = data.severity_counts
-#v(0.5cm)
-#heading(numbering: none)[Resumen de hallazgos]
-#table(
-  columns: (1fr, 1fr, 1fr, 1fr, 1fr),
-  align: center + horizon,
-  stroke: 0.5pt + gray,
-  table.header(
-    badge("Critica", sev-color.critical),
-    badge("Alta", sev-color.high),
-    badge("Media", sev-color.medium),
-    badge("Baja", sev-color.low),
-    badge("Info", sev-color.info),
-  ),
-  text(weight: "bold", str(counts.critical)),
-  text(weight: "bold", str(counts.high)),
-  text(weight: "bold", str(counts.medium)),
-  text(weight: "bold", str(counts.low)),
-  text(weight: "bold", str(counts.info)),
-)
-
-// --- Indice de hallazgos ---
-#if data.findings.len() > 0 {
+#let block-severity() = {
+  let counts = data.severity_counts
   v(0.5cm)
-  heading(numbering: none)[Indice de hallazgos]
+  heading(numbering: none)[Resumen de hallazgos]
   table(
-    columns: (auto, 1fr, auto),
-    align: (center + horizon, left + horizon, center + horizon),
-    stroke: 0.5pt + luma(220),
-    table.header([*\#*], [*Hallazgo*], [*Severidad*]),
-    ..data.findings.enumerate().map(((i, f)) => (
-      str(i + 1),
-      f.title,
-      badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info)),
-    )).flatten(),
+    columns: (1fr, 1fr, 1fr, 1fr, 1fr),
+    align: center + horizon,
+    stroke: 0.5pt + gray,
+    table.header(
+      badge("Critica", sev-color.critical),
+      badge("Alta", sev-color.high),
+      badge("Media", sev-color.medium),
+      badge("Baja", sev-color.low),
+      badge("Info", sev-color.info),
+    ),
+    text(weight: "bold", str(counts.critical)),
+    text(weight: "bold", str(counts.high)),
+    text(weight: "bold", str(counts.medium)),
+    text(weight: "bold", str(counts.low)),
+    text(weight: "bold", str(counts.info)),
   )
 }
 
-// --- Secciones de prosa (resumen, alcance, metodologia, conclusiones) ---
-#for section in project.sections {
-  if section.body.trim() != "" {
-    heading(level: 1, numbering: none, section.title)
-    // Los encabezados internos del cuerpo no van al indice de contenidos.
+#let block-findings-index() = {
+  if data.findings.len() > 0 {
+    v(0.5cm)
+    heading(numbering: none)[Indice de hallazgos]
+    table(
+      columns: (auto, 1fr, auto),
+      align: (center + horizon, left + horizon, center + horizon),
+      stroke: 0.5pt + luma(220),
+      table.header([*\#*], [*Hallazgo*], [*Severidad*]),
+      ..data.findings.enumerate().map(((i, f)) => (
+        str(i + 1),
+        f.title,
+        badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info)),
+      )).flatten(),
+    )
+  }
+}
+
+#let block-section(key) = {
+  let s = project.sections.find(x => x.key == key)
+  if s != none and s.body.trim() != "" {
+    heading(level: 1, numbering: none, s.title)
     {
       set heading(outlined: false)
-      eval(section.body, mode: "markup")
+      eval(s.body, mode: "markup")
     }
   }
 }
 
-// --- Hallazgos detallados ---
-#pagebreak()
-#heading(level: 1, numbering: none)[Hallazgos]
-
-#for (i, f) in data.findings.enumerate() {
-  let color = sev-color.at(f.severity, default: sev-color.info)
-  // Opcion: cada hallazgo en su propia hoja.
-  if i > 0 and ws.branding.findings_page_break { pagebreak() }
-  block(
-    breakable: false,
-    width: 100%,
-    inset: (left: 10pt),
-    stroke: (left: 3pt + color),
-  )[
-    #heading(level: 2, numbering: none, str(i + 1) + ". " + f.title)
-    #badge(sev-label.at(f.severity, default: f.severity), color)
-    #h(6pt)
-    #if f.cvss != "" [
-      #box(fill: color, inset: (x: 6pt, y: 3pt), radius: 3pt)[
-        #text(size: 8pt, weight: "bold", fill: white)[CVSS #f.cvss_version: #f.cvss]
-      ]
-    ]
-    #if f.cwe != "" [#h(6pt) #box(fill: luma(240), inset: (x: 6pt, y: 3pt), radius: 3pt, text(size: 8pt)[#f.cwe])]
-    #h(6pt)
-    #status-chip(f.status)
-  ]
-
-  if f.cvss_vector != "" {
-    block(above: 6pt, vector-chip(f.cvss_vector))
-  }
-  if f.affected.len() > 0 {
-    block(above: 6pt)[*Activos afectados:* #f.affected.map(a => raw(a)).join(", ")]
-  }
-  v(4pt)
-  {
+#let block-text(b) = {
+  let cfg = b.at("config", default: (:))
+  let title = cfg.at("title", default: "")
+  let body = cfg.at("body", default: "")
+  if title != "" { heading(level: 1, numbering: none, title) }
+  if body != "" {
     set heading(outlined: false)
-    eval(f.body, mode: "markup")
+    eval(body, mode: "markup")
   }
-  v(0.6cm)
 }
+
+#let block-findings() = {
+  pagebreak()
+  heading(level: 1, numbering: none)[Hallazgos]
+  for (i, f) in data.findings.enumerate() {
+    let color = sev-color.at(f.severity, default: sev-color.info)
+    if i > 0 and ws.branding.findings_page_break { pagebreak() }
+    block(
+      breakable: false,
+      width: 100%,
+      inset: (left: 10pt),
+      stroke: (left: 3pt + color),
+    )[
+      #heading(level: 2, numbering: none, str(i + 1) + ". " + f.title)
+      #badge(sev-label.at(f.severity, default: f.severity), color)
+      #h(6pt)
+      #if f.cvss != "" [
+        #box(fill: color, inset: (x: 6pt, y: 3pt), radius: 3pt)[
+          #text(size: 8pt, weight: "bold", fill: white)[CVSS #f.cvss_version: #f.cvss]
+        ]
+      ]
+      #if f.cwe != "" [#h(6pt) #box(fill: luma(240), inset: (x: 6pt, y: 3pt), radius: 3pt, text(size: 8pt)[#f.cwe])]
+      #h(6pt)
+      #status-chip(f.status)
+    ]
+
+    if f.cvss_vector != "" {
+      block(above: 6pt, vector-chip(f.cvss_vector))
+    }
+    if f.affected.len() > 0 {
+      block(above: 6pt)[*Activos afectados:* #f.affected.map(a => raw(a)).join(", ")]
+    }
+    v(4pt)
+    {
+      set heading(outlined: false)
+      eval(f.body, mode: "markup")
+    }
+    v(0.6cm)
+  }
+}
+
+#let render-block(b) = {
+  if b.enabled {
+    let k = b.kind
+    if k == "cover" { cover() } else if k == "toc" { block-toc() } else if k == "info" {
+      block-info()
+    } else if k == "severity" { block-severity() } else if k == "findings_index" {
+      block-findings-index()
+    } else if k == "findings" { block-findings() } else if k == "section" {
+      block-section(b.at("config", default: (:)).at("key", default: none))
+    } else if k == "text" { block-text(b) } else if k == "pagebreak" { pagebreak() }
+  }
+}
+
+#for b in project.layout { render-block(b) }

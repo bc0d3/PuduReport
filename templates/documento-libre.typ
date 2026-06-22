@@ -85,38 +85,66 @@
   parts.join("  ·  ")
 }
 
-// --- Portada minimalista ---
+// --- Portada y cuerpo por bloques ---
+// El cuerpo es una lista ordenada de bloques (project.layout). La portada es el
+// bloque "cover". Documento libre: portada, indice y prosa.
 #let logo = ws.branding.logo_path
 #let cover-subtitle = ws.branding.at("cover_subtitle", default: "")
 #let cover-show-logo = ws.branding.at("cover_show_logo", default: true)
 #let cover-show-period = ws.branding.at("cover_show_period", default: true)
 #let cover-show-org = ws.branding.at("cover_show_org", default: true)
 #let cover-show-accent = ws.branding.at("cover_show_accent", default: true)
-#align(left + horizon)[
-  #if logo != "" and cover-show-logo [#image(logo, width: 4cm)#v(1cm)]
-  #text(size: 30pt, weight: "bold", fill: brand, project.name)
-  #if cover-show-accent [#v(0.25cm)#line(length: 30%, stroke: 1pt + brand)]
-  #v(0.25cm)
-  #text(size: 14pt, fill: gray, project.client)
-  #if cover-subtitle != "" [#v(0.25cm)#text(size: 12pt, fill: brand, cover-subtitle)]
-  #if org-line != none and cover-show-org [#v(0.25cm)#text(size: 11pt, fill: gray, org-line)]
-  #if cover-show-period [#v(0.6cm)#text(size: 10.5pt, fill: gray)[#project.start_date — #project.end_date]]
-]
-#pagebreak()
 
-// --- Indice de contenidos ---
-#if project.sections.any(s => s.body.trim() != "") {
-  outline(title: [Indice de contenidos], depth: 2, indent: 1em)
+#let cover() = {
+  align(left + horizon)[
+    #if logo != "" and cover-show-logo [#image(logo, width: 4cm)#v(1cm)]
+    #text(size: 30pt, weight: "bold", fill: brand, project.name)
+    #if cover-show-accent [#v(0.25cm)#line(length: 30%, stroke: 1pt + brand)]
+    #v(0.25cm)
+    #text(size: 14pt, fill: gray, project.client)
+    #if cover-subtitle != "" [#v(0.25cm)#text(size: 12pt, fill: brand, cover-subtitle)]
+    #if org-line != none and cover-show-org [#v(0.25cm)#text(size: 11pt, fill: gray, org-line)]
+    #if cover-show-period [#v(0.6cm)#text(size: 10.5pt, fill: gray)[#project.start_date — #project.end_date]]
+  ]
   pagebreak()
 }
 
-// --- Secciones de prosa (todo el contenido) ---
-#for section in project.sections {
-  if section.body.trim() != "" {
-    heading(level: 1, numbering: none, section.title)
+#let block-toc() = {
+  if project.sections.any(s => s.body.trim() != "") {
+    outline(title: [Indice de contenidos], depth: 2, indent: 1em)
+    pagebreak()
+  }
+}
+
+#let block-section(key) = {
+  let s = project.sections.find(x => x.key == key)
+  if s != none and s.body.trim() != "" {
+    heading(level: 1, numbering: none, s.title)
     {
       set heading(outlined: false)
-      eval(section.body, mode: "markup")
+      eval(s.body, mode: "markup")
     }
   }
 }
+
+#let block-text(b) = {
+  let cfg = b.at("config", default: (:))
+  let title = cfg.at("title", default: "")
+  let body = cfg.at("body", default: "")
+  if title != "" { heading(level: 1, numbering: none, title) }
+  if body != "" {
+    set heading(outlined: false)
+    eval(body, mode: "markup")
+  }
+}
+
+#let render-block(b) = {
+  if b.enabled {
+    let k = b.kind
+    if k == "cover" { cover() } else if k == "toc" { block-toc() } else if k == "section" {
+      block-section(b.at("config", default: (:)).at("key", default: none))
+    } else if k == "text" { block-text(b) } else if k == "pagebreak" { pagebreak() }
+  }
+}
+
+#for b in project.layout { render-block(b) }
