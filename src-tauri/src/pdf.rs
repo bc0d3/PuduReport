@@ -557,6 +557,66 @@ mod tests {
             );
         }
 
+        // Layout custom por tipo: un bloque de texto libre (ejercita la conversion
+        // markdown -> typst), un bloque desactivado y un reordenamiento. Debe
+        // compilar en las 7 plantillas (oscp ignora el layout, pero igual compila).
+        for project_type in [
+            "pentest",
+            "redteam",
+            "ejecutivo",
+            "documento",
+            "retest",
+            "oscp",
+            "htb",
+        ] {
+            let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();
+            project.project_type = project_type.to_string();
+            let mut layout =
+                pudureport_core::models::default_layout(project_type, &project.sections);
+
+            let mut cfg = serde_json::Map::new();
+            cfg.insert(
+                "title".to_string(),
+                serde_json::Value::String("Nota agregada".to_string()),
+            );
+            cfg.insert(
+                "body".to_string(),
+                serde_json::Value::String("Texto con *enfasis* y `codigo`.".to_string()),
+            );
+            let text_block = ReportBlock {
+                kind: "text".to_string(),
+                enabled: true,
+                config: cfg,
+            };
+
+            // Insertar el texto despues de la portada y desactivar el bloque
+            // siguiente; luego mover el ultimo bloque al frente (reordenamiento).
+            let pos = usize::from(!layout.is_empty());
+            layout.insert(pos, text_block);
+            if layout.len() > pos + 1 {
+                layout[pos + 1].enabled = false;
+            }
+            if layout.len() > 1 {
+                let last = layout.remove(layout.len() - 1);
+                layout.insert(0, last);
+            }
+            project.layout = layout;
+            workspace::write_project_meta(&tmp, &pid, &project).unwrap();
+
+            let pdfs = generate_pdf(&tmp, &pid, &templates, &typst_bin, false)
+                .unwrap_or_else(|e| panic!("layout custom fallo {project_type}: {e}"));
+            let bytes = std::fs::metadata(&pdfs[0]).unwrap().len();
+            assert!(
+                bytes > 1000,
+                "PDF custom de {project_type} sospechosamente pequeno"
+            );
+        }
+
+        // Restaurar el layout por defecto para las aserciones siguientes.
+        let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();
+        project.layout = Vec::new();
+        workspace::write_project_meta(&tmp, &pid, &project).unwrap();
+
         // Salida ejecutiva secundaria desde un proyecto de pentest.
         let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();
         project.project_type = "pentest".to_string();
