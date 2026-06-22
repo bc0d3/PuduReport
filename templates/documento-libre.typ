@@ -95,17 +95,89 @@
 #let cover-show-org = ws.branding.at("cover_show_org", default: true)
 #let cover-show-accent = ws.branding.at("cover_show_accent", default: true)
 
+// Render de un elemento del lienzo libre de portada (cover_layout = "canvas").
+#let cover-element(el) = {
+  let ew = el.at("w", default: 0.3)
+  let fs = el.at("font_size", default: 0)
+  let al = el.at("align", default: "left")
+  let aln = if al == "center" { center } else if al == "right" { right } else { left }
+  let wt = el.at("weight", default: "normal")
+  let col = el.at("color", default: "")
+  let fill = if col != "" { rgb(col) } else { black }
+  let kind = el.kind
+  if kind == "logo" {
+    if ws.branding.logo_path != "" { image(ws.branding.logo_path, width: ew * 21cm) }
+  } else if kind == "image" {
+    let s = el.at("src", default: "")
+    if s != "" { image(s, width: ew * 21cm) }
+  } else {
+    let t = if kind == "title" { project.name } else if kind == "client" {
+      project.client
+    } else if kind == "subtitle" {
+      ws.branding.at("cover_subtitle", default: "")
+    } else if kind == "period" [#project.start_date — #project.end_date] else if kind == "text" {
+      el.at("content", default: "")
+    } else { "" }
+    box(width: ew * 21cm)[
+      #set text(
+        size: if fs > 0 { fs * 1pt } else { 12pt },
+        fill: fill,
+        weight: if wt == "bold" { "bold" } else { "regular" },
+      )
+      #set par(justify: false)
+      #align(aln, t)
+    ]
+  }
+}
+
 #let cover() = {
-  align(left + horizon)[
-    #if logo != "" and cover-show-logo [#image(logo, width: 4cm)#v(1cm)]
-    #text(size: 30pt, weight: "bold", fill: brand, project.name)
-    #if cover-show-accent [#v(0.25cm)#line(length: 30%, stroke: 1pt + brand)]
-    #v(0.25cm)
-    #text(size: 14pt, fill: gray, project.client)
-    #if cover-subtitle != "" [#v(0.25cm)#text(size: 12pt, fill: brand, cover-subtitle)]
-    #if org-line != none and cover-show-org [#v(0.25cm)#text(size: 11pt, fill: gray, org-line)]
-    #if cover-show-period [#v(0.6cm)#text(size: 10.5pt, fill: gray)[#project.start_date — #project.end_date]]
-  ]
+  // Color del TEXTO de la portada (titulo): si se definio cover_color, el titulo
+  // usa ese color; si no, el del layout. No cambia el fondo, las lineas ni el cuerpo.
+  let cover-text = {
+    let c = ws.branding.at("cover_color", default: "")
+    if c != "" { rgb(c) } else { none }
+  }
+  // Color de un texto de la portada: el de portada si se definio, o el dado.
+  let ct(fallback) = if cover-text != none { cover-text } else { fallback }
+  let cover_bg = ws.branding.cover_background
+  // Fondo de portada: la imagen configurada, o la marca de agua si no hay.
+  set page(background: if cover_bg != "" {
+    image(cover_bg, width: 100%, height: 100%, fit: "cover")
+  } else if watermark.enabled and watermark.text != "" {
+    place(
+      center + horizon,
+      rotate(-45deg, box(text(
+        size: watermark.size * 1pt,
+        fill: rgb(180, 180, 180, int(watermark.opacity * 255)),
+        weight: "bold",
+        watermark.text,
+      ))),
+    )
+  })
+  if ws.branding.cover_layout == "canvas" and ws.branding.at("cover_elements", default: ()).len() > 0 {
+    set page(margin: 0pt)
+    block(width: 100%, height: 100%, {
+      for el in ws.branding.cover_elements {
+        place(
+          top + left,
+          dx: el.at("x", default: 0.0) * 100%,
+          dy: el.at("y", default: 0.0) * 100%,
+          cover-element(el),
+        )
+      }
+    })
+  } else {
+    align(left + horizon)[
+      #if logo != "" and cover-show-logo [#image(logo, width: 4cm)#v(1cm)]
+      #text(size: 30pt, weight: "bold", fill: if cover-text != none { cover-text } else { brand }, project.name)
+      #if cover-show-accent [#v(0.25cm)#line(length: 30%, stroke: 1pt + ct(brand))]
+      #v(0.25cm)
+      #text(size: 14pt, fill: ct(gray), project.client)
+      #if cover-subtitle != "" [#v(0.25cm)#text(size: 12pt, fill: ct(brand), cover-subtitle)]
+      #if org-line != none and cover-show-org [#v(0.25cm)#text(size: 11pt, fill: ct(gray), org-line)]
+      #if cover-show-period [#v(0.6cm)#text(size: 10.5pt, fill: ct(gray))[#project.start_date — #project.end_date]]
+    ]
+  }
   pagebreak()
 }
 
