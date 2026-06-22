@@ -175,6 +175,10 @@ i.ti {
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   padding: 8px 10px;
+  /* Llenan su contenedor y pueden encoger (los inputs de fecha tienen un ancho
+     intrinseco que si no se desborda de columnas angostas). */
+  width: 100%;
+  min-width: 0;
 }
 .input:focus,
 .select:focus,
