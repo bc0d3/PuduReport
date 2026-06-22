@@ -2,6 +2,11 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [Unreleased]
+
+### Added
+- Editor visual de plantillas (primer corte: elementos de la portada). Desde Portada y marca se puede mostrar u ocultar el logo, el periodo (fechas), la linea de gerencia/area y la linea de acento, y agregar un subtitulo libre, todo con vista previa en vivo y sin tocar la plantilla. Aplica a las plantillas con portada configurable (pentest, ejecutivo, htb, documento libre y retest); el examen OSCP conserva su portada de formato fijo. Los reportes existentes no cambian: los elementos arrancan visibles por defecto.
+
 ## [0.0.7] - 2026-06-20
 
 ### Added

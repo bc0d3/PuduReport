@@ -284,6 +284,81 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
               La fuente debe estar instalada en tu equipo; si no, el PDF usa una del sistema.
             </p>
 
+            {/* Elementos de la portada: mostrar/ocultar y subtitulo libre */}
+            <span className="field-label-top">elementos de portada</span>
+            <div className="field" style={{ marginBottom: 8 }}>
+              <label>Subtitulo</label>
+              <input
+                className="input"
+                placeholder="Opcional (ej. Reporte de penetration testing)"
+                value={workspace.branding.cover_subtitle}
+                onChange={(e) =>
+                  save(
+                    {
+                      ...workspace,
+                      branding: { ...workspace.branding, cover_subtitle: e.target.value },
+                    },
+                    true,
+                  )
+                }
+              />
+            </div>
+            <label className="row" style={{ gap: 8, cursor: "pointer", marginBottom: 4 }}>
+              <input
+                type="checkbox"
+                checked={workspace.branding.cover_show_logo}
+                onChange={(e) =>
+                  save({
+                    ...workspace,
+                    branding: { ...workspace.branding, cover_show_logo: e.target.checked },
+                  })
+                }
+              />
+              Mostrar logo
+            </label>
+            <label className="row" style={{ gap: 8, cursor: "pointer", marginBottom: 4 }}>
+              <input
+                type="checkbox"
+                checked={workspace.branding.cover_show_period}
+                onChange={(e) =>
+                  save({
+                    ...workspace,
+                    branding: { ...workspace.branding, cover_show_period: e.target.checked },
+                  })
+                }
+              />
+              Mostrar periodo (fechas)
+            </label>
+            <label className="row" style={{ gap: 8, cursor: "pointer", marginBottom: 4 }}>
+              <input
+                type="checkbox"
+                checked={workspace.branding.cover_show_org}
+                onChange={(e) =>
+                  save({
+                    ...workspace,
+                    branding: { ...workspace.branding, cover_show_org: e.target.checked },
+                  })
+                }
+              />
+              Mostrar gerencia/area
+            </label>
+            <label
+              className="row"
+              style={{ gap: 8, cursor: "pointer", marginBottom: 16 }}
+            >
+              <input
+                type="checkbox"
+                checked={workspace.branding.cover_show_accent}
+                onChange={(e) =>
+                  save({
+                    ...workspace,
+                    branding: { ...workspace.branding, cover_show_accent: e.target.checked },
+                  })
+                }
+              />
+              Mostrar linea de acento
+            </label>
+
             {/* Marca de agua: on/off, texto, tamano, opacidad */}
             <span className="field-label-top">marca de agua</span>
             <div className="row" style={{ gap: 8, marginBottom: 8 }}>
@@ -392,6 +467,7 @@ function CoverPreview({
   logoSrc: string;
   bgSrc: string;
 }) {
+  const b = workspace.branding;
   const layout = workspace.branding.cover_layout;
   const wm = workspace.watermark;
   const hasBg = Boolean(bgSrc);
@@ -460,31 +536,54 @@ function CoverPreview({
             }}
           />
         )}
-        {logoSrc ? (
-          <img src={logoSrc} alt="logo" style={{ maxWidth: 90, maxHeight: 70, marginBottom: 24 }} />
-        ) : (
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 8,
-              background: brand + "22",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: brand,
-              marginBottom: 28,
-            }}
-          >
-            <i className="ti ti-shield-lock" style={{ fontSize: 26 }} />
-          </div>
-        )}
+        {b.cover_show_logo &&
+          (logoSrc ? (
+            <img
+              src={logoSrc}
+              alt="logo"
+              style={{ maxWidth: 90, maxHeight: 70, marginBottom: 24 }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 8,
+                background: brand + "22",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: brand,
+                marginBottom: 28,
+              }}
+            >
+              <i className="ti ti-shield-lock" style={{ fontSize: 26 }} />
+            </div>
+          ))}
         <div style={{ fontSize: 18, fontWeight: 600 }}>Pentest Aplicacion Web</div>
         <div style={{ fontSize: 13, color: full ? "#e6edf3" : brand, marginTop: 6 }}>
           Cliente Demo S.A.
         </div>
-        <div style={{ width: 40, height: 2, background: brand, margin: "14px 0" }} />
-        <div style={{ fontSize: 11, opacity: 0.7 }}>{workspace.name}</div>
+        {b.cover_subtitle && (
+          <div style={{ fontSize: 12, color: full ? "#e6edf3" : brand, marginTop: 4 }}>
+            {b.cover_subtitle}
+          </div>
+        )}
+        {b.cover_show_accent && (
+          <div style={{ width: 40, height: 2, background: brand, margin: "14px 0" }} />
+        )}
+        {b.cover_show_period && (
+          <div
+            style={{
+              fontSize: 11,
+              opacity: 0.7,
+              marginTop: b.cover_show_accent ? 0 : 14,
+            }}
+          >
+            01/01/2026 — 15/01/2026
+          </div>
+        )}
+        <div style={{ fontSize: 11, opacity: 0.7, marginTop: 6 }}>{workspace.name}</div>
       </div>
       {wm.enabled && wm.text && (
         <div

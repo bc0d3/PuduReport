@@ -97,6 +97,16 @@ export interface Branding {
   body_font: string;
   /** Fuente del codigo/vectores (monoespaciada). Vacio = la del sistema. */
   mono_font: string;
+  /** Mostrar el logo en la portada (aunque haya logo cargado). */
+  cover_show_logo: boolean;
+  /** Subtitulo libre bajo el cliente en la portada. Vacio = no se muestra. */
+  cover_subtitle: string;
+  /** Mostrar la linea de periodo (fechas) en la portada. */
+  cover_show_period: boolean;
+  /** Mostrar la linea de gerencia/area en la portada. */
+  cover_show_org: boolean;
+  /** Mostrar la linea decorativa de acento en la portada. */
+  cover_show_accent: boolean;
 }
 
 /** workspace.yaml. Solo identidad visual; la plantilla y el tipo viven en el proyecto. */

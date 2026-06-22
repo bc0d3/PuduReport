@@ -238,6 +238,21 @@ pub struct Branding {
     /// Fuente del codigo/vectores (monoespaciada). Vacio = la del sistema.
     #[serde(default)]
     pub mono_font: String,
+    /// Mostrar el logo en la portada (aunque haya logo_path cargado).
+    #[serde(default = "default_true")]
+    pub cover_show_logo: bool,
+    /// Subtitulo libre bajo el cliente en la portada. Vacio = no se muestra.
+    #[serde(default)]
+    pub cover_subtitle: String,
+    /// Mostrar la linea de periodo (fechas) en la portada.
+    #[serde(default = "default_true")]
+    pub cover_show_period: bool,
+    /// Mostrar la linea de gerencia/area (org-line) en la portada.
+    #[serde(default = "default_true")]
+    pub cover_show_org: bool,
+    /// Mostrar la linea decorativa de acento en la portada.
+    #[serde(default = "default_true")]
+    pub cover_show_accent: bool,
 }
 
 fn default_scrim() -> f64 {
@@ -264,6 +279,11 @@ impl Default for Branding {
             findings_page_break: true,
             body_font: String::new(),
             mono_font: String::new(),
+            cover_show_logo: true,
+            cover_subtitle: String::new(),
+            cover_show_period: true,
+            cover_show_org: true,
+            cover_show_accent: true,
         }
     }
 }
@@ -399,5 +419,17 @@ mod tests {
         assert!(vacio.cwe.is_empty());
         let ausente: FindingMeta = serde_yaml::from_str("title: x\n").unwrap();
         assert!(ausente.cwe.is_empty());
+    }
+
+    #[test]
+    fn branding_viejo_sin_campos_de_portada_usa_defaults() {
+        // workspace.yaml previo a los toggles de elementos de portada: deben
+        // arrancar visibles y el subtitulo vacio (retrocompatibilidad).
+        let viejo: Branding = serde_yaml::from_str("primary_color: '#1f6fb2'\n").unwrap();
+        assert!(viejo.cover_show_logo);
+        assert!(viejo.cover_show_period);
+        assert!(viejo.cover_show_org);
+        assert!(viejo.cover_show_accent);
+        assert!(viejo.cover_subtitle.is_empty());
     }
 }

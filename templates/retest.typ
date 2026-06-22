@@ -133,18 +133,22 @@
 
 // --- Portada ---
 #let logo = ws.branding.logo_path
+#let cover-subtitle = ws.branding.at("cover_subtitle", default: "")
+#let cover-show-logo = ws.branding.at("cover_show_logo", default: true)
+#let cover-show-period = ws.branding.at("cover_show_period", default: true)
+#let cover-show-org = ws.branding.at("cover_show_org", default: true)
+#let cover-show-accent = ws.branding.at("cover_show_accent", default: true)
 #align(center + horizon)[
-  #if logo != "" [#image(logo, width: 5cm)#v(1.2cm)]
+  #if logo != "" and cover-show-logo [#image(logo, width: 5cm)#v(1.2cm)]
   #text(size: 32pt, weight: "bold", fill: brand, project.name)
   #v(0.3cm)
   #text(size: 14pt, fill: gray)[Verificacion de remediacion (retest)]
-  #v(0.4cm)
-  #line(length: 40%, stroke: 1pt + brand)
+  #if cover-show-accent [#v(0.4cm)#line(length: 40%, stroke: 1pt + brand)]
   #v(0.4cm)
   #text(size: 18pt, project.client)
-  #if org-line != none [#v(0.3cm)#text(size: 11pt, fill: gray, org-line)]
-  #v(2.5cm)
-  #text(size: 11pt, fill: gray)[Periodo: #project.start_date — #project.end_date]
+  #if cover-subtitle != "" [#v(0.3cm)#text(size: 13pt, fill: brand, cover-subtitle)]
+  #if org-line != none and cover-show-org [#v(0.3cm)#text(size: 11pt, fill: gray, org-line)]
+  #if cover-show-period [#v(2.5cm)#text(size: 11pt, fill: gray)[Periodo: #project.start_date — #project.end_date]]
 ]
 #pagebreak()
 
