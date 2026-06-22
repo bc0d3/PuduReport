@@ -2,11 +2,20 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
-## [Unreleased]
+## [0.0.8] - 2026-06-22
 
 ### Added
+- Lienzo libre de portada (disposicion "Lienzo"). En Portada y marca, ademas de las cuatro disposiciones predefinidas, se puede armar la portada como un lienzo: arrastrar logo, titulo, cliente, subtitulo, periodo, textos libres e imagenes a cualquier posicion, con tiradores para redimensionar y un panel para ajustar tamano de fuente, alineacion, color y negrita. Se renderiza en el PDF con posicionamiento absoluto. Aplica a pentest, red team, informe ejecutivo, documento libre, retest y HTB. Es opcional: las cuatro disposiciones siguen igual.
 - Editor de bloques del cuerpo del reporte con vista previa en vivo. En la pantalla Reporte, el cuerpo del PDF (portada, indice, informacion del proyecto, resumen de severidades, indice de hallazgos, secciones y hallazgos) es una lista de bloques que se reordena arrastrando y se activa u oculta individualmente; se pueden insertar bloques de texto libre y saltos de pagina, con un panel que recompila el PDF al guardar. Aplica a pentest, red team, informe ejecutivo, documento libre, retest y HTB; el examen OSCP conserva su estructura fija. Los reportes existentes salen identicos: el orden de los bloques se sintetiza al abrirlos.
 - Editor visual de plantillas (primer corte: elementos de la portada). Desde Portada y marca se puede mostrar u ocultar el logo, el periodo (fechas), la linea de gerencia/area y la linea de acento, y agregar un subtitulo libre, todo con vista previa en vivo y sin tocar la plantilla. Aplica a las plantillas con portada configurable (pentest, ejecutivo, htb, documento libre y retest); el examen OSCP conserva su portada de formato fijo. Los reportes existentes no cambian: los elementos arrancan visibles por defecto.
+- Color de la portada independiente del color del reporte. Un selector de color de portada que tine el texto de la portada (titulo, cliente, gerencia/area, subtitulo y fechas) y sus lineas/acentos, sin afectar el cuerpo del reporte. Vacio = usa el color del reporte. Sirve, por ejemplo, para un titulo de portada de otro color o blanco sobre un fondo.
+- Ordenar hallazgos por severidad con un boton (criticos primero), ademas del orden manual por arrastre. El orden vale para cualquier plantilla.
+- El indice de hallazgos de pentest y HTB suma la columna Estado, para ver de un vistazo como quedo cada hallazgo (abierto/corregido/aceptado/no se corregira); el retest ya lo tenia.
+- El servidor MCP ahora sigue el workspace abierto en la app: en vez de quedar fijo al de la configuracion, lee el workspace abierto en el GUI en cada llamada, asi al cambiarlo lo refleja sin reconfigurar. Sigue acotado a un workspace por vez.
+
+### Fixed
+- Las portadas de los reportes de Retest y Documento libre ahora aplican la imagen de fondo configurada, igual que las demas plantillas. Antes la ignoraban.
+- Los campos de Reporte > Datos del proyecto ya no se desbordan de su recuadro (sobre todo los selectores de fecha) en ventanas angostas.
 
 ## [0.0.7] - 2026-06-20
 
