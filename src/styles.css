@@ -1454,6 +1454,23 @@ i.ti {
   height: auto;
   background: #ffffff;
 }
+
+/* Columna de vista previa embebida en el editor de reporte. */
+.report-preview {
+  align-self: start;
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+  border-left: 1px solid var(--border-strong);
+  padding-left: 16px;
+}
+.report-preview .pdf-pages {
+  padding-top: 0;
+}
+.report-preview .pdf-page {
+  max-width: 100%;
+}
 .upload-box {
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-control);

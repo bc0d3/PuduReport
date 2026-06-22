@@ -93,3 +93,31 @@ export function typeInfo(value: string | undefined): ProjectTypeInfo {
 export function typeLabel(value: string | undefined): string {
   return typeInfo(value).label;
 }
+
+/** Plantilla efectiva del proyecto: el override, o la del tipo. */
+export function effectiveTemplate(project: {
+  project_type: string;
+  template_override: string;
+}): string {
+  return project.template_override || typeInfo(project.project_type).template;
+}
+
+/** Plantillas .typ que recorren project.layout (cuerpo por bloques editable). */
+const BLOCK_RENDERER_TEMPLATES = new Set([
+  "pentest",
+  "ejecutivo",
+  "documento-libre",
+  "retest",
+  "htb",
+]);
+
+/**
+ * Si el reporte usa el editor de bloques (cuerpo data-driven). El examen OSCP
+ * conserva su cuerpo fijo; las plantillas propias todavia no se refactorizan.
+ */
+export function usesBlockRenderer(project: {
+  project_type: string;
+  template_override: string;
+}): boolean {
+  return BLOCK_RENDERER_TEMPLATES.has(effectiveTemplate(project));
+}

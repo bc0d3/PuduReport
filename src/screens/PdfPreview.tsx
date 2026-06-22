@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import * as api from "../lib/api";
 import { useToast } from "../components/Toast";
+import { LivePreview } from "../components/LivePreview";
 
 interface Props {
   projectId: string | null;
@@ -9,23 +10,11 @@ interface Props {
 
 export function PdfPreview({ projectId, onPickProject }: Props) {
   const { guard } = useToast();
-  const [pages, setPages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [execPath, setExecPath] = useState<string | null>(null);
   const [alsoExec, setAlsoExec] = useState(false);
-
-  const refresh = useCallback(async () => {
-    if (!projectId) return;
-    setLoading(true);
-    const result = await guard(api.previewPdf(projectId));
-    setLoading(false);
-    if (result) setPages(result);
-  }, [guard, projectId]);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
 
   async function handleExport() {
     if (!projectId) return;
@@ -68,7 +57,11 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
             />
             Tambien informe ejecutivo
           </label>
-          <button className="btn" onClick={refresh} disabled={loading}>
+          <button
+            className="btn"
+            onClick={() => setRefreshKey((k) => k + 1)}
+            disabled={loading}
+          >
             <i className={`ti ${loading ? "ti-loader-2" : "ti-refresh"}`} />
             {loading ? "Generando..." : "Actualizar"}
           </button>
@@ -98,17 +91,11 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
       </div>
 
       <div className="view" style={{ paddingTop: 12 }}>
-        {loading && pages.length === 0 ? (
-          <div className="empty">Compilando el PDF con Typst...</div>
-        ) : pages.length === 0 ? (
-          <div className="empty">Sin vista previa todavia. Pulsa Actualizar.</div>
-        ) : (
-          <div className="pdf-pages">
-            {pages.map((src, i) => (
-              <img key={i} className="pdf-page" src={src} alt={`Pagina ${i + 1}`} />
-            ))}
-          </div>
-        )}
+        <LivePreview
+          projectId={projectId}
+          refreshKey={refreshKey}
+          onLoadingChange={setLoading}
+        />
       </div>
     </>
   );

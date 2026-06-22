@@ -48,6 +48,30 @@ export interface TeamMember {
   role: string;
 }
 
+/** Tipo de bloque del cuerpo del reporte. */
+export type BlockKind =
+  | "cover"
+  | "info"
+  | "toc"
+  | "severity"
+  | "findings_index"
+  | "section"
+  | "findings"
+  | "text"
+  | "pagebreak";
+
+/**
+ * Bloque del cuerpo: el reporte es una lista ordenada de bloques que la
+ * plantilla recorre y renderiza segun el kind. Un bloque "section" referencia
+ * una seccion por `config.key`; un bloque "text" lleva su contenido en
+ * `config.title`/`config.body`.
+ */
+export interface ReportBlock {
+  kind: BlockKind;
+  enabled: boolean;
+  config: Record<string, unknown>;
+}
+
 /** project.yaml */
 export interface ProjectMeta {
   name: string;
@@ -69,6 +93,8 @@ export interface ProjectMeta {
   team: TeamMember[];
   /** Secciones de prosa del reporte, en orden. */
   sections: ReportSection[];
+  /** Cuerpo del PDF como lista ordenada de bloques. El backend lo reconcilia. */
+  layout: ReportBlock[];
   /** Orden de los hallazgos en el PDF (ids). Drag & drop reescribe este array. */
   finding_order: string[];
 }

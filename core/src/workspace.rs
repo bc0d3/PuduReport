@@ -547,7 +547,12 @@ pub fn read_project_meta(root: &Path, id: &str) -> Result<ProjectMeta> {
         return Err(WorkspaceError::ProjectNotFound(id.to_string()));
     }
     let content = fs::read_to_string(path)?;
-    Ok(serde_yaml::from_str(&content)?)
+    let mut meta: ProjectMeta = serde_yaml::from_str(&content)?;
+    // Layout del cuerpo consistente con las secciones (idempotente; sintetiza el
+    // default del tipo en project.yaml previos a los bloques). Asi load_project
+    // devuelve el layout efectivo al frontend.
+    meta.reconcile_layout();
+    Ok(meta)
 }
 
 pub fn write_project_meta(root: &Path, id: &str, meta: &ProjectMeta) -> Result<()> {

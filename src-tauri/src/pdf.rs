@@ -144,6 +144,30 @@ fn status_str(s: pudureport_core::models::FindingStatus) -> String {
         .to_string()
 }
 
+/// Prepara el layout para data.json: convierte el cuerpo de los bloques de
+/// texto libre (markdown) a markup de Typst, igual que las secciones. El resto
+/// de los bloques pasa tal cual.
+fn layout_for_data(layout: Vec<ReportBlock>) -> Vec<ReportBlock> {
+    layout
+        .into_iter()
+        .map(|mut b| {
+            if b.kind == "text" {
+                let body = b
+                    .config
+                    .get("body")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                if let Some(body) = body {
+                    let typ = markdown::to_typst(&body);
+                    b.config
+                        .insert("body".to_string(), serde_json::Value::String(typ));
+                }
+            }
+            b
+        })
+        .collect()
+}
+
 /// Construye el documento de datos del proyecto a partir de los archivos.
 fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
     let ws = workspace::read_workspace_meta(root)?;
@@ -204,7 +228,7 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
             scope: project.scope,
             team: project.team,
             sections,
-            layout: project.layout,
+            layout: layout_for_data(project.layout),
         },
         findings: findings_data,
         severity_counts: counts,

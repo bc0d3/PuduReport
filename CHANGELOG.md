@@ -5,6 +5,7 @@ Todo cambio notable se documenta en este archivo. El formato sigue Keep a Change
 ## [Unreleased]
 
 ### Added
+- Editor de bloques del cuerpo del reporte con vista previa en vivo. En la pantalla Reporte, el cuerpo del PDF (portada, indice, informacion del proyecto, resumen de severidades, indice de hallazgos, secciones y hallazgos) es una lista de bloques que se reordena arrastrando y se activa u oculta individualmente; se pueden insertar bloques de texto libre y saltos de pagina, con un panel que recompila el PDF al guardar. Aplica a pentest, red team, informe ejecutivo, documento libre, retest y HTB; el examen OSCP conserva su estructura fija. Los reportes existentes salen identicos: el orden de los bloques se sintetiza al abrirlos.
 - Editor visual de plantillas (primer corte: elementos de la portada). Desde Portada y marca se puede mostrar u ocultar el logo, el periodo (fechas), la linea de gerencia/area y la linea de acento, y agregar un subtitulo libre, todo con vista previa en vivo y sin tocar la plantilla. Aplica a las plantillas con portada configurable (pentest, ejecutivo, htb, documento libre y retest); el examen OSCP conserva su portada de formato fijo. Los reportes existentes no cambian: los elementos arrancan visibles por defecto.
 
 ## [0.0.7] - 2026-06-20
