@@ -102,7 +102,10 @@ export function effectiveTemplate(project: {
   return project.template_override || typeInfo(project.project_type).template;
 }
 
-/** Plantillas .typ que recorren project.layout (cuerpo por bloques editable). */
+/** Tipos cuyo cuerpo es fijo (no editable por bloques). Solo el examen OSCP. */
+const FIXED_BODY_TYPES = new Set(["oscp"]);
+
+/** Plantillas .typ incluidas que recorren project.layout (cuerpo por bloques). */
 const BLOCK_RENDERER_TEMPLATES = new Set([
   "pentest",
   "ejecutivo",
@@ -112,12 +115,25 @@ const BLOCK_RENDERER_TEMPLATES = new Set([
 ]);
 
 /**
- * Si el reporte usa el editor de bloques (cuerpo data-driven). El examen OSCP
- * conserva su cuerpo fijo; las plantillas propias todavia no se refactorizan.
+ * Si el reporte usa el editor de bloques (cuerpo data-driven). Se gatea por TIPO
+ * (no por la plantilla efectiva) para que el editor aparezca aunque el proyecto
+ * tenga un override personalizado; el examen OSCP conserva su cuerpo fijo.
  */
 export function usesBlockRenderer(project: {
   project_type: string;
   template_override: string;
 }): boolean {
-  return BLOCK_RENDERER_TEMPLATES.has(effectiveTemplate(project));
+  return !FIXED_BODY_TYPES.has(project.project_type);
+}
+
+/**
+ * Si el proyecto usa una plantilla personalizada (override) que NO es una de las
+ * incluidas con renderer de bloques. En ese caso el editor de bloques se muestra,
+ * pero el PDF puede no reflejar el orden si la copia es previa a esta version.
+ */
+export function usesCustomTemplate(project: {
+  project_type: string;
+  template_override: string;
+}): boolean {
+  return usesBlockRenderer(project) && !BLOCK_RENDERER_TEMPLATES.has(effectiveTemplate(project));
 }

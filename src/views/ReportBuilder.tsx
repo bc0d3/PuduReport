@@ -9,7 +9,7 @@ import type {
   WorkspaceMeta,
 } from "../lib/types";
 import { SEVERITY_LABEL, SEVERITY_ORDER, SEVERITY_COLOR } from "../lib/severity";
-import { typeInfo, usesBlockRenderer } from "../lib/projectTypes";
+import { typeInfo, usesBlockRenderer, usesCustomTemplate } from "../lib/projectTypes";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { LivePreview } from "../components/LivePreview";
 import { useToast } from "../components/Toast";
@@ -248,6 +248,16 @@ export function ReportBuilder({ projectId, assetBase, onPickProject }: Props) {
               Datos del proyecto
             </div>
 
+            {blockMode && usesCustomTemplate(project) && (
+              <p
+                className="faint"
+                style={{ fontSize: 11, marginBottom: 8, color: "var(--warning, #b4690e)" }}
+              >
+                Estas usando una plantilla personalizada. Si la duplicaste antes de esta version,
+                el PDF puede no reflejar el orden de los bloques: usa una plantilla incluida (desde
+                Plantillas) o actualiza tu copia.
+              </p>
+            )}
             {blockMode ? (
               <>
                 {project.layout.map((b, i) => (

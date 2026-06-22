@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Finding } from "../lib/types";
+import { SEVERITY_ORDER } from "../lib/severity";
 import { SeverityDot } from "./Severity";
 
 interface Props {
@@ -21,6 +22,14 @@ export function Sidebar({ findings, activeId, onSelect, onCreate, onReorder }: P
       onCreate(title);
       setNewTitle("");
     }
+  }
+
+  // Ordena los hallazgos por severidad (criticos primero) reescribiendo el orden;
+  // independiente de la plantilla. El orden manual (drag) sigue disponible.
+  function sortBySeverity() {
+    const rank = (f: Finding) => SEVERITY_ORDER.indexOf(f.meta.severity);
+    const ids = [...findings].sort((a, b) => rank(a) - rank(b)).map((f) => f.id);
+    onReorder(ids);
   }
 
   function handleDrop(targetId: string) {
@@ -61,6 +70,16 @@ export function Sidebar({ findings, activeId, onSelect, onCreate, onReorder }: P
             <i className="ti ti-plus" />
           </button>
         </div>
+        <button
+          className="btn small"
+          style={{ marginTop: 8, width: "100%", justifyContent: "center" }}
+          onClick={sortBySeverity}
+          disabled={findings.length < 2}
+          title="Ordena los hallazgos por severidad (criticos primero). Despues podes ajustar a mano."
+        >
+          <i className="ti ti-arrows-sort" />
+          Ordenar por severidad
+        </button>
       </div>
       <div className="finding-list">
         {findings.length === 0 && <div className="empty">Sin hallazgos todavia.</div>}
