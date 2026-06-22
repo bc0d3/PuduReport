@@ -11,7 +11,9 @@ use std::process::Command;
 use serde::Serialize;
 
 use pudureport_core::markdown;
-use pudureport_core::models::{Branding, ProjectMeta, Severity, TeamMember, Watermark};
+use pudureport_core::models::{
+    Branding, ProjectMeta, ReportBlock, Severity, TeamMember, Watermark,
+};
 use pudureport_core::workspace;
 
 #[derive(Debug, thiserror::Error)]
@@ -66,6 +68,10 @@ struct ProjectData {
     scope: Vec<String>,
     team: Vec<TeamMember>,
     sections: Vec<SectionData>,
+    /// Orden/estructura del cuerpo: la plantilla recorre estos bloques y
+    /// renderiza cada uno segun su kind. Se reconcilia (o se usa el default del
+    /// tipo) en build_data.
+    layout: Vec<ReportBlock>,
 }
 
 #[derive(Serialize)]
@@ -141,7 +147,10 @@ fn status_str(s: pudureport_core::models::FindingStatus) -> String {
 /// Construye el documento de datos del proyecto a partir de los archivos.
 fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
     let ws = workspace::read_workspace_meta(root)?;
-    let project = workspace::read_project_meta(root, project_id)?;
+    let mut project = workspace::read_project_meta(root, project_id)?;
+    // Layout efectivo del cuerpo: el guardado, o el default del tipo si esta
+    // vacio. Deja la lista de bloques consistente con las secciones.
+    project.reconcile_layout();
     let findings = workspace::list_findings(root, project_id)?;
 
     let mut counts = SeverityCounts::default();
@@ -195,6 +204,7 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
             scope: project.scope,
             team: project.team,
             sections,
+            layout: project.layout,
         },
         findings: findings_data,
         severity_counts: counts,
@@ -439,6 +449,12 @@ mod tests {
         assert_eq!(data.project.client, "ACME");
         assert_eq!(data.findings.len(), 1);
         assert!(serde_json::to_string(&data).is_ok());
+        // El cuerpo se serializa como layout de bloques, arrancando por la portada.
+        assert_eq!(
+            data.project.layout.first().map(|b| b.kind.as_str()),
+            Some("cover")
+        );
+        assert!(data.project.layout.iter().any(|b| b.kind == "findings"));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
