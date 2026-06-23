@@ -2,6 +2,27 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.9] - 2026-06-23
+
+### Added
+- Ocultar hallazgos del PDF con un icono de ojo en la lista. Un hallazgo oculto no aparece en las tablas, el indice ni el detalle, y no cuenta en los resumenes de severidad ni de estado. Sigue en disco; es un interruptor de inclusion, independiente del estado.
+- Hallazgos nuevos en un retest. Un hallazgo se puede marcar como nuevo detectado en la verificacion (solo en reportes de familia retest); la plantilla retest los muestra en una seccion aparte, separados de los hallazgos verificados, tanto en el indice como en el detalle.
+- Boton "Ordenar para retest" en la lista de hallazgos: ordena por estado de remediacion (abierto, no se corregira, aceptado, corregido) y, dentro de cada estado, por severidad. Aparece en reportes de familia retest en vez del orden por severidad.
+- Tipo de reporte editable desde Reporte > Datos del proyecto, sin perder contenido.
+- Editor de plantilla propia con un formulario simple (titulo, descripcion y tags editables) y el codigo Typst en una seccion avanzada plegable, para no tener que tocar codigo. El buscador de plantillas ahora filtra tambien por tags.
+- Borrar plantillas de la libreria (no las incluidas) y confirmacion antes de duplicar, para no llenarse de copias por error.
+- Subir imagenes al proyecto desde el servidor MCP (upload_asset) para ilustrar el reporte: la IA del usuario sube una captura y la referencia en el cuerpo. Solo escribe imagenes nuevas; nunca lee evidencias existentes.
+
+### Changed
+- La familia de render del reporte (hallazgos, retest o narrativo) se define con un tag de la plantilla: "retest" activa el orden por estado y la seccion de nuevos, "narrative" deja el reporte sin tabla de hallazgos. Un solo concepto en vez de un campo aparte. Los tags de las plantillas base se recortaron a un set minimo.
+
+### Fixed
+- La etiqueta del estado "No corregido" pasa a "No se corregira" en el resumen por estado de la plantilla retest, coherente con el resto de la app.
+- Al borrar una plantilla de la libreria se limpia su uso como override en todos los proyectos que la tenian, evitando una referencia colgante que rompia la generacion del PDF.
+
+### Security
+- La subida de imagenes por MCP (upload_asset) genera el nombre del archivo en el servidor (UUID), asi la IA no controla el nombre y se eliminan por construccion el path traversal y la sobrescritura de evidencias. Acepta solo imagenes rasterizadas (png/jpg/jpeg/gif/webp; SVG excluido por scripts/XXE), exige que el proyecto exista y limita el tamano con un pre-chequeo del base64. El consentimiento al conectar el MCP advierte que, con un modelo en la nube, la imagen ya paso por la nube al verla; para NDA estricto, modelo local.
+
 ## [0.0.8] - 2026-06-22
 
 ### Added
