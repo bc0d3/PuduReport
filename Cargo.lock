@@ -2495,6 +2495,7 @@ dependencies = [
 name = "pudureport-mcp"
 version = "0.0.8"
 dependencies = [
+ "base64 0.22.1",
  "dirs 5.0.1",
  "pudureport-core",
  "rmcp",

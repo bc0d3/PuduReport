@@ -6,12 +6,15 @@
 //! accede (ver README.dev.md).
 //!
 //! Alcance actual (Fase 2): leer proyectos e hallazgos y modificar el TEXTO de
-//! los hallazgos (crear vulnerabilidades, mejorar redaccion/campos). No edita
-//! plantillas ni configuracion (workspace.yaml, branding, tipo de proyecto), no
-//! borra nada y nunca expone bytes de assets/evidencias: solo texto y metadata.
+//! los hallazgos (crear vulnerabilidades, mejorar redaccion/campos). Puede SUBIR
+//! imagenes nuevas al proyecto (upload_asset) para ilustrar el reporte, con
+//! guardarrailes (solo imagenes, anti-traversal, tope de tamano), pero NUNCA lee
+//! evidencias existentes: no expone bytes de assets. No edita plantillas ni
+//! configuracion (workspace.yaml, branding, tipo de proyecto) ni borra nada.
 
 use std::path::PathBuf;
 
+use base64::Engine;
 use pudureport_core::cvss;
 use pudureport_core::models::{CvssVersion, FindingMeta, FindingStatus, Severity};
 use pudureport_core::workspace;
@@ -69,6 +72,18 @@ struct SearchArgs {
     project_id: String,
     /// Texto a buscar en el titulo o el cuerpo (sin distinguir mayusculas).
     query: String,
+}
+
+/// Argumentos de `upload_asset`. Sube una imagen al proyecto. SOLO escribe.
+#[derive(Debug, Deserialize, JsonSchema)]
+struct UploadAssetArgs {
+    /// Id del proyecto donde guardar la imagen.
+    project_id: String,
+    /// Nombre de referencia, p.ej. "captura-login.png". SOLO se usa para tomar la
+    /// extension; el archivo se guarda con un id unico generado por el servidor.
+    filename: String,
+    /// Contenido binario de la imagen codificado en base64.
+    data_base64: String,
 }
 
 /// Argumentos de `calc_cvss`. La IA fija el vector; el backend deriva la
@@ -478,6 +493,59 @@ impl PuduReportServer {
         to_json(&finding)
     }
 
+    // --- Escritura de imagenes (assets) ---
+
+    /// Sube una imagen al proyecto para ilustrar el reporte. SOLO escribe; nunca
+    /// lee evidencias existentes. Devuelve la ruta relativa para referenciarla.
+    #[tool(
+        description = "Sube una imagen (captura/evidencia) al proyecto para ilustrar un hallazgo. La guarda en assets/ con un nombre unico generado y DEVUELVE la ruta: usa esa ruta exacta para referenciarla en el cuerpo con ![](assets/...). SOLO escribe imagenes nuevas, NUNCA lee evidencias existentes. Aviso de privacidad: si tu IA corre en la nube, la imagen ya paso por la nube al verla; para trabajo bajo NDA estricto usa un modelo local."
+    )]
+    async fn upload_asset(
+        &self,
+        Parameters(args): Parameters<UploadAssetArgs>,
+    ) -> Result<String, McpError> {
+        let root = self.current_root()?;
+        // El proyecto debe existir: no se crean carpetas de proyectos al subir.
+        workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
+        // Solo imagenes rasterizadas. Se excluye SVG a proposito: puede llevar
+        // scripts/entidades externas (XXE) y no es necesario para evidencias.
+        let ext = std::path::Path::new(&args.filename)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase())
+            .unwrap_or_default();
+        const ALLOWED: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
+        if !ALLOWED.contains(&ext.as_str()) {
+            return Err(McpError::invalid_params(
+                format!("extension no permitida: {ext} (use png|jpg|jpeg|gif|webp)"),
+                None,
+            ));
+        }
+        const MAX_BYTES: usize = 20 * 1024 * 1024;
+        // Pre-chequeo sobre el string base64 (crece ~4/3) para no alocar gigas
+        // antes de validar el tamano real.
+        if args.data_base64.len() > MAX_BYTES / 3 * 4 + 64 {
+            return Err(McpError::invalid_params(
+                "imagen muy grande (supera el maximo permitido)".to_string(),
+                None,
+            ));
+        }
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(args.data_base64.trim())
+            .map_err(|e| McpError::invalid_params(format!("base64 invalido: {e}"), None))?;
+        if bytes.len() > MAX_BYTES {
+            return Err(McpError::invalid_params(
+                format!("imagen muy grande: {} bytes (max {MAX_BYTES})", bytes.len()),
+                None,
+            ));
+        }
+        // El nombre lo genera el servidor (UUID + extension saneada): la IA NO
+        // controla el nombre del archivo, asi que no hay traversal ni sobrescritura
+        // posible. Devuelve la ruta para referenciarla en el cuerpo.
+        let rel = workspace::save_asset(&root, &args.project_id, &ext, &bytes).map_err(internal)?;
+        Ok(rel)
+    }
+
     // --- Calculo ---
 
     /// Calcula el puntaje y la severidad de un vector CVSS 3.1 o 4.0.
@@ -504,9 +572,10 @@ impl ServerHandler for PuduReportServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "Servidor MCP de PuduReport. Lee proyectos e hallazgos del workspace expuesto y \
-             mejora el texto de los hallazgos (crear vulnerabilidades, redaccion, campos). No \
-             edita plantillas ni configuracion y nunca expone bytes de assets ni evidencias: \
-             solo texto y metadata.",
+             mejora el texto de los hallazgos (crear vulnerabilidades, redaccion, campos). Puede \
+             SUBIR imagenes nuevas al proyecto (upload_asset) para ilustrar el reporte, pero \
+             NUNCA lee evidencias existentes: no expone bytes de assets. No edita plantillas ni \
+             configuracion.",
         )
     }
 }
