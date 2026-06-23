@@ -98,6 +98,20 @@ pub struct FindingMeta {
     pub status: FindingStatus,
     #[serde(default)]
     pub affected: Vec<String>,
+    /// Oculta el hallazgo del PDF (no sale en tablas, indice ni detalle). Sigue
+    /// en disco; es un flag de inclusion, independiente del estado.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hidden: bool,
+    /// Marca el hallazgo como NUEVO detectado durante un retest. Solo relevante
+    /// en reportes de familia retest; la plantilla los muestra aparte.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub new_in_retest: bool,
+}
+
+/// Para `skip_serializing_if`: omite los bool en false (no ensucia el
+/// front-matter de cada hallazgo con `hidden: false`).
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// Hallazgo completo: front-matter + cuerpo markdown.
@@ -598,6 +612,10 @@ pub struct PdfTemplate {
     /// Tags para filtrar (red-team, perimetral, web, oscp, htb...).
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Familia de render: "findings" | "retest" | "narrative". Define el orden y
+    /// el render. Explicita (del meta) o derivada de los tags como respaldo.
+    #[serde(default)]
+    pub family: String,
 }
 
 /// Resultado del calculo CVSS.

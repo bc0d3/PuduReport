@@ -263,7 +263,7 @@
       badge("Corregido", status-color.fixed),
       badge("Abierto", status-color.open),
       badge("Aceptado", status-color.accepted),
-      badge("No corregido", status-color.wontfix),
+      badge("No se corregira", status-color.wontfix),
     ),
     text(weight: "bold", str(st-count("fixed"))),
     text(weight: "bold", str(st-count("open"))),
@@ -272,16 +272,21 @@
   )
 }
 
-#let block-findings-index() = {
-  if data.findings.len() > 0 {
+// Hallazgos previos (verificacion) vs nuevos detectados en el retest.
+#let is-new(f) = f.at("new_in_retest", default: false)
+#let verified-findings = data.findings.filter(f => not is-new(f))
+#let new-findings = data.findings.filter(f => is-new(f))
+
+#let findings-index-table(rows, title) = {
+  if rows.len() > 0 {
     v(0.5cm)
-    heading(numbering: none)[Hallazgos verificados]
+    heading(numbering: none)[#title]
     table(
       columns: (auto, 1fr, auto, auto),
       align: (center + horizon, left + horizon, center + horizon, center + horizon),
       stroke: 0.5pt + luma(220),
       table.header([*\#*], [*Hallazgo*], [*Severidad*], [*Estado*]),
-      ..data.findings.enumerate().map(((i, f)) => (
+      ..rows.enumerate().map(((i, f)) => (
         str(i + 1),
         f.title,
         badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info)),
@@ -289,6 +294,11 @@
       )).flatten(),
     )
   }
+}
+
+#let block-findings-index() = {
+  findings-index-table(verified-findings, "Hallazgos verificados")
+  findings-index-table(new-findings, "Hallazgos nuevos detectados")
 }
 
 #let block-section(key) = {
@@ -313,10 +323,8 @@
   }
 }
 
-#let block-findings() = {
-  pagebreak()
-  heading(level: 1, numbering: none)[Detalle de verificacion]
-  for (i, f) in data.findings.enumerate() {
+#let findings-detail(rows) = {
+  for (i, f) in rows.enumerate() {
     let color = status-color.at(f.status, default: rgb("#78716c"))
     if i > 0 and ws.branding.findings_page_break { pagebreak() }
     block(
@@ -340,6 +348,17 @@
       eval(f.body, mode: "markup")
     }
     v(0.6cm)
+  }
+}
+
+#let block-findings() = {
+  pagebreak()
+  heading(level: 1, numbering: none)[Detalle de verificacion]
+  findings-detail(verified-findings)
+  if new-findings.len() > 0 {
+    pagebreak()
+    heading(level: 1, numbering: none)[Hallazgos nuevos detectados]
+    findings-detail(new-findings)
   }
 }
 

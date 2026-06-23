@@ -39,6 +39,8 @@ interface Props {
   assetBase?: string | null;
   /** Tipo del proyecto activo (examenes activan el modo cualitativo). */
   projectType?: string;
+  /** Familia de render efectiva (deriva de la plantilla); gatea el orden de retest. */
+  family?: "findings" | "retest" | "narrative";
   onGoToPreview: () => void;
   onPickProject: () => void;
 }
@@ -47,6 +49,7 @@ export function FindingEditor({
   projectId,
   assetBase,
   projectType,
+  family,
   onGoToPreview,
   onPickProject,
 }: Props) {
@@ -145,6 +148,21 @@ export function FindingEditor({
     }
   }
 
+  // Alterna el flag hidden de un hallazgo. Si es el activo, usa patchMeta (que
+  // conserva el cuerpo sin guardar); si no, guarda la version de la lista.
+  async function handleToggleHidden(id: string) {
+    if (!projectId) return;
+    if (current && id === current.id) {
+      patchMeta((m) => ({ ...m, hidden: !m.hidden }));
+      return;
+    }
+    const target = findings.find((f) => f.id === id);
+    if (!target) return;
+    const updated: Finding = { ...target, meta: { ...target.meta, hidden: !target.meta.hidden } };
+    const saved = await guard(api.saveFinding(projectId, updated));
+    if (saved) setFindings((list) => list.map((f) => (f.id === saved.id ? saved : f)));
+  }
+
   async function handleReorder(orderedIds: string[]) {
     if (!projectId) return;
     const reordered = orderedIds
@@ -215,9 +233,11 @@ export function FindingEditor({
       <Sidebar
         findings={findings}
         activeId={activeId}
+        family={family}
         onSelect={setActiveId}
         onCreate={handleCreate}
         onReorder={handleReorder}
+        onToggleHidden={handleToggleHidden}
       />
       {current ? (
         <div className="editor">
@@ -310,6 +330,22 @@ export function FindingEditor({
               </select>
             </div>
           </div>
+
+          {family === "retest" && (
+            <label
+              className="row"
+              style={{ gap: 8, marginBottom: 14, cursor: "pointer", alignItems: "center" }}
+            >
+              <input
+                type="checkbox"
+                checked={current.meta.new_in_retest ?? false}
+                onChange={(e) =>
+                  patchMeta((m) => ({ ...m, new_in_retest: e.target.checked }))
+                }
+              />
+              <span>Hallazgo nuevo detectado en el retest (va en seccion aparte del PDF)</span>
+            </label>
+          )}
 
           {!examMode && (
             <div className="field" style={{ marginBottom: 14 }}>

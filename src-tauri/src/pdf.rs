@@ -93,6 +93,8 @@ struct FindingData {
     cwe: String,
     status: String,
     affected: Vec<String>,
+    /// Hallazgo nuevo detectado en el retest (la plantilla retest lo separa).
+    new_in_retest: bool,
     /// Cuerpo ya convertido a markup de Typst.
     body: String,
 }
@@ -175,7 +177,11 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
     // Layout efectivo del cuerpo: el guardado, o el default del tipo si esta
     // vacio. Deja la lista de bloques consistente con las secciones.
     project.reconcile_layout();
-    let findings = workspace::list_findings(root, project_id)?;
+    // Los hallazgos ocultos no entran al PDF ni cuentan en los resumenes.
+    let findings: Vec<_> = workspace::list_findings(root, project_id)?
+        .into_iter()
+        .filter(|f| !f.meta.hidden)
+        .collect();
 
     let mut counts = SeverityCounts::default();
     let findings_data: Vec<FindingData> = findings
@@ -193,6 +199,7 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
                 cwe: f.meta.cwe.join(", "),
                 status: status_str(f.meta.status),
                 affected: f.meta.affected,
+                new_in_retest: f.meta.new_in_retest,
                 body: markdown::to_typst(&f.body),
             }
         })

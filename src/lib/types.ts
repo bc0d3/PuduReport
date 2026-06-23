@@ -22,6 +22,10 @@ export interface FindingMeta {
   cwe: string[];
   status: FindingStatus;
   affected: string[];
+  /** Oculta el hallazgo del PDF. Ausente o false = visible. */
+  hidden?: boolean;
+  /** Hallazgo nuevo detectado en un retest. Solo relevante en familia retest. */
+  new_in_retest?: boolean;
 }
 
 /** Hallazgo completo: front-matter + cuerpo markdown. */
@@ -231,6 +235,8 @@ export interface PdfTemplate {
   description: string;
   /** Tags para filtrar (red-team, perimetral, web, oscp, htb...). */
   tags: string[];
+  /** Familia de render: define orden y render. La resuelve el backend. */
+  family: "findings" | "retest" | "narrative";
 }
 
 export interface CvssResult {
