@@ -182,6 +182,21 @@ export function saveTemplateSource(name: string, content: string): Promise<void>
   return invoke("save_template_source", { name, content });
 }
 
+/** Elimina una plantilla de la libreria del usuario (no las incluidas). */
+export function deleteTemplate(name: string): Promise<void> {
+  return invoke("delete_template", { name });
+}
+
+/** Guarda la metadata (.meta.yaml) de una plantilla: titulo, descripcion y tags. */
+export function saveTemplateMeta(
+  name: string,
+  title: string,
+  description: string,
+  tags: string[],
+): Promise<void> {
+  return invoke("save_template_meta", { name, title, description, tags });
+}
+
 // --- PDF ---
 
 /**

@@ -459,7 +459,7 @@ fn list_pdf_templates(app: AppHandle, state: State<AppState>) -> Result<Vec<PdfT
 }
 
 /// Metadata opcional de una plantilla (templates/<name>.meta.yaml).
-#[derive(Default, serde::Deserialize)]
+#[derive(Default, serde::Deserialize, serde::Serialize)]
 struct TemplateMeta {
     #[serde(default)]
     title: String,
@@ -467,6 +467,19 @@ struct TemplateMeta {
     description: String,
     #[serde(default)]
     tags: Vec<String>,
+}
+
+/// Familia de render derivada de los tags: un solo concepto, el tag manda. El
+/// tag "retest" arma el reporte como retest; "narrative" lo deja sin tabla de
+/// hallazgos; sin tag especial es "findings".
+fn derive_family_from_tags(tags: &[String]) -> String {
+    if tags.iter().any(|t| t == "retest") {
+        "retest".to_string()
+    } else if tags.iter().any(|t| t == "narrative") {
+        "narrative".to_string()
+    } else {
+        "findings".to_string()
+    }
 }
 
 fn collect_typ(dir: &std::path::Path, builtin: bool, out: &mut Vec<PdfTemplate>) {
@@ -482,6 +495,7 @@ fn collect_typ(dir: &std::path::Path, builtin: bool, out: &mut Vec<PdfTemplate>)
                             .ok()
                             .and_then(|c| serde_yaml::from_str(&c).ok())
                             .unwrap_or_default();
+                    let family = derive_family_from_tags(&meta.tags);
                     out.push(PdfTemplate {
                         title: if meta.title.is_empty() {
                             name.clone()
@@ -494,6 +508,7 @@ fn collect_typ(dir: &std::path::Path, builtin: bool, out: &mut Vec<PdfTemplate>)
                             meta.description
                         },
                         tags: meta.tags,
+                        family,
                         name,
                         builtin,
                     });
@@ -609,6 +624,62 @@ fn save_template_source(
     let dir = user_templates_dir(&root);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::write(dir.join(format!("{name}.typ")), content).map_err(|e| e.to_string())
+}
+
+/// Elimina una plantilla de la libreria del usuario (.typ y su .meta.yaml).
+/// Nunca toca las incluidas: solo opera dentro de library/templates del
+/// workspace, asi que las base empaquetadas no se pueden borrar.
+#[tauri::command]
+fn delete_template(state: State<AppState>, name: String) -> Result<(), String> {
+    validate_template_name(&name)?;
+    let root = current_root(&state)?;
+    let dir = user_templates_dir(&root);
+    let typ = dir.join(format!("{name}.typ"));
+    if !typ.exists() {
+        return Err(format!("plantilla no encontrada en tu libreria: {name}"));
+    }
+    std::fs::remove_file(&typ).map_err(|e| e.to_string())?;
+    let meta = dir.join(format!("{name}.meta.yaml"));
+    if meta.exists() {
+        let _ = std::fs::remove_file(meta);
+    }
+    // Limpia el override en TODO proyecto que la usara, para no dejar una
+    // referencia colgante que rompa la generacion del PDF.
+    if let Ok(projects) = workspace::list_projects(&root) {
+        for p in projects {
+            if let Ok(mut meta) = workspace::read_project_meta(&root, &p.id) {
+                if meta.template_override == name {
+                    meta.template_override = String::new();
+                    let _ = workspace::write_project_meta(&root, &p.id, &meta);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Guarda la metadata (.meta.yaml) de una plantilla en la libreria del usuario:
+/// titulo, descripcion y tags. Los tags definen la familia de render (p.ej.
+/// "retest" activa el orden por estado). Solo escribe en la libreria del usuario.
+#[tauri::command]
+fn save_template_meta(
+    state: State<AppState>,
+    name: String,
+    title: String,
+    description: String,
+    tags: Vec<String>,
+) -> Result<(), String> {
+    validate_template_name(&name)?;
+    let root = current_root(&state)?;
+    let dir = user_templates_dir(&root);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let meta = TemplateMeta {
+        title,
+        description,
+        tags,
+    };
+    let yaml = serde_yaml::to_string(&meta).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join(format!("{name}.meta.yaml")), yaml).map_err(|e| e.to_string())
 }
 
 /// Primer comentario (`// ...`) no vacio del archivo, como descripcion.
@@ -787,6 +858,8 @@ pub fn run() {
             duplicate_template,
             read_template_source,
             save_template_source,
+            save_template_meta,
+            delete_template,
             generate_pdf,
             preview_pdf,
             open_path,

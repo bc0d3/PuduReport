@@ -9,7 +9,12 @@ import type {
   WorkspaceMeta,
 } from "../lib/types";
 import { SEVERITY_LABEL, SEVERITY_ORDER, SEVERITY_COLOR } from "../lib/severity";
-import { typeInfo, usesBlockRenderer, usesCustomTemplate } from "../lib/projectTypes";
+import {
+  PROJECT_TYPES,
+  typeInfo,
+  usesBlockRenderer,
+  usesCustomTemplate,
+} from "../lib/projectTypes";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { LivePreview } from "../components/LivePreview";
 import { useToast } from "../components/Toast";
@@ -77,13 +82,19 @@ interface Props {
   projectId: string | null;
   assetBase?: string | null;
   onWorkspaceSaved: (meta: WorkspaceMeta) => void;
+  onProjectMetaChange?: (meta: ProjectMeta) => void;
   onGoToPreview: () => void;
   onPickProject: () => void;
 }
 
 type Selection = { kind: "data" } | { kind: "block"; index: number };
 
-export function ReportBuilder({ projectId, assetBase, onPickProject }: Props) {
+export function ReportBuilder({
+  projectId,
+  assetBase,
+  onProjectMetaChange,
+  onPickProject,
+}: Props) {
   const { guard } = useToast();
   const [project, setProject] = useState<ProjectMeta | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
@@ -118,6 +129,9 @@ export function ReportBuilder({ projectId, assetBase, onPickProject }: Props) {
       if (!prev) return prev;
       const next = updater(prev);
       persist(next);
+      // Mantiene en sincronia el proyecto activo del App (otras vistas leen el
+      // tipo de ahi, p.ej. el orden de retest en el editor de hallazgos).
+      onProjectMetaChange?.(next);
       return next;
     });
   }
@@ -587,6 +601,21 @@ function ProjectDataForm({
     <div className="card">
       <h3 style={{ marginTop: 0 }}>Datos del proyecto</h3>
       <div className="editor-grid">
+        <div className="field">
+          <label>Tipo de reporte</label>
+          <select
+            className="input"
+            value={project.project_type}
+            onChange={(e) => patch((p) => ({ ...p, project_type: e.target.value }))}
+            title="Cambia el flujo del reporte (formulario, plantilla por defecto y orden). No borra el contenido."
+          >
+            {PROJECT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="field">
           <label>Nombre</label>
           <input

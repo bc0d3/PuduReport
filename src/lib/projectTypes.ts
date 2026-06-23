@@ -14,6 +14,13 @@ export interface ProjectTypeInfo {
   usesFindings: boolean;
   /** Si es un examen: severidad cualitativa manual, sin CVSS, y campo OSID. */
   exam: boolean;
+  /**
+   * Familia de render: agrupa los tipos en modos. "findings" (tabla de
+   * hallazgos por severidad), "retest" (verificacion por estado de remediacion)
+   * y "narrative" (solo prosa, sin tabla de hallazgos). La logica de orden y
+   * render pregunta por familia, no por cada tipo.
+   */
+  family: "findings" | "retest" | "narrative";
 }
 
 export const PROJECT_TYPES: ProjectTypeInfo[] = [
@@ -25,6 +32,7 @@ export const PROJECT_TYPES: ProjectTypeInfo[] = [
     template: "pentest",
     usesFindings: true,
     exam: false,
+    family: "findings",
   },
   {
     value: "redteam",
@@ -34,6 +42,7 @@ export const PROJECT_TYPES: ProjectTypeInfo[] = [
     template: "pentest",
     usesFindings: true,
     exam: false,
+    family: "findings",
   },
   {
     value: "oscp",
@@ -43,6 +52,7 @@ export const PROJECT_TYPES: ProjectTypeInfo[] = [
     template: "oscp",
     usesFindings: true,
     exam: true,
+    family: "findings",
   },
   {
     value: "htb",
@@ -52,6 +62,7 @@ export const PROJECT_TYPES: ProjectTypeInfo[] = [
     template: "htb",
     usesFindings: true,
     exam: true,
+    family: "findings",
   },
   {
     value: "ejecutivo",
@@ -61,6 +72,7 @@ export const PROJECT_TYPES: ProjectTypeInfo[] = [
     template: "ejecutivo",
     usesFindings: false,
     exam: false,
+    family: "narrative",
   },
   {
     value: "documento",
@@ -70,6 +82,7 @@ export const PROJECT_TYPES: ProjectTypeInfo[] = [
     template: "documento-libre",
     usesFindings: false,
     exam: false,
+    family: "narrative",
   },
   {
     value: "retest",
@@ -79,6 +92,7 @@ export const PROJECT_TYPES: ProjectTypeInfo[] = [
     template: "retest",
     usesFindings: true,
     exam: false,
+    family: "retest",
   },
 ];
 
@@ -92,6 +106,29 @@ export function typeInfo(value: string | undefined): ProjectTypeInfo {
 /** Etiqueta legible del tipo. */
 export function typeLabel(value: string | undefined): string {
   return typeInfo(value).label;
+}
+
+/** Familia de render del tipo: agrupa los tipos en 3 modos de render/orden. */
+export function reportFamily(value: string | undefined): ProjectTypeInfo["family"] {
+  return typeInfo(value).family;
+}
+
+/**
+ * Familia de render EFECTIVA del proyecto. La PLANTILLA manda: si encontramos la
+ * plantilla efectiva (override incluido), su familia es la del campo `family` de
+ * la plantilla (que el backend resuelve del meta, o deriva de los tags como
+ * respaldo). Asi una copia marcada como retest, o un pentest con override de
+ * retest, se ordenan como retest. Si no la encontramos, cae a la del tipo.
+ */
+export function familyForProject(
+  project: { project_type: string; template_override: string } | null | undefined,
+  templates: { name: string; family: ProjectTypeInfo["family"] }[],
+): ProjectTypeInfo["family"] {
+  if (!project) return "findings";
+  const name = effectiveTemplate(project);
+  const tmpl = templates.find((t) => t.name === name);
+  if (tmpl) return tmpl.family;
+  return reportFamily(project.project_type);
 }
 
 /** Plantilla efectiva del proyecto: el override, o la del tipo. */

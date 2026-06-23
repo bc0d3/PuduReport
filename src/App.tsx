@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "./lib/api";
-import type { ProjectMeta, ProjectSummary, WorkspaceMeta } from "./lib/types";
+import type { PdfTemplate, ProjectMeta, ProjectSummary, WorkspaceMeta } from "./lib/types";
+import { familyForProject } from "./lib/projectTypes";
 import { Rail, type View } from "./components/Rail";
 import { Welcome } from "./screens/Welcome";
 import { Projects } from "./screens/Projects";
@@ -30,6 +31,8 @@ function AppInner() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<ProjectMeta | null>(null);
+  const [pdfTemplates, setPdfTemplates] = useState<PdfTemplate[]>([]);
+  const [templatesTick, setTemplatesTick] = useState(0);
   const [view, setView] = useState<View>("inicio");
   const [dark, setDark] = useState<boolean>(() => {
     const saved = window.localStorage.getItem("pudu-theme");
@@ -92,6 +95,20 @@ function AppInner() {
     guard(api.loadProject(activeProjectId)).then((m) => setActiveProject(m ?? null));
   }, [guard, activeProjectId]);
 
+  // Plantillas PDF del workspace (base + libreria del usuario). Se usan para
+  // resolver la familia de render por los tags de la plantilla efectiva.
+  useEffect(() => {
+    if (!workspacePath) {
+      setPdfTemplates([]);
+      return;
+    }
+    guard(api.listPdfTemplates()).then((t) => setPdfTemplates(t ?? []));
+  }, [guard, workspacePath, templatesTick]);
+
+  // Familia de render efectiva del proyecto activo: la plantilla manda (un
+  // override de retest o una copia retest-* se ordenan como retest).
+  const activeFamily = familyForProject(activeProject, pdfTemplates);
+
   // Directorio absoluto del proyecto activo, para adjuntar evidencias.
   const assetBase = workspacePath && activeProjectId ? `${workspacePath}/${activeProjectId}` : null;
 
@@ -145,6 +162,7 @@ function AppInner() {
             projectId={activeProjectId}
             assetBase={assetBase}
             projectType={activeProject?.project_type}
+            family={activeFamily}
             onGoToPreview={() => setView("preview")}
             onPickProject={() => setView("proyectos")}
           />
@@ -156,6 +174,7 @@ function AppInner() {
             projectId={activeProjectId}
             assetBase={assetBase}
             onWorkspaceSaved={setWorkspace}
+            onProjectMetaChange={setActiveProject}
             onGoToPreview={() => setView("preview")}
             onPickProject={() => setView("proyectos")}
           />
@@ -165,6 +184,7 @@ function AppInner() {
             projectId={activeProjectId}
             project={activeProject}
             onProjectSaved={setActiveProject}
+            onTemplatesChanged={() => setTemplatesTick((t) => t + 1)}
           />
         )}
         {view === "portada" && (

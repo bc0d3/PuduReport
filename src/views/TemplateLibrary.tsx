@@ -5,6 +5,7 @@ import { typeInfo } from "../lib/projectTypes";
 import { SeverityBadge } from "../components/Severity";
 import { Modal } from "../components/Modal";
 import { MarkdownEditor } from "../components/MarkdownEditor";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 
 interface Props {
@@ -12,6 +13,8 @@ interface Props {
   /** Proyecto activo: define la plantilla por su tipo + override. */
   project: ProjectMeta | null;
   onProjectSaved: (meta: ProjectMeta) => void;
+  /** Aviso de que cambiaron las plantillas (p.ej. su familia), para refrescar. */
+  onTemplatesChanged?: () => void;
 }
 
 type Tab = "pdf" | "findings" | "snippets";
@@ -29,7 +32,12 @@ function extractVars(...texts: string[]): string[] {
   return [...found];
 }
 
-export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
+export function TemplateLibrary({
+  projectId,
+  project,
+  onProjectSaved,
+  onTemplatesChanged,
+}: Props) {
   const { guard, notify } = useToast();
   const [tab, setTab] = useState<Tab>("pdf");
   const [templates, setTemplates] = useState<FindingTemplate[]>([]);
@@ -40,6 +48,8 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
   const [instantiating, setInstantiating] = useState<FindingTemplate | null>(null);
   const [creatingTemplate, setCreatingTemplate] = useState(false);
   const [creatingSnippet, setCreatingSnippet] = useState(false);
+  const [confirmDup, setConfirmDup] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
 
   // Plantilla del tipo del proyecto y la efectiva (override si existe).
   const typeTemplate = project ? typeInfo(project.project_type).template : "";
@@ -107,10 +117,19 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
                     <button
                       className="btn small"
                       title="Duplicar"
-                      onClick={() => duplicate(t.name)}
+                      onClick={() => setConfirmDup(t.name)}
                     >
                       <i className="ti ti-copy" />
                     </button>
+                    {!t.builtin && (
+                      <button
+                        className="btn small danger"
+                        title="Eliminar de tu libreria"
+                        onClick={() => setConfirmDel(t.name)}
+                      >
+                        <i className="ti ti-trash" />
+                      </button>
+                    )}
                     <button
                       className={`btn small ${active ? "" : "primary"}`}
                       disabled={active}
@@ -132,8 +151,22 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
     const newName = await guard(api.duplicateTemplate(name), "Plantilla duplicada");
     if (newName) {
       await reload();
+      onTemplatesChanged?.();
       setEditing(newName);
     }
+  }
+
+  async function deleteTpl(name: string) {
+    const done = await guard(api.deleteTemplate(name), "Plantilla eliminada");
+    if (done === undefined) return;
+    // Si el proyecto activo la usaba como override, lo limpiamos para no dejar
+    // una referencia colgante que rompa la generacion del PDF.
+    if (project && projectId && project.template_override === name) {
+      const next: ProjectMeta = { ...project, template_override: "" };
+      if ((await guard(api.saveProject(projectId, next))) !== undefined) onProjectSaved(next);
+    }
+    await reload();
+    onTemplatesChanged?.();
   }
 
   const q = query.trim().toLowerCase();
@@ -142,7 +175,8 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
       q === "" ||
       t.title.toLowerCase().includes(q) ||
       t.name.toLowerCase().includes(q) ||
-      t.description.toLowerCase().includes(q),
+      t.description.toLowerCase().includes(q) ||
+      t.tags.some((tag) => tag.toLowerCase().includes(q)),
   );
   const builtinPdf = filteredPdf.filter((t) => t.builtin);
   const userPdf = filteredPdf.filter((t) => !t.builtin);
@@ -325,44 +359,92 @@ export function TemplateLibrary({ projectId, project, onProjectSaved }: Props) {
 
       {editing && (
         <TemplateEditor
-          name={editing}
+          template={
+            pdfTemplates.find((t) => t.name === editing) ?? {
+              name: editing,
+              builtin: false,
+              title: editing,
+              description: "",
+              tags: [],
+              family: "findings",
+            }
+          }
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
             await reload();
+            onTemplatesChanged?.();
           }}
+        />
+      )}
+
+      {confirmDup && (
+        <ConfirmDialog
+          title="Duplicar plantilla"
+          message={`Se creara una copia editable de "${confirmDup}" en tu libreria.`}
+          confirmLabel="Duplicar"
+          danger={false}
+          onConfirm={() => duplicate(confirmDup)}
+          onClose={() => setConfirmDup(null)}
+        />
+      )}
+
+      {confirmDel && (
+        <ConfirmDialog
+          title="Eliminar plantilla"
+          message={`Se eliminara "${confirmDel}" de tu libreria. No afecta a las plantillas incluidas.`}
+          onConfirm={() => deleteTpl(confirmDel)}
+          onClose={() => setConfirmDel(null)}
         />
       )}
     </div>
   );
 }
 
-/** Editor del codigo fuente .typ de una plantilla (nivel avanzado). */
+/**
+ * Editor de una plantilla propia. Lo simple primero: titulo, descripcion y tags
+ * en un form; el codigo Typst queda en una seccion "Avanzado" plegable. El
+ * comportamiento (orden y render) lo define un tag: "retest" o "narrative".
+ */
 function TemplateEditor({
-  name,
+  template,
   onClose,
   onSaved,
 }: {
-  name: string;
+  template: PdfTemplate;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { guard } = useToast();
+  const [title, setTitle] = useState(template.title);
+  const [description, setDescription] = useState(template.description);
+  const [tagsInput, setTagsInput] = useState(template.tags.join(", "));
   const [source, setSource] = useState<string | null>(null);
+  const [showCode, setShowCode] = useState(false);
 
   useEffect(() => {
-    guard(api.readTemplateSource(name)).then((s) => setSource(s ?? ""));
-  }, [guard, name]);
+    guard(api.readTemplateSource(template.name)).then((s) => setSource(s ?? ""));
+  }, [guard, template.name]);
 
   async function save() {
     if (source === null) return;
-    const done = await guard(api.saveTemplateSource(name, source), "Plantilla guardada");
-    if (done !== undefined) onSaved();
+    // La familia va explicita en el meta; los tags quedan descriptivos.
+    const tags = tagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const metaDone = await guard(
+      api.saveTemplateMeta(template.name, title, description, tags),
+      "Plantilla guardada",
+    );
+    if (metaDone === undefined) return;
+    const srcDone = await guard(api.saveTemplateSource(template.name, source));
+    if (srcDone !== undefined) onSaved();
   }
 
   return (
     <Modal
-      title={`Editar plantilla: ${name}`}
+      title={`Editar plantilla: ${template.name}`}
       onClose={onClose}
       footer={
         <>
@@ -375,16 +457,54 @@ function TemplateEditor({
         </>
       }
     >
-      <p className="faint" style={{ fontSize: 12, marginTop: 0 }}>
-        Codigo Typst. Se guarda en tu libreria. Consume el mismo data.json.
-      </p>
-      <textarea
-        className="textarea mono"
-        style={{ width: "100%", minHeight: 360, fontSize: 12 }}
-        value={source ?? "Cargando..."}
-        onChange={(e) => setSource(e.target.value)}
-        spellCheck={false}
-      />
+      <div className="field">
+        <label>Titulo</label>
+        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+      </div>
+      <div className="field">
+        <label>Descripcion</label>
+        <input
+          className="input"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </div>
+      <div className="field">
+        <label>Tags (separados por coma)</label>
+        <input
+          className="input"
+          value={tagsInput}
+          onChange={(e) => setTagsInput(e.target.value)}
+          placeholder="web, infra, remediacion"
+        />
+        <span className="faint" style={{ fontSize: 12 }}>
+          Para buscar y filtrar. Dos cambian el reporte: <strong>retest</strong> (ordena por
+          estado y separa los nuevos) y <strong>narrative</strong> (sin tabla de hallazgos).
+        </span>
+      </div>
+
+      <button
+        className="btn small"
+        style={{ marginTop: 4 }}
+        onClick={() => setShowCode((v) => !v)}
+      >
+        <i className={`ti ti-chevron-${showCode ? "down" : "right"}`} />
+        Avanzado: codigo Typst
+      </button>
+      {showCode && (
+        <>
+          <p className="faint" style={{ fontSize: 12, marginBottom: 4 }}>
+            Codigo Typst. Se guarda en tu libreria. Consume el mismo data.json.
+          </p>
+          <textarea
+            className="textarea mono"
+            style={{ width: "100%", minHeight: 320, fontSize: 12 }}
+            value={source ?? "Cargando..."}
+            onChange={(e) => setSource(e.target.value)}
+            spellCheck={false}
+          />
+        </>
+      )}
     </Modal>
   );
 }
