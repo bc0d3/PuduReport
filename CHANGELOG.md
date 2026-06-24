@@ -2,6 +2,15 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.10] - 2026-06-24
+
+### Added
+- Export de resumen de hallazgos a CSV con selector de columnas (numero, titulo, severidad, CVSS, CWE, estado, afectados, nuevo). Desde Vista previa PDF, el boton "Exportar CSV" abre el selector y salen solo las columnas elegidas. Es una tabla sin el detalle (cuerpo/PoC), en UTF-8 con BOM para que Excel muestre bien los acentos, y excluye los hallazgos ocultos. Util para compartir un panorama rapido, por ejemplo por correo.
+- Menu de acciones por hallazgo en la lista (boton de tres puntos): Ocultar/Mostrar en el PDF, Copiar (duplica el hallazgo clonando sus campos y cuerpo) y Eliminar con confirmacion. Reemplaza al icono de ojo y deja lugar para mas opciones.
+
+### Fixed
+- Windows: ya no aparece la consola que parpadeaba y robaba el foco cada vez que se compila el PDF (tanto al exportar como en la vista previa en vivo). Se suprime con CREATE_NO_WINDOW al lanzar el sidecar de Typst. El mismo arreglo aplica al conectar el MCP por CLI.
+
 ## [0.0.9] - 2026-06-23
 
 ### Added
