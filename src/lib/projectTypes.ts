@@ -133,15 +133,20 @@ export function reportFamily(value: string | undefined): ProjectTypeInfo["family
   return typeInfo(value).family;
 }
 
-/** Tipos cuyo cuerpo es un unico lienzo markdown libre (documento, CTI, DFIR). */
-const FREE_MARKDOWN_TYPES = new Set(["documento", "cti", "incidente"]);
+/** Plantillas cuyo cuerpo es un unico lienzo markdown libre (documento, CTI, DFIR). */
+const FREE_MARKDOWN_TEMPLATES = new Set(["documento-libre", "cti", "incidente"]);
 
 /**
  * Si el reporte se edita como un solo documento markdown (pestaña Contenido) en
- * vez de la lista de hallazgos. Para CTI, respuesta a incidentes y documento libre.
+ * vez de la lista de hallazgos. Lo decide la PLANTILLA efectiva (override
+ * incluido), no el tipo: asignar una plantilla de lienzo a cualquier proyecto
+ * cambia el editor. Coherente con "la plantilla manda".
  */
-export function usesFreeMarkdown(value: string | undefined): boolean {
-  return FREE_MARKDOWN_TYPES.has(value ?? "");
+export function usesFreeMarkdown(
+  project: { project_type: string; template_override: string } | null | undefined,
+): boolean {
+  if (!project) return false;
+  return FREE_MARKDOWN_TEMPLATES.has(effectiveTemplate(project));
 }
 
 /**

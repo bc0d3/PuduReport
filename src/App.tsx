@@ -112,7 +112,7 @@ function AppInner() {
 
   // Tipos de lienzo markdown libre (documento, CTI, DFIR): la pestaña de edicion
   // muestra un editor markdown unico (Contenido) en vez de la lista de hallazgos.
-  const freeMarkdown = usesFreeMarkdown(activeProject?.project_type);
+  const freeMarkdown = usesFreeMarkdown(activeProject);
 
   // Directorio absoluto del proyecto activo, para adjuntar evidencias.
   const assetBase = workspacePath && activeProjectId ? `${workspacePath}/${activeProjectId}` : null;
