@@ -16,8 +16,12 @@ interface Props {
   onSelect: (id: string) => void;
   onCreate: (title: string) => void;
   onReorder: (orderedIds: string[]) => void;
-  /** Alterna si un hallazgo se oculta del PDF (icono de ojo). */
+  /** Alterna si un hallazgo se oculta del PDF. */
   onToggleHidden: (id: string) => void;
+  /** Duplica un hallazgo (lo clona en el proyecto). */
+  onDuplicate: (id: string) => void;
+  /** Elimina un hallazgo (la confirmacion la maneja el padre). */
+  onDelete: (id: string) => void;
 }
 
 /** Lista lateral de hallazgos con punto de severidad y reordenamiento drag & drop. */
@@ -29,9 +33,12 @@ export function Sidebar({
   onCreate,
   onReorder,
   onToggleHidden,
+  onDuplicate,
+  onDelete,
 }: Props) {
   const [newTitle, setNewTitle] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
 
   function submitNew() {
     const title = newTitle.trim();
@@ -149,17 +156,59 @@ export function Sidebar({
                 nuevo
               </span>
             )}
+            {f.meta.hidden && (
+              <i
+                className="ti ti-eye-off"
+                title="Oculto del PDF"
+                style={{ color: "var(--text-muted)", fontSize: 14 }}
+              />
+            )}
             {f.meta.cvss && <span className="cvss-chip">{f.meta.cvss}</span>}
-            <button
-              className="icon-btn"
-              title={f.meta.hidden ? "Oculto del PDF: mostrar" : "Ocultar del PDF"}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleHidden(f.id);
-              }}
-            >
-              <i className={`ti ti-eye${f.meta.hidden ? "-off" : ""}`} />
-            </button>
+            <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+              <button
+                className="icon-btn"
+                title="Mas opciones"
+                aria-label="Mas opciones"
+                onClick={() => setMenuId(menuId === f.id ? null : f.id)}
+              >
+                <i className="ti ti-dots-vertical" />
+              </button>
+              {menuId === f.id && (
+                <>
+                  <div className="finding-menu-backdrop" onClick={() => setMenuId(null)} />
+                  <div className="finding-menu">
+                    <button
+                      onClick={() => {
+                        onToggleHidden(f.id);
+                        setMenuId(null);
+                      }}
+                    >
+                      <i className={`ti ti-eye${f.meta.hidden ? "" : "-off"}`} />
+                      {f.meta.hidden ? "Mostrar en el PDF" : "Ocultar del PDF"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        onDuplicate(f.id);
+                        setMenuId(null);
+                      }}
+                    >
+                      <i className="ti ti-copy" />
+                      Copiar
+                    </button>
+                    <button
+                      className="danger"
+                      onClick={() => {
+                        onDelete(f.id);
+                        setMenuId(null);
+                      }}
+                    >
+                      <i className="ti ti-trash" />
+                      Eliminar
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         ))}
       </div>

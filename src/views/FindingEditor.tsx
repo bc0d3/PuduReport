@@ -65,7 +65,7 @@ export function FindingEditor({
   const [cweOpen, setCweOpen] = useState(false);
   const [cweInput, setCweInput] = useState("");
   const [affectedInput, setAffectedInput] = useState("");
-  const [confirmDel, setConfirmDel] = useState(false);
+  const [delTarget, setDelTarget] = useState<string | null>(null);
 
   const saveTimer = useRef<number | undefined>(undefined);
   const metaRef = useRef<FindingMeta | null>(null);
@@ -140,11 +140,32 @@ export function FindingEditor({
   }
 
   async function doDelete() {
-    if (!current || !projectId) return;
-    const done = await guard(api.deleteFinding(projectId, current.id), "Hallazgo eliminado");
+    if (!delTarget || !projectId) return;
+    const id = delTarget;
+    const done = await guard(api.deleteFinding(projectId, id), "Hallazgo eliminado");
     if (done !== undefined) {
-      setActiveId(null);
+      if (id === activeId) setActiveId(null);
       await loadFindings();
+    }
+  }
+
+  // Duplica un hallazgo: crea uno nuevo con titulo "(copia)" y le clona los
+  // campos y el cuerpo. Queda seleccionado para seguir editandolo.
+  async function handleDuplicate(id: string) {
+    if (!projectId) return;
+    const src = findings.find((f) => f.id === id);
+    if (!src) return;
+    const created = await guard(api.createFinding(projectId, `${src.meta.title} (copia)`));
+    if (!created) return;
+    const clone: Finding = {
+      ...created,
+      meta: { ...src.meta, title: `${src.meta.title} (copia)` },
+      body: src.body,
+    };
+    const saved = await guard(api.saveFinding(projectId, clone), "Hallazgo duplicado");
+    if (saved) {
+      setFindings((list) => [...list, saved]);
+      setActiveId(saved.id);
     }
   }
 
@@ -238,6 +259,8 @@ export function FindingEditor({
         onCreate={handleCreate}
         onReorder={handleReorder}
         onToggleHidden={handleToggleHidden}
+        onDuplicate={handleDuplicate}
+        onDelete={(id) => setDelTarget(id)}
       />
       {current ? (
         <div className="editor">
@@ -445,7 +468,7 @@ export function FindingEditor({
           </div>
 
           <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
-            <button className="btn danger" onClick={() => setConfirmDel(true)}>
+            <button className="btn danger" onClick={() => current && setDelTarget(current.id)}>
               <i className="ti ti-trash" />
               Eliminar hallazgo
             </button>
@@ -474,12 +497,14 @@ export function FindingEditor({
         />
       )}
 
-      {confirmDel && current && (
+      {delTarget && (
         <ConfirmDialog
           title="Eliminar hallazgo"
-          message={`Se eliminara el hallazgo "${current.meta.title}". Esta accion no se puede deshacer.`}
+          message={`Se eliminara el hallazgo "${
+            findings.find((f) => f.id === delTarget)?.meta.title ?? ""
+          }". Esta accion no se puede deshacer.`}
           onConfirm={doDelete}
-          onClose={() => setConfirmDel(false)}
+          onClose={() => setDelTarget(null)}
         />
       )}
     </div>

@@ -308,6 +308,44 @@ i.ti {
   font-family: var(--mono);
 }
 
+/* --- Menu de acciones del hallazgo (kebab) --- */
+.finding-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+}
+.finding-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 2px);
+  z-index: 30;
+  min-width: 152px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 4px;
+}
+.finding-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.finding-menu button:hover {
+  background: var(--bg-subtle);
+}
+.finding-menu button.danger {
+  color: var(--danger);
+}
+
 /* --- Punto de severidad --- */
 .sev-dot {
   width: 7px;
