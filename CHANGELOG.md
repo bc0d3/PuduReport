@@ -2,6 +2,13 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.11] - 2026-06-24
+
+### Added
+- Tipos de reporte de defensa: Inteligencia de amenazas (CTI) y Respuesta a incidentes (DFIR). Son de familia narrative (sin tabla de hallazgos ni CVSS): el reporte se construye como un unico lienzo markdown.
+- Editor de contenido adaptativo. La pestaña de edicion cambia segun el tipo de proyecto: para pentest y retest sigue siendo la lista de hallazgos; para los tipos de lienzo libre (documento libre, CTI, DFIR) pasa a "Contenido", un editor markdown unico con autoguardado, precargado con la estructura sugerida (Resumen, TTPs, IOCs para CTI; Cronologia, Causa raiz, Contencion para DFIR).
+- Plantillas dedicadas para CTI y DFIR, con identidad propia en la portada (un encabezado "INTELIGENCIA DE AMENAZAS" o "RESPUESTA A INCIDENTES" sobre el titulo del reporte).
+
 ## [0.0.10] - 2026-06-24
 
 ### Added
