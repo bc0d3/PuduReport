@@ -387,6 +387,10 @@ fn sections_for_type(project_type: &str) -> Vec<crate::models::ReportSection> {
         "documento" => sections_from(DOCUMENTO_SECTION_BOILERPLATE),
         "cti" => sections_from(CTI_SECTION_BOILERPLATE),
         "incidente" => sections_from(INCIDENTE_SECTION_BOILERPLATE),
+        "auditoria" => sections_from(AUDITORIA_SECTION_BOILERPLATE),
+        "cumplimiento" => sections_from(CUMPLIMIENTO_SECTION_BOILERPLATE),
+        "riesgos" => sections_from(RIESGOS_SECTION_BOILERPLATE),
+        "hunting" => sections_from(HUNTING_SECTION_BOILERPLATE),
         "retest" => sections_from(RETEST_SECTION_BOILERPLATE),
         // pentest y desconocidos: scaffold generico de pentest.
         _ => default_sections(),
@@ -489,6 +493,34 @@ const INCIDENTE_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[(
     "contenido",
     "",
     "## Resumen ejecutivo\n\nQue paso, cuando se detecto, impacto y estado actual, para la gestion.\n\n## Cronologia\n\nLinea de tiempo del incidente: fecha/hora, evento y fuente.\n\n## Alcance e impacto\n\nSistemas, datos y usuarios afectados; datos potencialmente comprometidos.\n\n## Deteccion\n\nComo se detecto: alertas, fuentes de datos y senales que lo dispararon.\n\n## Causa raiz\n\nVector inicial de acceso y causa de fondo.\n\n## Contencion\n\nAcciones para contener la amenaza y limitar su propagacion.\n\n## Erradicacion\n\nEliminacion de malware, cuentas, persistencia y accesos del atacante.\n\n## Recuperacion\n\nRestauracion de servicios y verificacion de que el entorno quedo limpio.\n\n## Lecciones aprendidas\n\nQue funciono, que no, y mejoras concretas para el futuro.\n\n## Indicadores de compromiso (IOCs)\n\nIndicadores observados durante el incidente, con su contexto.\n\n## Anexos\n\nEvidencia complementaria, comandos, capturas y artefactos.\n",
+)];
+
+/// Boilerplate para una auditoria / assessment de seguridad (defensivo).
+const AUDITORIA_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[(
+    "contenido",
+    "",
+    "## Resumen ejecutivo\n\nObjetivo de la auditoria, postura general encontrada y prioridades, en lenguaje de gestion.\n\n## Alcance y objetivos\n\nSistemas, areas y controles evaluados; que entra y que queda fuera.\n\n## Metodologia\n\nMarco y enfoque usado (entrevistas, revision documental, pruebas tecnicas).\n\n## Evaluacion de controles\n\nControles revisados y su estado (implementado / parcial / ausente).\n\n## Hallazgos y observaciones\n\nDebilidades detectadas, con su riesgo asociado y evidencia.\n\n## Recomendaciones\n\nAcciones priorizadas para cerrar las brechas.\n\n## Conclusiones\n\nValoracion final de la postura de seguridad y proximos pasos.\n",
+)];
+
+/// Boilerplate para un informe de cumplimiento / GRC (gap analysis).
+const CUMPLIMIENTO_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[(
+    "contenido",
+    "",
+    "## Resumen ejecutivo\n\nNivel de cumplimiento general frente al marco y brechas mas relevantes.\n\n## Marco de referencia\n\nEstandar evaluado (ISO 27001, NIST CSF, CIS, etc.) y version.\n\n## Alcance\n\nUnidades, sistemas y procesos cubiertos por la evaluacion.\n\n## Analisis de brechas\n\nPor cada control/requisito: estado actual, brecha y nivel de cumplimiento.\n\n## Controles evaluados\n\nDetalle de los controles, su evidencia y observaciones.\n\n## Plan de remediacion\n\nAcciones, responsables y plazos para cerrar las brechas.\n\n## Conclusiones\n\nResumen del estado de cumplimiento y recomendaciones.\n",
+)];
+
+/// Boilerplate para una evaluacion de riesgos.
+const RIESGOS_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[(
+    "contenido",
+    "",
+    "## Resumen ejecutivo\n\nRiesgos mas criticos y recomendaciones de tratamiento, para la gestion.\n\n## Alcance y metodologia\n\nQue se evalua y como se calcula el riesgo (probabilidad x impacto).\n\n## Activos\n\nInventario de activos en alcance y su criticidad.\n\n## Amenazas y vulnerabilidades\n\nAmenazas consideradas y debilidades que podrian explotar.\n\n## Analisis de riesgos\n\nPor cada riesgo: probabilidad, impacto y nivel resultante.\n\n## Tratamiento de riesgos\n\nDecision por riesgo (mitigar, aceptar, transferir, evitar) y controles.\n\n## Riesgo residual\n\nRiesgo remanente tras aplicar los controles.\n\n## Recomendaciones\n\nAcciones priorizadas y proximos pasos.\n",
+)];
+
+/// Boilerplate para un informe de threat hunting (caza de amenazas).
+const HUNTING_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[(
+    "contenido",
+    "",
+    "## Resumen ejecutivo\n\nQue se cazo, si se encontro actividad maliciosa y acciones recomendadas.\n\n## Hipotesis\n\nHipotesis de caza que guiaron el ejercicio.\n\n## Alcance y fuentes de datos\n\nSistemas, periodo y telemetria analizada (EDR, logs, red, etc.).\n\n## Metodologia\n\nEnfoque y TTPs buscados, mapeados a MITRE ATT&CK.\n\n## Hallazgos\n\nActividad detectada (maliciosa o anomala) con su evidencia.\n\n## Indicadores y detecciones\n\nIOCs encontrados y reglas de deteccion propuestas (Sigma/YARA).\n\n## Recomendaciones\n\nMejoras de visibilidad, nuevas detecciones y acciones de respuesta.\n\n## Conclusiones\n\nResultado de la caza y proximos ejercicios sugeridos.\n",
 )];
 
 /// Boilerplate para el retest / verificacion de remediacion.

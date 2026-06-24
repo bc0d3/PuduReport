@@ -232,9 +232,10 @@ pub fn default_layout(project_type: &str, sections: &[ReportSection]) -> Vec<Rep
             blocks.push(ReportBlock::simple("severity"));
             blocks.extend(sections_blocks());
         }
-        // Documento libre, CTI y respuesta a incidentes: portada, indice y prosa
-        // en markdown. Sin tabla de hallazgos ni resumen de severidades.
-        "documento" | "cti" | "incidente" => {
+        // Tipos de lienzo markdown (documento libre, CTI, DFIR y los defensivos):
+        // portada, indice y prosa en markdown. Sin tabla de hallazgos ni severidad.
+        "documento" | "cti" | "incidente" | "auditoria" | "cumplimiento" | "riesgos"
+        | "hunting" => {
             blocks.push(ReportBlock::simple("cover"));
             blocks.push(ReportBlock::simple("toc"));
             blocks.extend(sections_blocks());
@@ -397,7 +398,7 @@ pub fn template_for_type(project_type: &str) -> &'static str {
         "oscp" => "oscp",
         "htb" => "htb",
         "ejecutivo" => "ejecutivo",
-        "documento" => "documento-libre",
+        "documento" | "auditoria" | "cumplimiento" | "riesgos" | "hunting" => "documento-libre",
         "cti" => "cti",
         "incidente" => "incidente",
         "retest" => "retest",
