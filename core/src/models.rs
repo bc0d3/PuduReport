@@ -397,7 +397,9 @@ pub fn template_for_type(project_type: &str) -> &'static str {
         "oscp" => "oscp",
         "htb" => "htb",
         "ejecutivo" => "ejecutivo",
-        "documento" | "cti" | "incidente" => "documento-libre",
+        "documento" => "documento-libre",
+        "cti" => "cti",
+        "incidente" => "incidente",
         "retest" => "retest",
         // pentest, redteam y cualquier desconocido caen al diseno de pentest.
         _ => "pentest",
