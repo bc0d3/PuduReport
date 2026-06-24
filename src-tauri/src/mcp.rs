@@ -236,10 +236,15 @@ fn disconnect_desktop() -> Result<(), String> {
 // --- Claude Code: a traves de su CLI (evita el race con sus escrituras) ---
 
 fn run_claude(cli: &Path, args: &[&str]) -> Result<std::process::Output, String> {
-    Command::new(cli)
-        .args(args)
-        .output()
-        .map_err(|e| e.to_string())
+    let mut cmd = Command::new(cli);
+    cmd.args(args);
+    // Evita el parpadeo de una consola en Windows al invocar el CLI.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    cmd.output().map_err(|e| e.to_string())
 }
 
 fn connect_code(binary: &Path, workspace: &Path) -> Result<(), String> {

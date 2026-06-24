@@ -336,6 +336,13 @@ fn run_typst(
     ppi: Option<u32>,
 ) -> Result<()> {
     let mut cmd = Command::new(typst_bin);
+    // En Windows, spawnear el sidecar abre una consola que parpadea en cada
+    // compilacion; CREATE_NO_WINDOW la suprime. No-op en otras plataformas.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
     cmd.arg("compile").arg("--root").arg(root);
     if let Some(ppi) = ppi {
         cmd.arg("--format")
