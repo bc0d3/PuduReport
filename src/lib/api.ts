@@ -208,6 +208,11 @@ export function generatePdf(projectId: string, alsoExecutive = false): Promise<s
   return invoke("generate_pdf", { projectId, alsoExecutive });
 }
 
+/** Exporta un resumen de hallazgos a CSV con las columnas elegidas. Devuelve la ruta. */
+export function exportCsv(projectId: string, columns: string[]): Promise<string> {
+  return invoke("export_csv", { projectId, columns });
+}
+
 /** Renderiza el PDF a imagenes PNG (data URLs) para la vista previa embebida. */
 export function previewPdf(projectId: string): Promise<string[]> {
   return invoke("preview_pdf", { projectId });

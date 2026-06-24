@@ -5,6 +5,7 @@
 //! aqui solo se orquesta y se mapean errores a String para el frontend.
 
 mod db;
+mod export;
 mod git;
 mod mcp;
 mod pdf;
@@ -290,6 +291,18 @@ fn delete_project(state: State<AppState>, id: String) -> Result<(), String> {
 fn save_project(state: State<AppState>, id: String, meta: ProjectMeta) -> Result<(), String> {
     let root = current_root(&state)?;
     workspace::write_project_meta(&root, &id, &meta).map_err(|e| e.to_string())
+}
+
+/// Exporta un resumen de hallazgos a CSV (`build/<id>-resumen.csv`) con las
+/// columnas elegidas. Devuelve la ruta del archivo.
+#[tauri::command]
+fn export_csv(
+    state: State<AppState>,
+    project_id: String,
+    columns: Vec<String>,
+) -> Result<String, String> {
+    let root = current_root(&state)?;
+    export::export_csv(&root, &project_id, &columns)
 }
 
 // ---------------------------------------------------------------------------
@@ -839,6 +852,7 @@ pub fn run() {
             load_project,
             delete_project,
             save_project,
+            export_csv,
             list_findings,
             load_finding,
             create_finding,
