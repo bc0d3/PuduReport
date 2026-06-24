@@ -6,6 +6,8 @@ import type {
   CvssVersion,
   Finding,
   FindingTemplate,
+  GitBranch,
+  GitChange,
   GitCommit,
   GitState,
   McpClient,
@@ -246,6 +248,16 @@ export function gitStatus(projectId: string): Promise<GitState> {
 /** Historial de commits que tocan un proyecto. */
 export function gitLog(projectId: string): Promise<GitCommit[]> {
   return invoke("git_log", { projectId });
+}
+
+/** Ramas locales del workspace (la actual marcada). */
+export function gitBranches(): Promise<GitBranch[]> {
+  return invoke("git_branches");
+}
+
+/** Archivos de un proyecto que cambia un commit (para el panel de detalle). */
+export function gitCommitFiles(projectId: string, hash: string): Promise<GitChange[]> {
+  return invoke("git_commit_files", { projectId, hash });
 }
 
 // --- Integracion MCP (Claude Desktop / Claude Code) ---

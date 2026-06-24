@@ -191,6 +191,12 @@ export interface GitCommit {
   timestamp: number;
 }
 
+/** Una rama local del workspace. */
+export interface GitBranch {
+  name: string;
+  current: boolean;
+}
+
 /** Workspace reciente para la pantalla de bienvenida. */
 export interface RecentWorkspace {
   path: string;

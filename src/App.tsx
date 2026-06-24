@@ -213,7 +213,12 @@ function AppInner() {
           <PdfPreview projectId={activeProjectId} onPickProject={() => setView("proyectos")} />
         )}
         {view === "historial" && (
-          <History projectId={activeProjectId} onPickProject={() => setView("proyectos")} />
+          <History
+            projectId={activeProjectId}
+            projectName={activeProject?.name}
+            workspacePath={workspacePath}
+            onPickProject={() => setView("proyectos")}
+          />
         )}
         {view === "ajustes" && (
           <Settings

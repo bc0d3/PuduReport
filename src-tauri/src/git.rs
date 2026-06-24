@@ -153,6 +153,76 @@ pub fn log(root: &Path, project_id: &str, limit: usize) -> Result<Vec<GitCommit>
     Ok(out)
 }
 
+/// Una rama local del repositorio.
+#[derive(Serialize)]
+pub struct GitBranch {
+    pub name: String,
+    pub current: bool,
+}
+
+/// Ramas locales del workspace; la actual queda marcada con `current`.
+pub fn branches(root: &Path) -> Result<Vec<GitBranch>> {
+    let repo = match Repository::open(root) {
+        Ok(r) => r,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let current = match repo.head() {
+        Ok(h) if h.is_branch() => h.shorthand().map(|s| s.to_string()).ok(),
+        _ => None,
+    };
+    let mut out = Vec::new();
+    for b in repo.branches(Some(git2::BranchType::Local))? {
+        let (branch, _) = b?;
+        if let Some(name) = branch.name()?.map(|s| s.to_string()) {
+            let is_current = Some(&name) == current.as_ref();
+            out.push(GitBranch {
+                name,
+                current: is_current,
+            });
+        }
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(out)
+}
+
+/// Archivos que cambia un commit, SOLO los de la carpeta del proyecto (para que
+/// el detalle no mezcle otros proyectos del mismo workspace).
+pub fn commit_files(root: &Path, project_id: &str, hash: &str) -> Result<Vec<GitChange>> {
+    let repo = Repository::open(root)?;
+    let commit = repo.revparse_single(hash)?.peel_to_commit()?;
+    let tree = commit.tree()?;
+    let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
+    let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None)?;
+    let prefix = format!("{project_id}/");
+    let mut out = Vec::new();
+    diff.foreach(
+        &mut |delta, _| {
+            let status = match delta.status() {
+                git2::Delta::Added => "new",
+                git2::Delta::Deleted => "deleted",
+                git2::Delta::Renamed => "renamed",
+                _ => "modified",
+            };
+            let file = delta.new_file().path().or_else(|| delta.old_file().path());
+            if let Some(p) = file {
+                let path = p.to_string_lossy().to_string();
+                if path.starts_with(&prefix) {
+                    out.push(GitChange {
+                        path,
+                        status: status.to_string(),
+                    });
+                }
+            }
+            true
+        },
+        None,
+        None,
+        None,
+    )?;
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
+}
+
 /// Inicializa un repositorio git en el workspace si no existe.
 pub fn init(root: &Path) -> Result<()> {
     if Repository::open(root).is_ok() {

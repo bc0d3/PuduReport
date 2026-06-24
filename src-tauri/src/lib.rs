@@ -810,6 +810,25 @@ fn git_log(state: State<AppState>, project_id: String) -> Result<Vec<git::GitCom
     git::log(&root, &project_id, 50).map_err(|e| e.to_string())
 }
 
+/// Ramas locales del workspace (la actual marcada).
+#[tauri::command]
+fn git_branches(state: State<AppState>) -> Result<Vec<git::GitBranch>, String> {
+    let root = current_root(&state)?;
+    git::branches(&root).map_err(|e| e.to_string())
+}
+
+
+/// Archivos de un proyecto que cambia un commit (para el panel de detalle).
+#[tauri::command]
+fn git_commit_files(
+    state: State<AppState>,
+    project_id: String,
+    hash: String,
+) -> Result<Vec<git::GitChange>, String> {
+    let root = current_root(&state)?;
+    git::commit_files(&root, &project_id, &hash).map_err(|e| e.to_string())
+}
+
 /// Estado de la integracion con un cliente MCP ("desktop" | "code").
 #[tauri::command]
 fn mcp_status(state: State<AppState>, client: String) -> Result<mcp::McpStatus, String> {
@@ -882,6 +901,8 @@ pub fn run() {
             git_commit,
             git_status,
             git_log,
+            git_branches,
+            git_commit_files,
             mcp_status,
             mcp_connect,
             mcp_disconnect,
