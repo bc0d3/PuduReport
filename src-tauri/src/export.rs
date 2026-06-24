@@ -81,10 +81,7 @@ pub fn export_csv(root: &Path, project_id: &str, columns: &[String]) -> Result<S
         .collect();
 
     let mut csv = String::from("\u{FEFF}"); // BOM: Excel abre UTF-8 con acentos.
-    let header: Vec<String> = columns
-        .iter()
-        .map(|c| csv_escape(header_for(c)))
-        .collect();
+    let header: Vec<String> = columns.iter().map(|c| csv_escape(header_for(c))).collect();
     csv.push_str(&header.join(","));
     csv.push_str("\r\n");
 
