@@ -385,6 +385,8 @@ fn sections_for_type(project_type: &str) -> Vec<crate::models::ReportSection> {
         "redteam" => sections_from(REDTEAM_SECTION_BOILERPLATE),
         "ejecutivo" => sections_from(EJECUTIVO_SECTION_BOILERPLATE),
         "documento" => sections_from(DOCUMENTO_SECTION_BOILERPLATE),
+        "cti" => sections_from(CTI_SECTION_BOILERPLATE),
+        "incidente" => sections_from(INCIDENTE_SECTION_BOILERPLATE),
         "retest" => sections_from(RETEST_SECTION_BOILERPLATE),
         // pentest y desconocidos: scaffold generico de pentest.
         _ => default_sections(),
@@ -469,8 +471,24 @@ const EJECUTIVO_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[
 /// Boilerplate minimo para un documento libre: una sola seccion abierta.
 const DOCUMENTO_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[(
     "contenido",
-    "Contenido",
-    "Escribe aqui el contenido del documento. Puedes crear todas las secciones que necesites desde la pestaña Reporte.",
+    "",
+    "# Titulo del documento\n\nEscribi aca todo el contenido en markdown, desde la pestaña Contenido. Usa encabezados (##) para las secciones que necesites.",
+)];
+
+/// Boilerplate para un informe de inteligencia de amenazas (CTI). Un solo lienzo
+/// markdown con la estructura sugerida como encabezados; el usuario la construye.
+const CTI_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[(
+    "contenido",
+    "",
+    "## Resumen ejecutivo\n\nSintesis de la amenaza y las acciones recomendadas, en lenguaje no tecnico.\n\n## Resumen de la amenaza\n\nQue es la campaña, a quien apunta, desde cuando se observa y nivel de confianza.\n\n## Actor y atribucion\n\nActor o grupo asociado, alias, motivacion y base de la atribucion.\n\n## TTPs (MITRE ATT&CK)\n\nTacticas, tecnicas y procedimientos observados (ID de ATT&CK y uso).\n\n## Indicadores de compromiso (IOCs)\n\nHashes, dominios, IPs y URLs observados, con su contexto.\n\n## Infraestructura\n\nC2, dominios, hosting y relaciones entre los indicadores.\n\n## Recomendaciones y mitigaciones\n\nDetecciones, reglas (Sigma/YARA), bloqueos y acciones defensivas.\n\n## Referencias\n\nFuentes y enlaces del analisis.\n",
+)];
+
+/// Boilerplate para un informe de respuesta a incidentes (DFIR). Un solo lienzo
+/// markdown con la estructura sugerida; el usuario la completa.
+const INCIDENTE_SECTION_BOILERPLATE: &[(&str, &str, &str)] = &[(
+    "contenido",
+    "",
+    "## Resumen ejecutivo\n\nQue paso, cuando se detecto, impacto y estado actual, para la gestion.\n\n## Cronologia\n\nLinea de tiempo del incidente: fecha/hora, evento y fuente.\n\n## Alcance e impacto\n\nSistemas, datos y usuarios afectados; datos potencialmente comprometidos.\n\n## Deteccion\n\nComo se detecto: alertas, fuentes de datos y senales que lo dispararon.\n\n## Causa raiz\n\nVector inicial de acceso y causa de fondo.\n\n## Contencion\n\nAcciones para contener la amenaza y limitar su propagacion.\n\n## Erradicacion\n\nEliminacion de malware, cuentas, persistencia y accesos del atacante.\n\n## Recuperacion\n\nRestauracion de servicios y verificacion de que el entorno quedo limpio.\n\n## Lecciones aprendidas\n\nQue funciono, que no, y mejoras concretas para el futuro.\n\n## Indicadores de compromiso (IOCs)\n\nIndicadores observados durante el incidente, con su contexto.\n\n## Anexos\n\nEvidencia complementaria, comandos, capturas y artefactos.\n",
 )];
 
 /// Boilerplate para el retest / verificacion de remediacion.
@@ -1030,6 +1048,20 @@ mod tests {
         let (eje, _) = create_project(&tmp, "Ejecutivo", "ACME", "ejecutivo").unwrap();
         let xmeta = read_project_meta(&tmp, &eje).unwrap();
         assert!(xmeta.sections.iter().any(|s| s.key == "recomendaciones"));
+
+        // CTI: un solo lienzo markdown (seccion "contenido"), sin hallazgos.
+        let (cti, _) = create_project(&tmp, "CTI", "ACME", "cti").unwrap();
+        let cmeta = read_project_meta(&tmp, &cti).unwrap();
+        assert_eq!(cmeta.sections.len(), 1);
+        assert_eq!(cmeta.sections[0].key, "contenido");
+        assert!(cmeta.sections[0].body.contains("TTPs"));
+        assert!(!cmeta.layout.iter().any(|b| b.kind == "findings"));
+
+        // Respuesta a incidentes: un solo lienzo markdown con el scaffold DFIR.
+        let (inc, _) = create_project(&tmp, "IR", "ACME", "incidente").unwrap();
+        let imeta = read_project_meta(&tmp, &inc).unwrap();
+        assert_eq!(imeta.sections.len(), 1);
+        assert!(imeta.sections[0].body.contains("Causa raiz"));
 
         let _ = fs::remove_dir_all(&tmp);
     }

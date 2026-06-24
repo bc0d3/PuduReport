@@ -32,26 +32,35 @@ const TOP: RailItem[] = [
 interface Props {
   view: View;
   onNavigate: (view: View) => void;
+  /** Si el proyecto activo edita el reporte como markdown libre: "Hallazgos" pasa a "Contenido". */
+  freeMarkdown?: boolean;
   dark: boolean;
   onToggleTheme: () => void;
   onCloseWorkspace: () => void;
 }
 
 /** Barra de navegacion lateral de iconos (Tabler). */
-export function Rail({ view, onNavigate, dark, onToggleTheme, onCloseWorkspace }: Props) {
+export function Rail({ view, onNavigate, freeMarkdown, dark, onToggleTheme, onCloseWorkspace }: Props) {
   return (
     <nav className="rail">
-      {TOP.map((item) => (
-        <button
-          key={item.view}
-          className={`rail-btn ${view === item.view ? "active" : ""}`}
-          title={item.title}
-          onClick={() => onNavigate(item.view)}
-        >
-          <i className={`ti ${item.icon}`} />
-          <span>{item.label}</span>
-        </button>
-      ))}
+      {TOP.map((item) => {
+        // El editor cambia de cara segun el tipo: hallazgos o contenido markdown.
+        const editorContent = item.view === "editor" && freeMarkdown;
+        const icon = editorContent ? "ti-markdown" : item.icon;
+        const label = editorContent ? "Contenido" : item.label;
+        const title = editorContent ? "Contenido" : item.title;
+        return (
+          <button
+            key={item.view}
+            className={`rail-btn ${view === item.view ? "active" : ""}`}
+            title={title}
+            onClick={() => onNavigate(item.view)}
+          >
+            <i className={`ti ${icon}`} />
+            <span>{label}</span>
+          </button>
+        );
+      })}
       <span className="rail-spacer" />
       <button className="rail-btn" title="Cambiar de workspace" onClick={onCloseWorkspace}>
         <i className="ti ti-layout-grid" />

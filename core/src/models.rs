@@ -232,8 +232,9 @@ pub fn default_layout(project_type: &str, sections: &[ReportSection]) -> Vec<Rep
             blocks.push(ReportBlock::simple("severity"));
             blocks.extend(sections_blocks());
         }
-        // Documento libre: portada, indice y prosa.
-        "documento" => {
+        // Documento libre, CTI y respuesta a incidentes: portada, indice y prosa
+        // en markdown. Sin tabla de hallazgos ni resumen de severidades.
+        "documento" | "cti" | "incidente" => {
             blocks.push(ReportBlock::simple("cover"));
             blocks.push(ReportBlock::simple("toc"));
             blocks.extend(sections_blocks());
@@ -396,7 +397,7 @@ pub fn template_for_type(project_type: &str) -> &'static str {
         "oscp" => "oscp",
         "htb" => "htb",
         "ejecutivo" => "ejecutivo",
-        "documento" => "documento-libre",
+        "documento" | "cti" | "incidente" => "documento-libre",
         "retest" => "retest",
         // pentest, redteam y cualquier desconocido caen al diseno de pentest.
         _ => "pentest",

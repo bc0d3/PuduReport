@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "./lib/api";
 import type { PdfTemplate, ProjectMeta, ProjectSummary, WorkspaceMeta } from "./lib/types";
-import { familyForProject } from "./lib/projectTypes";
+import { familyForProject, usesFreeMarkdown } from "./lib/projectTypes";
 import { Rail, type View } from "./components/Rail";
 import { Welcome } from "./screens/Welcome";
 import { Projects } from "./screens/Projects";
@@ -11,6 +11,7 @@ import { PdfPreview } from "./screens/PdfPreview";
 import { History } from "./screens/History";
 import { Settings } from "./screens/Settings";
 import { FindingEditor } from "./views/FindingEditor";
+import { ContentEditor } from "./views/ContentEditor";
 import { ReportBuilder } from "./views/ReportBuilder";
 import { TemplateLibrary } from "./views/TemplateLibrary";
 import { ToastProvider, useToast } from "./components/Toast";
@@ -109,6 +110,10 @@ function AppInner() {
   // override de retest o una copia retest-* se ordenan como retest).
   const activeFamily = familyForProject(activeProject, pdfTemplates);
 
+  // Tipos de lienzo markdown libre (documento, CTI, DFIR): la pestaña de edicion
+  // muestra un editor markdown unico (Contenido) en vez de la lista de hallazgos.
+  const freeMarkdown = usesFreeMarkdown(activeProject?.project_type);
+
   // Directorio absoluto del proyecto activo, para adjuntar evidencias.
   const assetBase = workspacePath && activeProjectId ? `${workspacePath}/${activeProjectId}` : null;
 
@@ -136,6 +141,7 @@ function AppInner() {
       <Rail
         view={view}
         onNavigate={setView}
+        freeMarkdown={freeMarkdown}
         dark={dark}
         onToggleTheme={() => setDark((d) => !d)}
         onCloseWorkspace={() => {
@@ -156,17 +162,26 @@ function AppInner() {
             onDelete={deleteProjectById}
           />
         )}
-        {view === "editor" && (
-          <FindingEditor
-            key={activeProjectId ?? "none"}
-            projectId={activeProjectId}
-            assetBase={assetBase}
-            projectType={activeProject?.project_type}
-            family={activeFamily}
-            onGoToPreview={() => setView("preview")}
-            onPickProject={() => setView("proyectos")}
-          />
-        )}
+        {view === "editor" &&
+          (freeMarkdown ? (
+            <ContentEditor
+              key={activeProjectId ?? "none"}
+              projectId={activeProjectId}
+              assetBase={assetBase}
+              onGoToPreview={() => setView("preview")}
+              onPickProject={() => setView("proyectos")}
+            />
+          ) : (
+            <FindingEditor
+              key={activeProjectId ?? "none"}
+              projectId={activeProjectId}
+              assetBase={assetBase}
+              projectType={activeProject?.project_type}
+              family={activeFamily}
+              onGoToPreview={() => setView("preview")}
+              onPickProject={() => setView("proyectos")}
+            />
+          ))}
         {view === "reporte" && (
           <ReportBuilder
             key={activeProjectId ?? "none"}

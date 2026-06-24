@@ -85,6 +85,26 @@ export const PROJECT_TYPES: ProjectTypeInfo[] = [
     family: "narrative",
   },
   {
+    value: "cti",
+    label: "Inteligencia de amenazas (CTI)",
+    icon: "ti-radar-2",
+    desc: "Actor, TTPs (ATT&CK) e IOCs. Markdown puro, sin hallazgos.",
+    template: "documento-libre",
+    usesFindings: false,
+    exam: false,
+    family: "narrative",
+  },
+  {
+    value: "incidente",
+    label: "Respuesta a incidentes (DFIR)",
+    icon: "ti-alert-triangle",
+    desc: "Cronologia, causa raiz, contencion y lecciones. Markdown puro.",
+    template: "documento-libre",
+    usesFindings: false,
+    exam: false,
+    family: "narrative",
+  },
+  {
     value: "retest",
     label: "Retest / verificacion",
     icon: "ti-checkup-list",
@@ -111,6 +131,17 @@ export function typeLabel(value: string | undefined): string {
 /** Familia de render del tipo: agrupa los tipos en 3 modos de render/orden. */
 export function reportFamily(value: string | undefined): ProjectTypeInfo["family"] {
   return typeInfo(value).family;
+}
+
+/** Tipos cuyo cuerpo es un unico lienzo markdown libre (documento, CTI, DFIR). */
+const FREE_MARKDOWN_TYPES = new Set(["documento", "cti", "incidente"]);
+
+/**
+ * Si el reporte se edita como un solo documento markdown (pestaña Contenido) en
+ * vez de la lista de hallazgos. Para CTI, respuesta a incidentes y documento libre.
+ */
+export function usesFreeMarkdown(value: string | undefined): boolean {
+  return FREE_MARKDOWN_TYPES.has(value ?? "");
 }
 
 /**

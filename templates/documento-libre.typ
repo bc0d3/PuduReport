@@ -191,7 +191,11 @@
 #let block-section(key) = {
   let s = project.sections.find(x => x.key == key)
   if s != none and s.body.trim() != "" {
-    heading(level: 1, numbering: none, s.title)
+    // Titulo vacio (lienzo markdown libre): se renderiza solo el cuerpo, sin un
+    // encabezado de seccion de relleno.
+    if s.title.trim() != "" {
+      heading(level: 1, numbering: none, s.title)
+    }
     {
       set heading(outlined: false)
       eval(s.body, mode: "markup")
