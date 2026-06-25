@@ -817,7 +817,6 @@ fn git_branches(state: State<AppState>) -> Result<Vec<git::GitBranch>, String> {
     git::branches(&root).map_err(|e| e.to_string())
 }
 
-
 /// Archivos de un proyecto que cambia un commit (para el panel de detalle).
 #[tauri::command]
 fn git_commit_files(

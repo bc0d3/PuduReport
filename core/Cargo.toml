@@ -1,6 +1,6 @@
 [package]
 name = "pudureport-core"
-version = "0.0.11"
+version = "0.0.12"
 description = "Logica compartida de PuduReport: modelo de datos, CVSS, workspace y markdown"
 license = "GPL-3.0-only"
 edition = "2021"

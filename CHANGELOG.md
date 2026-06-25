@@ -2,6 +2,17 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.12] - 2026-06-24
+
+### Added
+- Cuatro tipos de reporte defensivos: Auditoria de seguridad, Cumplimiento / GRC, Evaluacion de riesgos y Threat hunting. Son de familia narrative (lienzo markdown unico) con la estructura precargada como encabezados, para rellenar rapido, igual que CTI y DFIR.
+
+### Changed
+- La seccion Historial (git local del workspace) se rediseña a una vista por proyecto, estilo cliente git: linea de tiempo de versiones del reporte con commit en linea, una fila de cambios sin guardar, un panel de detalle con los archivos de cada version (filtrados a la carpeta del reporte, sin mezclar otros proyectos), y un header con el nombre del reporte, la rama actual y la ruta del workspace.
+
+### Fixed
+- El editor de contenido markdown ("Contenido") ahora se decide por la plantilla efectiva del proyecto, no por su tipo: asignarle una plantilla de lienzo a cualquier proyecto cambia la pestaña a markdown.
+
 ## [0.0.11] - 2026-06-24
 
 ### Added

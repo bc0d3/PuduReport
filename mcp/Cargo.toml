@@ -1,6 +1,6 @@
 [package]
 name = "pudureport-mcp"
-version = "0.0.11"
+version = "0.0.12"
 description = "Servidor MCP de PuduReport: expone el workspace por stdio para que la IA del usuario lea y mejore reportes. No embebe ningun LLM."
 license = "GPL-3.0-only"
 edition = "2021"
