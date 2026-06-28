@@ -1,0 +1,36 @@
+# Gate de licencias (cargo-deny). Mantiene viable una futura relicencia comercial:
+# falla el build si entra una dependencia con copyleft fuerte (GPL/AGPL/LGPL/...).
+# Ver CLAUDE.md, "Relicenciamiento comercial reservado".
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+
+# Solo licencias permisivas, mas MPL-2.0 (copyleft DEBIL a nivel de archivo, que
+# si permite empaquetado propietario). Cualquier copyleft fuerte queda fuera y
+# rompe el build. Una expresion con OR (ej. "Apache-2.0 OR LGPL") pasa mientras
+# una de sus opciones este permitida, asi que LGPL como alternativa no bloquea.
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "0BSD",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "BSL-1.0",
+    "CC0-1.0",
+    "Unlicense",
+]
+
+# Los crates propios del workspace son GPL-3.0-only (la licencia publica actual).
+# Se permiten explicitamente solo aqui; un tercero GPL seguiria rompiendo el build.
+exceptions = [
+    { name = "pudureport", allow = ["GPL-3.0-only"] },
+    { name = "pudureport-core", allow = ["GPL-3.0-only"] },
+    { name = "pudureport-mcp", allow = ["GPL-3.0-only"] },
+]
