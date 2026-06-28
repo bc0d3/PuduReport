@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 import { useState } from "react";
 import type { Finding, FindingStatus } from "../lib/types";
 import { SEVERITY_ORDER } from "../lib/severity";

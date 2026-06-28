@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 // Definiciones de metricas CVSS para la UI de la calculadora.
 // El calculo del puntaje lo hace el backend Rust (comando calc_cvss); aqui solo
 // se arma el vector a partir de las selecciones del usuario.

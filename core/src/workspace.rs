@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 //! I/O de archivos del workspace: parseo/serializacion de YAML + markdown.
 //!
 //! Regla de oro (README.dev.md): los archivos en disco son la fuente de verdad.

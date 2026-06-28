@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 //! Export de resumen de hallazgos a CSV. Genera una tabla plana (sin el cuerpo
 //! ni la PoC) con las columnas que elija el usuario, para compartir un panorama
 //! rapido (ej. por correo). Excluye los hallazgos ocultos, igual que el PDF.

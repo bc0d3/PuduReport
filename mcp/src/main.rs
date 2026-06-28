@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 //! Servidor MCP de PuduReport (transporte stdio).
 //!
 //! Expone el workspace por stdio (JSON-RPC) para que la IA del usuario lea y

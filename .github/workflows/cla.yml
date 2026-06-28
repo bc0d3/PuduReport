@@ -1,0 +1,40 @@
+# Verificador de CLA: exige que todo contribuyente externo acepte el CLA antes
+# de mergear su PR. Ver CLA.md.
+#
+# ACTIVACION: este workflow necesita un secret PERSONAL_ACCESS_TOKEN (un token
+# clasico con scope 'repo') para registrar las firmas en signatures/cla.json.
+# Mientras el secret no exista, el paso no corre. El autor del repo esta en la
+# allowlist, asi que sus propios PRs no requieren firma.
+name: CLA
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla:
+    runs-on: ubuntu-latest
+    if: ${{ vars.CLA_ENABLED == 'true' }}
+    steps:
+      - name: Verificar CLA
+        uses: contributor-assistant/github-action@v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        with:
+          path-to-signatures: signatures/cla.json
+          path-to-document: https://github.com/bc0d3/PuduReport/blob/main/CLA.md
+          branch: main
+          allowlist: bc0d3,bot*
+          custom-pr-sign-comment: He leido y acepto el CLA del proyecto.
+          custom-notsigned-prcomment: >-
+            Gracias por tu PR. Antes de poder mergearlo necesitamos que aceptes
+            el CLA del proyecto. Responde a este PR con el comentario indicado.

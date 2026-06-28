@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 /// Tabla de lookup oficial CVSS v4.0 (MacroVector -> score base).
 /// Fuente: FIRST.org cvss-v4-calculator (BSD-2-Clause). Ordenada por clave para busqueda binaria.
 static CVSS4_LOOKUP: &[(&str, f64)] = &[

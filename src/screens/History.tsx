@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 import { useCallback, useEffect, useState } from "react";
 import * as api from "../lib/api";
 import type { GitBranch, GitChange, GitCommit, GitState } from "../lib/types";

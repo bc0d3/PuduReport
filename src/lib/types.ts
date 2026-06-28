@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 // Contrato de datos compartido con el backend Rust (serde).
 // Cualquier cambio aqui debe reflejarse en src-tauri/src/workspace.rs.
 // Regla de oro: los archivos en disco son la fuente de verdad; estos tipos

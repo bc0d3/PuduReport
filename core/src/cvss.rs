@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 //! Calculo de puntaje CVSS 3.1 y 4.0.
 //!
 //! 3.1: formula oficial del documento de especificacion de FIRST.org.

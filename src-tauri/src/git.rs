@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 //! Operaciones git sobre el workspace del usuario (no sobre el repo del codigo).
 //!
 //! Solo init y commit: el workspace es git-friendly (texto + assets) y el

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 // Secciones del cuerpo de un hallazgo. El archivo en disco sigue siendo un
 // markdown unico; la UI lo edita por secciones y al guardar lo reconcatena con
 // encabezados "## Titulo". Asi se mantiene legible y git-friendly (README.dev.md:

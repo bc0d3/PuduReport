@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 //! Pipeline de generacion de PDF.
 //!
 //! Separacion critica (README.dev.md): datos (`data.json`, generado) vs

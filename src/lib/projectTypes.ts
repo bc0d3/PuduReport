@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 // Catalogo de tipos de proyecto. El tipo se elige al crear el proyecto y define
 // el formulario (examen sin CVSS, tipos sin hallazgos), el scaffold de secciones
 // (backend) y la plantilla por defecto. Espeja models::template_for_type.

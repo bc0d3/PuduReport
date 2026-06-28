@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 import type { Severity } from "./types";
 
 export const SEVERITY_COLOR: Record<Severity, string> = {

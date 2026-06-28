@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 //! Indice SQLite para busqueda y filtros.
 //!
 //! NUNCA es fuente de verdad: se reconstruye por completo desde los archivos

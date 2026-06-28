@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 //! Conversor de markdown a markup de Typst.
 //!
 //! README.dev.md prefiere el paquete `cmarker` dentro del template, con fallback a

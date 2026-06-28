@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 
 type ToastKind = "ok" | "error" | "info";

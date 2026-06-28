@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 // Catalogo de CWE para el selector del editor de hallazgos.
 //
 // Orden y seleccion: ranking de HackerOne por cantidad de reportes (los mas

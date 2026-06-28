@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 import { useEffect, useState } from "react";
 import type { CvssResult, CvssVersion } from "../lib/types";
 import { buildVector, defaultSelections, groupsFor, parseVector } from "../lib/cvssMetrics";

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 //! Modelos de datos serializables compartidos con el frontend.
 //!
 //! Espejan los tipos de `src/lib/types.ts`. Cualquier cambio aqui debe

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 //! Punto de entrada de la libreria Tauri: estado de la app y comandos IPC.
 //!
 //! Cada comando devuelve `Result<T, String>` (convencion de README.dev.md).

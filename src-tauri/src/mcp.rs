@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 //! Integracion con clientes MCP (Claude Desktop y Claude Code).
 //!
 //! Conecta el binario `pudureport-mcp` (scoped al workspace abierto) al cliente

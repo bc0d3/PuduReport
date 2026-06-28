@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 // Sugerencias de fuentes para las plantillas de PDF. Es solo una lista para el
 // datalist: el usuario puede escribir cualquier fuente instalada en el sistema.
 // Vacio = la plantilla usa su fuente del sistema por defecto. Ampliable: agregar

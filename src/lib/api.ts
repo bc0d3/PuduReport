@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 bc0d3
+
 // Wrapper tipado de toda la comunicacion IPC con el backend Rust.
 // Regla de README.dev.md: ningun componente llama a invoke() directamente.
 import { invoke } from "@tauri-apps/api/core";
