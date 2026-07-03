@@ -9,70 +9,16 @@
 // IP en "activos afectados"); las secciones (Introduccion, Objetivo,
 // High-Level Summary, Metodologia...) se llenan en la pestaña Reporte.
 
+#import "theme.typ": *
+
 #let data = json("data.json")
 #let ws = data.workspace
 #let project = data.project
 #let brand = rgb(ws.branding.primary_color)
 
 // Fuentes: la del branding primero (si se definio), con el sistema de respaldo.
-#let body-font = if ws.branding.at("body_font", default: "") != "" {
-  (ws.branding.body_font, "Helvetica Neue", "Arial", "Liberation Sans")
-} else {
-  ("Helvetica Neue", "Arial", "Liberation Sans")
-}
-#let mono-font = if ws.branding.at("mono_font", default: "") != "" {
-  (ws.branding.mono_font, "JetBrains Mono", "SF Mono", "monospace")
-} else {
-  ("JetBrains Mono", "SF Mono", "monospace")
-}
-
-#let sev-color = (
-  critical: rgb("#a32d2d"),
-  high: rgb("#c2410c"),
-  medium: rgb("#ba7517"),
-  low: rgb("#639922"),
-  info: rgb("#78716c"),
-)
-#let sev-label = (
-  critical: "Critica",
-  high: "Alta",
-  medium: "Media",
-  low: "Baja",
-  info: "Informativa",
-)
-#let status-label = (
-  open: "Abierto",
-  fixed: "Corregido",
-  accepted: "Aceptado",
-  wontfix: "No se corregira",
-)
-#let status-color = (
-  open: rgb("#c2410c"),
-  fixed: rgb("#639922"),
-  accepted: rgb("#2563eb"),
-  wontfix: rgb("#78716c"),
-)
-#let status-chip(status) = box(
-  inset: (x: 6pt, y: 2pt),
-  radius: 3pt,
-  stroke: 0.7pt + status-color.at(status, default: rgb("#78716c")),
-  text(size: 8pt, weight: "bold", fill: status-color.at(status, default: rgb("#78716c")), upper(
-    status-label.at(status, default: status),
-  )),
-)
-#let vector-chip(vec) = box(
-  fill: luma(236),
-  stroke: 0.5pt + luma(200),
-  inset: (x: 6pt, y: 3pt),
-  radius: 3pt,
-  text(size: 8pt, fill: luma(60), font: mono-font, vec),
-)
-#let badge(text-content, fill-color) = box(
-  fill: fill-color,
-  inset: (x: 7pt, y: 3pt),
-  radius: 3pt,
-  text(fill: white, weight: "bold", size: 8pt, upper(text-content)),
-)
+#let body-font = default-body-font(ws.branding)
+#let mono-font = default-mono-font(ws.branding)
 
 #let watermark = ws.watermark
 #let report-title = "Offensive Security Certified Professional Exam Report"
@@ -82,6 +28,9 @@
 #show raw: set text(font: mono-font)
 #set par(justify: true, leading: 0.65em)
 #set heading(numbering: "1.1")
+// Encabezados intencionalmente monocromos (sin color de marca): convencion de
+// reporte de examen anonimizado, no un default sin migrar a theme.typ. Un
+// reporte OSCP no lleva el color del cliente en sus titulos.
 #show heading.where(level: 1): it => block(above: 1.4em, below: 0.6em, text(
   size: 15pt, weight: "bold", fill: luma(20), it,
 ))
@@ -95,20 +44,7 @@
 // Bloques de codigo: fondo oscuro con resaltado de sintaxis. La etiqueta de
 // lenguaje (```http, ```sql...) se muestra como cabecera del bloque.
 #set raw(theme: "code-dark.tmTheme")
-#show raw.where(block: true): it => block(
-  width: 100%,
-  fill: rgb("#1e1f24"),
-  radius: 4pt,
-  clip: true,
-  stroke: 0.5pt + rgb("#2c2d34"),
-)[
-  #if it.lang != none [
-    #block(width: 100%, fill: rgb("#2c2d34"), inset: (x: 9pt, y: 3pt))[
-      #text(size: 7pt, weight: "bold", fill: rgb("#9aa0aa"), tracking: 0.4pt, upper(it.lang))
-    ]
-  ]
-  #block(inset: 9pt, text(size: 8.5pt, fill: rgb("#e6e6e6"), it))
-]
+#show raw.where(block: true): it => render-code-block(it)
 
 // Tablas minimalistas (solo lineas horizontales, estilo booktabs).
 #set table(stroke: (_, y) => if y == 0 {
@@ -252,7 +188,7 @@
     #status-chip(f.status)
   ]
   if f.cvss_vector != "" {
-    block(above: 6pt, vector-chip(f.cvss_vector))
+    block(above: 6pt, vector-chip(f.cvss_vector, mono-font))
   }
   if f.affected.len() > 0 {
     block(above: 6pt)[*Objetivo / activos:* #f.affected.map(a => raw(a)).join(", ")]

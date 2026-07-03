@@ -857,6 +857,31 @@ pub fn list_finding_templates(root: &Path) -> Result<Vec<FindingTemplate>> {
                     id: f.id,
                     meta: f.meta,
                     body: f.body,
+                    builtin: false,
+                });
+            }
+        }
+    }
+    out.sort_by_key(|a| a.meta.title.to_lowercase());
+    Ok(out)
+}
+
+/// Lee las plantillas de hallazgos empaquetadas con la app (solo lectura),
+/// desde el directorio de recursos (`templates/finding-templates`). No falla
+/// si el directorio no existe: en ese caso simplemente no hay builtins.
+pub fn list_builtin_finding_templates(dir: &Path) -> Result<Vec<FindingTemplate>> {
+    let mut out = Vec::new();
+    if dir.exists() {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "md") {
+                let f = parse_finding_file(&path)?;
+                out.push(FindingTemplate {
+                    id: f.id,
+                    meta: f.meta,
+                    body: f.body,
+                    builtin: true,
                 });
             }
         }
@@ -880,18 +905,30 @@ pub fn save_finding_template(root: &Path, template: &FindingTemplate) -> Result<
 }
 
 /// Clona una plantilla de hallazgo a un proyecto, reemplazando {{variables}}.
+///
+/// Resuelve primero en la libreria del usuario y, si no esta, en
+/// `builtin_dir` (las plantillas empaquetadas con la app) — mismo orden que
+/// `resolve_template` ya usa para las plantillas PDF en pdf.rs.
 pub fn instantiate_template(
     root: &Path,
     project_id: &str,
     template_id: &str,
     vars: &std::collections::HashMap<String, String>,
+    builtin_dir: Option<&Path>,
 ) -> Result<Finding> {
     validate_id(project_id)?;
     validate_id(template_id)?;
-    let path = library_findings_dir(root).join(format!("{template_id}.md"));
-    if !path.exists() {
-        return Err(WorkspaceError::FindingNotFound(template_id.to_string()));
-    }
+    let user_path = library_findings_dir(root).join(format!("{template_id}.md"));
+    let path = if user_path.exists() {
+        user_path
+    } else {
+        match builtin_dir {
+            Some(dir) if dir.join(format!("{template_id}.md")).exists() => {
+                dir.join(format!("{template_id}.md"))
+            }
+            _ => return Err(WorkspaceError::FindingNotFound(template_id.to_string())),
+        }
+    };
     let template = parse_finding_file(&path)?;
 
     let title = replace_vars(&template.meta.title, vars);

@@ -594,6 +594,10 @@ pub struct FindingTemplate {
     pub id: String,
     pub meta: FindingMeta,
     pub body: String,
+    /// Empaquetada con la app (solo lectura) vs guardada por el usuario en el
+    /// workspace. Se calcula al listar, no se persiste en el .md.
+    #[serde(default)]
+    pub builtin: bool,
 }
 
 /// Snippet de texto reutilizable.

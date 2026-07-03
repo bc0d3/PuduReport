@@ -313,6 +313,15 @@ fn prepare_build(
         std::fs::copy(&theme, build_dir.join("code-dark.tmTheme"))?;
     }
 
+    // Copiar la libreria de diseno compartida (sev-color, badges, chips...) que
+    // las plantillas importan con `#import "theme.typ": *`; debe quedar junto
+    // a report.typ igual que code-dark.tmTheme, sin importar si la plantilla
+    // activa es builtin o un override en library/templates.
+    let design_theme = templates_dir.join("theme.typ");
+    if design_theme.exists() {
+        std::fs::copy(&design_theme, build_dir.join("theme.typ"))?;
+    }
+
     // Copiar los assets del proyecto junto a report.typ para que las imagenes
     // referenciadas como "assets/<uuid>.png" en markdown resuelvan en Typst.
     let src_assets = root.join(project_id).join("assets");

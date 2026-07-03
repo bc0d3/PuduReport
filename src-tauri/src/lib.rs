@@ -423,10 +423,22 @@ fn calc_cvss(version: CvssVersion, vector: String) -> Result<CvssResult, String>
 // Libreria de plantillas
 // ---------------------------------------------------------------------------
 
+/// Directorio de plantillas de hallazgos builtin, empaquetadas junto a las
+/// plantillas PDF (`templates/finding-templates`).
+fn builtin_finding_templates_dir(app: &AppHandle) -> PathBuf {
+    templates_dir(app).join("finding-templates")
+}
+
 #[tauri::command]
-fn list_finding_templates(state: State<AppState>) -> Result<Vec<FindingTemplate>, String> {
+fn list_finding_templates(
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<Vec<FindingTemplate>, String> {
     let root = current_root(&state)?;
-    workspace::list_finding_templates(&root).map_err(|e| e.to_string())
+    let mut out = workspace::list_builtin_finding_templates(&builtin_finding_templates_dir(&app))
+        .map_err(|e| e.to_string())?;
+    out.extend(workspace::list_finding_templates(&root).map_err(|e| e.to_string())?);
+    Ok(out)
 }
 
 #[tauri::command]
@@ -437,13 +449,15 @@ fn save_finding_template(state: State<AppState>, template: FindingTemplate) -> R
 
 #[tauri::command]
 fn instantiate_template(
+    app: AppHandle,
     state: State<AppState>,
     project_id: String,
     template_id: String,
     vars: std::collections::HashMap<String, String>,
 ) -> Result<Finding, String> {
     let root = current_root(&state)?;
-    workspace::instantiate_template(&root, &project_id, &template_id, &vars)
+    let builtin_dir = builtin_finding_templates_dir(&app);
+    workspace::instantiate_template(&root, &project_id, &template_id, &vars, Some(&builtin_dir))
         .map_err(|e| e.to_string())
 }
 
