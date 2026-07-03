@@ -40,7 +40,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["../templates/*"],
+    "resources": ["../templates/*", "../templates/finding-templates/**/*"],
     "externalBin": ["binaries/typst", "binaries/pudureport-mcp"]
   }
 }

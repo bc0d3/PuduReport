@@ -223,6 +223,8 @@ export interface FindingTemplate {
   id: string;
   meta: FindingMeta;
   body: string;
+  /** Empaquetada con la app (solo lectura) vs guardada por el usuario. */
+  builtin: boolean;
 }
 
 /** Snippet de texto reutilizable. */

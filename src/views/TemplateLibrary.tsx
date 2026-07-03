@@ -183,6 +183,50 @@ export function TemplateLibrary({
   );
   const builtinPdf = filteredPdf.filter((t) => t.builtin);
   const userPdf = filteredPdf.filter((t) => !t.builtin);
+  const builtinFindings = templates.filter((t) => t.builtin);
+  const userFindings = templates.filter((t) => !t.builtin);
+
+  // Copia una plantilla incluida a la biblioteca del workspace para editarla;
+  // el id vacio hace que save_finding_template genere uno nuevo a partir del
+  // titulo (misma logica que para las plantillas PDF).
+  async function duplicateFinding(t: FindingTemplate) {
+    const copy: FindingTemplate = { ...t, id: "", builtin: false };
+    const done = await guard(api.saveFindingTemplate(copy), "Plantilla duplicada a tu biblioteca");
+    if (done !== undefined) await reload();
+  }
+
+  function findingCard(t: FindingTemplate) {
+    return (
+      <div className="card" key={`${t.id}-${t.builtin}`}>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <div className="row" style={{ gap: 10 }}>
+            <SeverityBadge severity={t.meta.severity} />
+            <strong>{t.meta.title}</strong>
+            {t.meta.cwe.length > 0 && <span className="faint">{t.meta.cwe.join(", ")}</span>}
+          </div>
+          <div className="row" style={{ gap: 6 }}>
+            {t.builtin && (
+              <button
+                className="btn small"
+                title="Duplicar a tu biblioteca para editarla"
+                onClick={() => duplicateFinding(t)}
+              >
+                <i className="ti ti-copy" />
+              </button>
+            )}
+            <button
+              className="btn small"
+              disabled={!projectId}
+              title={projectId ? "" : "Selecciona un proyecto primero"}
+              onClick={() => setInstantiating(t)}
+            >
+              Insertar en proyecto
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     reload();
@@ -276,28 +320,31 @@ export function TemplateLibrary({
 
       {tab === "findings" && (
         <>
-          {templates.length === 0 && <div className="empty">Sin plantillas de hallazgos.</div>}
-          {templates.map((t) => (
-            <div className="card" key={t.id}>
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <div className="row" style={{ gap: 10 }}>
-                  <SeverityBadge severity={t.meta.severity} />
-                  <strong>{t.meta.title}</strong>
-                  {t.meta.cwe.length > 0 && (
-                    <span className="faint">{t.meta.cwe.join(", ")}</span>
-                  )}
-                </div>
-                <button
-                  className="btn small"
-                  disabled={!projectId}
-                  title={projectId ? "" : "Selecciona un proyecto primero"}
-                  onClick={() => setInstantiating(t)}
-                >
-                  Insertar en proyecto
-                </button>
+          {templates.length === 0 ? (
+            <div className="empty">Sin plantillas de hallazgos.</div>
+          ) : (
+            <>
+              <div className="tpl-section-head">
+                <h3>Tu biblioteca</h3>
+                <span className="faint">Plantillas que creaste o duplicaste en este workspace</span>
               </div>
-            </div>
-          ))}
+              {userFindings.length === 0 ? (
+                <div className="empty">
+                  Aun no tienes plantillas propias. Duplica una incluida para personalizarla.
+                </div>
+              ) : (
+                userFindings.map(findingCard)
+              )}
+
+              <div className="tpl-section-head" style={{ marginTop: 22 }}>
+                <h3>Incluidas</h3>
+                <span className="faint">
+                  29 clases de vulnerabilidad frecuentes, listas para insertar
+                </span>
+              </div>
+              {builtinFindings.map(findingCard)}
+            </>
+          )}
         </>
       )}
 
@@ -580,6 +627,7 @@ function TemplateForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =
         affected: [],
       },
       body,
+      builtin: false,
     };
     const done = await guard(api.saveFindingTemplate(template), "Plantilla guardada");
     if (done !== undefined) onSaved();

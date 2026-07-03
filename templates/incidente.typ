@@ -7,22 +7,16 @@
 // Consume build/data.json (generado por el backend). Separacion estricta:
 // estos .typ definen PRESENTACION; los datos llegan por JSON.
 
+#import "theme.typ": *
+
 #let data = json("data.json")
 #let ws = data.workspace
 #let project = data.project
 #let brand = rgb(ws.branding.primary_color)
 
 // Fuentes: la del branding primero (si se definio), con el sistema de respaldo.
-#let body-font = if ws.branding.at("body_font", default: "") != "" {
-  (ws.branding.body_font, "Helvetica Neue", "Arial", "Liberation Sans")
-} else {
-  ("Helvetica Neue", "Arial", "Liberation Sans")
-}
-#let mono-font = if ws.branding.at("mono_font", default: "") != "" {
-  (ws.branding.mono_font, "JetBrains Mono", "SF Mono", "monospace")
-} else {
-  ("JetBrains Mono", "SF Mono", "monospace")
-}
+#let body-font = default-body-font(ws.branding)
+#let mono-font = default-mono-font(ws.branding)
 
 // --- Configuracion de pagina + marca de agua ---
 #let watermark = ws.watermark
@@ -61,20 +55,7 @@
 
 // Bloques de codigo: fondo oscuro con resaltado + etiqueta de lenguaje.
 #set raw(theme: "code-dark.tmTheme")
-#show raw.where(block: true): it => block(
-  width: 100%,
-  fill: rgb("#1e1f24"),
-  radius: 4pt,
-  clip: true,
-  stroke: 0.5pt + rgb("#2c2d34"),
-)[
-  #if it.lang != none [
-    #block(width: 100%, fill: rgb("#2c2d34"), inset: (x: 9pt, y: 3pt))[
-      #text(size: 7pt, weight: "bold", fill: rgb("#9aa0aa"), tracking: 0.4pt, upper(it.lang))
-    ]
-  ]
-  #block(inset: 9pt, text(size: 8.5pt, fill: rgb("#e6e6e6"), it))
-]
+#show raw.where(block: true): it => render-code-block(it)
 
 // Linea opcional con gerencia y area del cliente, para la portada.
 #let org-line = {
