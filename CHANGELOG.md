@@ -2,6 +2,16 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.13] - 2026-07-03
+
+### Added
+- Biblioteca de 29 plantillas de hallazgos predefinidas (vulnerabilidades web frecuentes), listas para insertar en cualquier proyecto sin redactarlas desde cero.
+- Guia de estilo de contenido (CONTENT-STYLE.md) para mantener la redaccion de hallazgos consistente y entendible por perfiles tecnicos y no tecnicos.
+- Vocabulario de tags documentado para las plantillas PDF (TAGS.md).
+
+### Changed
+- Las 8 plantillas PDF ahora comparten un sistema de diseno Typst comun (colores, badges, chips, fuentes), eliminando duplicacion y evitando que diverjan visualmente entre si.
+
 ## [0.0.12] - 2026-06-24
 
 ### Added
