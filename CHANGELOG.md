@@ -2,6 +2,15 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.14] - 2026-07-03
+
+### Added
+- Nombre de export estandar para PDF y CSV (`Cliente-Tipo-Fecha`), en vez del id interno del proyecto. Los examenes OSCP/HTB conservan su convencion de submission.
+- Columnas de Vector CVSS y Version CVSS como opcionales en el export CSV de hallazgos.
+- Renombrar un proyecto directamente desde la lista, sin entrar al reporte.
+- Ocultar campos puntuales de un hallazgo en el PDF (Activos afectados, Descripcion, Impacto, Prueba de concepto, Remediacion) sin ocultar el hallazgo entero.
+- Herramienta MCP `save_pdf_template`: el asistente de IA conectado puede crear o modificar plantillas PDF en su propia biblioteca (nunca las incluidas, nunca una editada por un humano, y sin aplicarlas sola a un proyecto). Documentado en `docs/mcp-security-assessment.md`.
+
 ## [0.0.13] - 2026-07-03
 
 ### Added
