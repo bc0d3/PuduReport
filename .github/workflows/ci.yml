@@ -67,7 +67,13 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit
-      - run: cargo audit
+      # RUSTSEC-2026-0194/0195 (quick-xml 0.39.4, DoS): dependencia transitiva
+      # via plist -> tauri (Info.plist del bundle de macOS, no parsea entrada
+      # de usuario/red en runtime). plist 1.9.0 (la ultima publicada) sigue
+      # fijando quick-xml ^0.39.2 y tauri 2.11.5 (la ultima) no la actualizo;
+      # no hay combinacion de bumps que la resuelva hoy. Quitar el --ignore en
+      # cuanto plist/tauri publiquen un fix.
+      - run: cargo audit --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195
 
   # Gate de licencias: bloquea dependencias con copyleft fuerte (GPL/AGPL/LGPL)
   # para mantener viable una futura relicencia comercial. El copyleft debil
