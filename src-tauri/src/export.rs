@@ -111,7 +111,10 @@ pub fn export_csv(root: &Path, project_id: &str, columns: &[String]) -> Result<S
 
     let build_dir = root.join(project_id).join("build");
     std::fs::create_dir_all(&build_dir).map_err(|e| e.to_string())?;
-    let path = build_dir.join(format!("{}-resumen.csv", naming::standard_basename(&project)));
+    let path = build_dir.join(format!(
+        "{}-resumen.csv",
+        naming::standard_basename(&project)
+    ));
     std::fs::write(&path, csv).map_err(|e| e.to_string())?;
     Ok(path.display().to_string())
 }

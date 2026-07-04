@@ -93,7 +93,10 @@ mod tests {
     fn sanitize_filename_part_basic() {
         assert_eq!(sanitize_filename_part("ACME Corp"), "ACME-Corp");
         assert_eq!(sanitize_filename_part("  "), "Informe");
-        assert_eq!(sanitize_filename_part("Acme S.A. / Chile"), "Acme-S-A-Chile");
+        assert_eq!(
+            sanitize_filename_part("Acme S.A. / Chile"),
+            "Acme-S-A-Chile"
+        );
         assert_eq!(sanitize_filename_part("Múltiples Áéíóú"), "M-ltiples");
     }
 

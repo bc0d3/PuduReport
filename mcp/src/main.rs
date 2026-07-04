@@ -627,10 +627,9 @@ impl PuduReportServer {
         // No pisar una plantilla que no creo esta misma herramienta: ni una
         // editada a mano por un humano, ni una legacy sin metadata (ai_generated
         // ausente = false, tratada igual de protegida).
-        let typ_path =
-            workspace::user_templates_dir(&root).join(format!("{}.typ", args.name));
-        let already_ai_generated = workspace::read_user_template_meta(&root, &args.name)
-            .is_some_and(|m| m.ai_generated);
+        let typ_path = workspace::user_templates_dir(&root).join(format!("{}.typ", args.name));
+        let already_ai_generated =
+            workspace::read_user_template_meta(&root, &args.name).is_some_and(|m| m.ai_generated);
         if typ_path.exists() && !already_ai_generated {
             return Err(McpError::invalid_params(
                 format!(
@@ -641,8 +640,7 @@ impl PuduReportServer {
             ));
         }
 
-        workspace::save_template_source(&root, &args.name, &args.typst_source)
-            .map_err(internal)?;
+        workspace::save_template_source(&root, &args.name, &args.typst_source).map_err(internal)?;
         let meta = pudureport_core::models::TemplateMeta {
             title: args.title,
             description: args.description,
@@ -869,7 +867,10 @@ mod tests {
         let (root, _pid) = temp_workspace("tpl-create", "pentest");
         let srv = PuduReportServer::new(root.clone());
         let msg = srv
-            .save_pdf_template(Parameters(template_args("mi-plantilla", "#set page(margin: 1cm)")))
+            .save_pdf_template(Parameters(template_args(
+                "mi-plantilla",
+                "#set page(margin: 1cm)",
+            )))
             .await
             .expect("crea la plantilla");
         assert!(msg.contains("mi-plantilla"));

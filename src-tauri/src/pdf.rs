@@ -446,8 +446,10 @@ pub fn generate_pdf(
         let exec_src = resolve_template(root, templates_dir, "ejecutivo")?;
         let exec_typ = build_dir.join("report-ejecutivo.typ");
         std::fs::copy(&exec_src, &exec_typ)?;
-        let exec_pdf =
-            build_dir.join(format!("{}-ejecutivo.pdf", naming::standard_basename(&project)));
+        let exec_pdf = build_dir.join(format!(
+            "{}-ejecutivo.pdf",
+            naming::standard_basename(&project)
+        ));
         run_typst(typst_bin, root, &exec_typ, &exec_pdf, None)?;
         out.push(exec_pdf);
     }
