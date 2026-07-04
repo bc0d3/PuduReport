@@ -9,10 +9,10 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run lint
@@ -25,10 +25,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
       # Toolchain fijo (no @stable) para que clippy/fmt sean deterministas y
       # coincidan con el entorno local; se sube a mano cuando convenga.
       - uses: dtolnay/rust-toolchain@1.93.0
@@ -62,7 +62,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.93.0
       - uses: taiki-e/install-action@v2
         with:
@@ -81,16 +81,16 @@ jobs:
   licenses:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.93.0
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny
       - name: Licencias de crates Rust (cargo-deny)
         run: cargo deny check licenses
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Licencias de dependencias npm (produccion)
         run: |
