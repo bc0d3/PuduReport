@@ -10,4 +10,5 @@
 pub mod cvss;
 pub mod markdown;
 pub mod models;
+pub mod sections;
 pub mod workspace;

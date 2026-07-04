@@ -22,9 +22,12 @@ interface Props {
 const CONSENT =
   "Al conectar, el TEXTO de los hallazgos de este workspace queda accesible para tu cliente de " +
   "IA. Tu IA tambien podra SUBIR imagenes nuevas al workspace para ilustrar el reporte, pero " +
-  "NUNCA puede leer las evidencias existentes. Importante: si el cliente usa un modelo en la " +
-  "nube, el texto (y cualquier imagen que suba, porque ya la vio) SALE del equipo. Para trabajo " +
-  "bajo NDA estricto, usa un modelo local (ej. Ollama). Aceptas el riesgo y continuas?";
+  "NUNCA puede leer las evidencias existentes. Tambien podra crear o modificar plantillas PDF, " +
+  "pero SOLO en tu propia biblioteca (nunca las incluidas, nunca una que edites vos) y sin " +
+  "aplicarlas sola a un proyecto: la revisas vos antes de usarla. Importante: si el cliente usa " +
+  "un modelo en la nube, el texto (y cualquier imagen que suba, porque ya la vio) SALE del " +
+  "equipo. Para trabajo bajo NDA estricto, usa un modelo local (ej. Ollama). Aceptas el riesgo y " +
+  "continuas?";
 
 /** Tarjeta de integracion con un cliente MCP (Claude Desktop o Claude Code). */
 export function McpClientCard({ client, title, installLabel, note, workspacePath }: Props) {
@@ -57,10 +60,11 @@ export function McpClientCard({ client, title, installLabel, note, workspacePath
         <div style={{ flex: 1, minWidth: 0 }}>
           <strong>{title}</strong>
           <p className="faint" style={{ fontSize: 12, margin: "6px 0 0", lineHeight: 1.5 }}>
-            Permite que tu cliente de IA lea y mejore el texto de los hallazgos, y suba imagenes
-            nuevas para ilustrarlos. No lee las evidencias existentes: solo texto y las imagenes
-            que el mismo sube. PuduReport no manda nada a ningun lado: el cliente lanza el servidor
-            local por stdio.
+            Permite que tu cliente de IA lea y mejore el texto de los hallazgos, suba imagenes
+            nuevas para ilustrarlos, y cree o modifique plantillas PDF en tu propia biblioteca (sin
+            tocar las incluidas ni las tuyas, y sin aplicarlas sola). No lee las evidencias
+            existentes: solo texto y las imagenes que el mismo sube. PuduReport no manda nada a
+            ningun lado: el cliente lanza el servidor local por stdio.
           </p>
           <p className="faint" style={{ fontSize: 12, margin: "6px 0 0", lineHeight: 1.5 }}>
             {note}

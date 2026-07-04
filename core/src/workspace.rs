@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 
 use crate::models::{
     Finding, FindingMeta, FindingStatus, FindingTemplate, ProjectMeta, ProjectStats,
-    ProjectSummary, SeverityCounts, Snippet, WorkspaceMeta, WorkspaceStats,
+    ProjectSummary, SeverityCounts, Snippet, TemplateMeta, WorkspaceMeta, WorkspaceStats,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -342,6 +342,7 @@ fn example_findings() -> Vec<Finding> {
                 affected: vec!["https://app.demo.example/login".to_string()],
                 hidden: false,
                 new_in_retest: false,
+                hidden_fields: Vec::new(),
             },
             body: "## Descripcion\n\nEl campo de usuario del formulario de inicio de sesion no valida ni parametriza la entrada antes de construir la consulta SQL. Esto permite a un atacante alterar la logica de la consulta e interactuar directamente con la base de datos.\n\n## Impacto\n\nUn atacante puede omitir la autenticacion, extraer informacion sensible de la base de datos (credenciales, datos personales) y, segun la configuracion del motor, ejecutar comandos en el sistema operativo subyacente.\n\n## Prueba de concepto\n\nEnviando el siguiente valor en el campo de usuario se omite la verificacion de credenciales:\n\n```\nusuario: admin' OR '1'='1' -- \npassword: cualquier_cosa\n```\n\nLa aplicacion responde con una sesion valida sin conocer la contrasena real.\n\n## Remediacion\n\nUtilizar consultas parametrizadas (prepared statements) o un ORM que las aplique por defecto. Validar y normalizar toda entrada del usuario y aplicar el principio de minimo privilegio a la cuenta de base de datos.".to_string(),
         },
@@ -359,6 +360,7 @@ fn example_findings() -> Vec<Finding> {
                 affected: vec!["https://api.demo.example/v1/users/{id}".to_string()],
                 hidden: false,
                 new_in_retest: false,
+                hidden_fields: Vec::new(),
             },
             body: "## Descripcion\n\nEl endpoint de la API que devuelve datos de un usuario utiliza un identificador numerico secuencial sin verificar que el solicitante tenga permiso sobre ese recurso. Cualquier usuario autenticado puede acceder a los datos de otros.\n\n## Impacto\n\nExposicion masiva de informacion de otros usuarios (datos personales, configuracion de cuenta) recorriendo los identificadores. Constituye una violacion de confidencialidad a nivel de toda la base de usuarios.\n\n## Prueba de concepto\n\nAutenticado como el usuario con identificador 1001, la siguiente peticion devuelve los datos de otro usuario:\n\n```\nGET /v1/users/1002 HTTP/1.1\nHost: api.demo.example\nAuthorization: Bearer <token-del-usuario-1001>\n```\n\nLa respuesta contiene los datos del usuario 1002.\n\n## Remediacion\n\nAplicar controles de autorizacion a nivel de objeto en cada peticion, verificando que el recurso pertenezca al usuario autenticado. Considerar el uso de identificadores no predecibles (UUID) como defensa en profundidad.".to_string(),
         },
@@ -375,6 +377,7 @@ fn example_findings() -> Vec<Finding> {
                 affected: vec!["https://app.demo.example".to_string()],
                 hidden: false,
                 new_in_retest: false,
+                hidden_fields: Vec::new(),
             },
             body: "## Descripcion\n\nLas respuestas de la aplicacion no incluyen varias cabeceras de seguridad recomendadas, como Content-Security-Policy, Strict-Transport-Security y X-Content-Type-Options.\n\n## Impacto\n\nLa ausencia de estas cabeceras facilita ataques del lado del cliente como cross-site scripting, clickjacking o la degradacion de la conexion a HTTP. Por si sola es de bajo riesgo, pero amplifica el impacto de otras vulnerabilidades.\n\n## Prueba de concepto\n\nAl inspeccionar las cabeceras de respuesta de la pagina principal no se observan las cabeceras de seguridad mencionadas:\n\n```\nGET / HTTP/1.1\nHost: app.demo.example\n```\n\n## Remediacion\n\nConfigurar el servidor web o la aplicacion para enviar las cabeceras de seguridad apropiadas. Definir una Content-Security-Policy restrictiva, habilitar HSTS y agregar X-Content-Type-Options: nosniff.".to_string(),
         },
@@ -1008,6 +1011,59 @@ pub fn save_snippet(root: &Path, snippet: &Snippet) -> Result<()> {
     validate_id(&id)?;
     let content = format!("# {}\n\n{}\n", snippet.title, snippet.body.trim_end());
     fs::write(dir.join(format!("{id}.md")), content)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Plantillas .typ (biblioteca del usuario)
+// ---------------------------------------------------------------------------
+//
+// Las plantillas incluidas viven fuera del workspace (recurso de la app); solo
+// las de la libreria del usuario se leen/escriben desde aca. Comparte la
+// validacion anti-traversal de `validate_id` (sin `/`, `\`, `..`, ni mas de un
+// componente de ruta).
+
+/// Directorio de plantillas del usuario dentro del workspace.
+pub fn user_templates_dir(root: &Path) -> PathBuf {
+    root.join("library/templates")
+}
+
+/// Valida el nombre de una plantilla .typ contra path traversal (mismo
+/// criterio que cualquier otro id del workspace: sin separadores, sin `..`,
+/// un unico componente de ruta).
+pub fn validate_template_name(name: &str) -> Result<()> {
+    validate_id(name)
+}
+
+/// Lee la metadata (`<name>.meta.yaml`) de una plantilla de la libreria del
+/// usuario. `None` si no existe el nombre, el archivo de metadata o no es un
+/// YAML valido (una plantilla sin metadata sidecar es valida: cae a
+/// `TemplateMeta::default()` en quien la liste).
+pub fn read_user_template_meta(root: &Path, name: &str) -> Option<TemplateMeta> {
+    validate_id(name).ok()?;
+    let content =
+        fs::read_to_string(user_templates_dir(root).join(format!("{name}.meta.yaml"))).ok()?;
+    serde_yaml::from_str(&content).ok()
+}
+
+/// Guarda el codigo fuente `.typ` de una plantilla en la libreria del usuario
+/// (la crea si no existe, la sobreescribe si ya existe).
+pub fn save_template_source(root: &Path, name: &str, content: &str) -> Result<()> {
+    validate_id(name)?;
+    let dir = user_templates_dir(root);
+    fs::create_dir_all(&dir)?;
+    fs::write(dir.join(format!("{name}.typ")), content)?;
+    Ok(())
+}
+
+/// Guarda la metadata (`.meta.yaml`) de una plantilla en la libreria del
+/// usuario.
+pub fn save_template_meta(root: &Path, name: &str, meta: &TemplateMeta) -> Result<()> {
+    validate_id(name)?;
+    let dir = user_templates_dir(root);
+    fs::create_dir_all(&dir)?;
+    let yaml = serde_yaml::to_string(meta)?;
+    fs::write(dir.join(format!("{name}.meta.yaml")), yaml)?;
     Ok(())
 }
 

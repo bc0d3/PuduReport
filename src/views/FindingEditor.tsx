@@ -125,6 +125,25 @@ export function FindingEditor({
     });
   }
 
+  // Campos ocultos en el PDF sin ocultar el hallazgo entero (affected y las
+  // secciones del body). Mismo patron visual que el toggle de bloques/secciones
+  // en ReportBuilder.tsx (icono ti-eye / ti-eye-off).
+  function isFieldHidden(key: string) {
+    return current?.meta.hidden_fields?.includes(key) ?? false;
+  }
+
+  function toggleFieldHidden(key: string) {
+    patchMeta((m) => {
+      const hidden = m.hidden_fields ?? [];
+      return {
+        ...m,
+        hidden_fields: hidden.includes(key)
+          ? hidden.filter((h) => h !== key)
+          : [...hidden, key],
+      };
+    });
+  }
+
   function setSection(key: string, value: string) {
     if (!current) return;
     const next = { ...sectionsRef.current, [key]: value };
@@ -417,7 +436,16 @@ export function FindingEditor({
           )}
 
           <div className="field" style={{ marginBottom: 14 }}>
-            <label>Activos afectados</label>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <label>Activos afectados</label>
+              <button
+                className={`toggle ${isFieldHidden("affected") ? "off" : ""}`}
+                title={isFieldHidden("affected") ? "Oculto en el PDF" : "Visible en el PDF"}
+                onClick={() => toggleFieldHidden("affected")}
+              >
+                <i className={`ti ${isFieldHidden("affected") ? "ti-eye-off" : "ti-eye"}`} />
+              </button>
+            </div>
             <div className="tag-list" style={{ marginBottom: 6 }}>
               {current.meta.affected.map((a, i) => (
                 <span className="tag" key={`${a}-${i}`}>
@@ -453,7 +481,16 @@ export function FindingEditor({
           <div className="section-grid">
             {FINDING_SECTIONS.map((s) => (
               <div className={`field ${s.full ? "full" : ""}`} key={s.key}>
-                <label>{s.title}</label>
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <label>{s.title}</label>
+                  <button
+                    className={`toggle ${isFieldHidden(s.key) ? "off" : ""}`}
+                    title={isFieldHidden(s.key) ? "Oculto en el PDF" : "Visible en el PDF"}
+                    onClick={() => toggleFieldHidden(s.key)}
+                  >
+                    <i className={`ti ${isFieldHidden(s.key) ? "ti-eye-off" : "ti-eye"}`} />
+                  </button>
+                </div>
                 <MarkdownEditor
                   key={`${current.id}-${s.key}`}
                   value={sections[s.key] ?? ""}

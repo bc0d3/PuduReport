@@ -105,6 +105,12 @@ pub struct FindingMeta {
     /// en disco; es un flag de inclusion, independiente del estado.
     #[serde(default, skip_serializing_if = "is_false")]
     pub hidden: bool,
+    /// Oculta campos puntuales del hallazgo en el PDF sin ocultarlo entero.
+    /// Valores: "affected" y las claves de seccion del body ("descripcion",
+    /// "impacto", "poc", "remediacion"; ver `src/lib/sections.ts` y
+    /// `sections::strip_hidden_sections`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_fields: Vec<String>,
     /// Marca el hallazgo como NUEVO detectado durante un retest. Solo relevante
     /// en reportes de familia retest; la plantilla los muestra aparte.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -627,6 +633,28 @@ pub struct PdfTemplate {
     /// el render. Explicita (del meta) o derivada de los tags como respaldo.
     #[serde(default)]
     pub family: String,
+    /// La escribio/edito una IA via MCP (`save_pdf_template`), sin revision
+    /// humana todavia. Solo aplica a plantillas de la libreria del usuario; las
+    /// incluidas nunca lo tienen. La UI la resalta; no cambia como se aplica.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ai_generated: bool,
+}
+
+/// Metadata sidecar de una plantilla (`<name>.meta.yaml`), solo en la
+/// libreria del usuario. Las plantillas incluidas no tienen este archivo.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TemplateMeta {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+    /// Tags para filtrar y derivar la familia de render (ver
+    /// `derive_family_from_tags` en `src-tauri`).
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Ver `PdfTemplate::ai_generated`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ai_generated: bool,
 }
 
 /// Resultado del calculo CVSS.

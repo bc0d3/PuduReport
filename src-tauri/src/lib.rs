@@ -11,6 +11,7 @@ mod db;
 mod export;
 mod git;
 mod mcp;
+mod naming;
 mod pdf;
 
 use std::path::PathBuf;
@@ -23,7 +24,7 @@ use tauri_plugin_store::StoreExt;
 // Logica compartida en el crate pudureport-core.
 use pudureport_core::models::{
     CvssResult, CvssVersion, Finding, FindingTemplate, PdfTemplate, ProjectMeta, ProjectSummary,
-    Snippet, WorkspaceMeta, WorkspaceStats,
+    Snippet, TemplateMeta, WorkspaceMeta, WorkspaceStats,
 };
 use pudureport_core::{cvss, workspace};
 
@@ -296,8 +297,8 @@ fn save_project(state: State<AppState>, id: String, meta: ProjectMeta) -> Result
     workspace::write_project_meta(&root, &id, &meta).map_err(|e| e.to_string())
 }
 
-/// Exporta un resumen de hallazgos a CSV (`build/<id>-resumen.csv`) con las
-/// columnas elegidas. Devuelve la ruta del archivo.
+/// Exporta un resumen de hallazgos a CSV (`build/{Cliente}-{Tipo}-{fecha}-resumen.csv`)
+/// con las columnas elegidas. Devuelve la ruta del archivo.
 #[tauri::command]
 fn export_csv(
     state: State<AppState>,
@@ -483,20 +484,9 @@ fn list_pdf_templates(app: AppHandle, state: State<AppState>) -> Result<Vec<PdfT
 
     // Plantillas del usuario en el workspace.
     if let Ok(root) = current_root(&state) {
-        collect_typ(&root.join("library/templates"), false, &mut out);
+        collect_typ(&workspace::user_templates_dir(&root), false, &mut out);
     }
     Ok(out)
-}
-
-/// Metadata opcional de una plantilla (templates/<name>.meta.yaml).
-#[derive(Default, serde::Deserialize, serde::Serialize)]
-struct TemplateMeta {
-    #[serde(default)]
-    title: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    tags: Vec<String>,
 }
 
 /// Familia de render derivada de los tags: un solo concepto, el tag manda. El
@@ -541,25 +531,12 @@ fn collect_typ(dir: &std::path::Path, builtin: bool, out: &mut Vec<PdfTemplate>)
                         family,
                         name,
                         builtin,
+                        ai_generated: meta.ai_generated,
                     });
                 }
             }
         }
     }
-}
-
-/// Directorio de plantillas del usuario dentro del workspace.
-fn user_templates_dir(root: &std::path::Path) -> std::path::PathBuf {
-    root.join("library/templates")
-}
-
-/// Valida el nombre de una plantilla .typ contra path traversal (mismo criterio
-/// que validate_id de core: sin separadores ni `..`).
-fn validate_template_name(name: &str) -> Result<(), String> {
-    if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
-        return Err(format!("nombre de plantilla invalido: {name}"));
-    }
-    Ok(())
 }
 
 /// Canonicaliza `path` y verifica que quede dentro del workspace abierto. Evita
@@ -589,11 +566,11 @@ fn duplicate_template(
     state: State<AppState>,
     name: String,
 ) -> Result<String, String> {
-    validate_template_name(&name)?;
+    workspace::validate_template_name(&name).map_err(|e| e.to_string())?;
     let root = current_root(&state)?;
     // Buscar el origen: primero libreria del usuario, luego builtin.
     let src = {
-        let user = user_templates_dir(&root).join(format!("{name}.typ"));
+        let user = workspace::user_templates_dir(&root).join(format!("{name}.typ"));
         if user.exists() {
             user
         } else {
@@ -603,7 +580,7 @@ fn duplicate_template(
     if !src.exists() {
         return Err(format!("plantilla no encontrada: {name}"));
     }
-    let dir = user_templates_dir(&root);
+    let dir = workspace::user_templates_dir(&root);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
     // Nombre unico: <name>-copia, -copia-2, ...
@@ -614,11 +591,15 @@ fn duplicate_template(
         n += 1;
     }
     std::fs::copy(&src, dir.join(format!("{new_name}.typ"))).map_err(|e| e.to_string())?;
-    // Copiar metadata si existe (junto al origen).
+    // Copiar metadata si existe (junto al origen). Una copia manual de un
+    // humano nunca queda marcada ai_generated, aunque el original lo estuviera.
     if let Some(src_dir) = src.parent() {
         let meta_src = src_dir.join(format!("{name}.meta.yaml"));
-        if meta_src.exists() {
-            let _ = std::fs::copy(meta_src, dir.join(format!("{new_name}.meta.yaml")));
+        if let Ok(content) = std::fs::read_to_string(meta_src) {
+            if let Ok(mut meta) = serde_yaml::from_str::<TemplateMeta>(&content) {
+                meta.ai_generated = false;
+                let _ = workspace::save_template_meta(&root, &new_name, &meta);
+            }
         }
     }
     Ok(new_name)
@@ -631,9 +612,9 @@ fn read_template_source(
     state: State<AppState>,
     name: String,
 ) -> Result<String, String> {
-    validate_template_name(&name)?;
+    workspace::validate_template_name(&name).map_err(|e| e.to_string())?;
     let root = current_root(&state)?;
-    let user = user_templates_dir(&root).join(format!("{name}.typ"));
+    let user = workspace::user_templates_dir(&root).join(format!("{name}.typ"));
     let path = if user.exists() {
         user
     } else {
@@ -649,11 +630,8 @@ fn save_template_source(
     name: String,
     content: String,
 ) -> Result<(), String> {
-    validate_template_name(&name)?;
     let root = current_root(&state)?;
-    let dir = user_templates_dir(&root);
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join(format!("{name}.typ")), content).map_err(|e| e.to_string())
+    workspace::save_template_source(&root, &name, &content).map_err(|e| e.to_string())
 }
 
 /// Elimina una plantilla de la libreria del usuario (.typ y su .meta.yaml).
@@ -661,9 +639,9 @@ fn save_template_source(
 /// workspace, asi que las base empaquetadas no se pueden borrar.
 #[tauri::command]
 fn delete_template(state: State<AppState>, name: String) -> Result<(), String> {
-    validate_template_name(&name)?;
+    workspace::validate_template_name(&name).map_err(|e| e.to_string())?;
     let root = current_root(&state)?;
-    let dir = user_templates_dir(&root);
+    let dir = workspace::user_templates_dir(&root);
     let typ = dir.join(format!("{name}.typ"));
     if !typ.exists() {
         return Err(format!("plantilla no encontrada en tu libreria: {name}"));
@@ -691,6 +669,9 @@ fn delete_template(state: State<AppState>, name: String) -> Result<(), String> {
 /// Guarda la metadata (.meta.yaml) de una plantilla en la libreria del usuario:
 /// titulo, descripcion y tags. Los tags definen la familia de render (p.ej.
 /// "retest" activa el orden por estado). Solo escribe en la libreria del usuario.
+/// Guardar desde la app SIEMPRE limpia `ai_generated`: que un humano edite y
+/// guarde la metadata ES la revision humana de la plantilla (aunque la haya
+/// escrito originalmente la IA vía MCP).
 #[tauri::command]
 fn save_template_meta(
     state: State<AppState>,
@@ -699,17 +680,14 @@ fn save_template_meta(
     description: String,
     tags: Vec<String>,
 ) -> Result<(), String> {
-    validate_template_name(&name)?;
     let root = current_root(&state)?;
-    let dir = user_templates_dir(&root);
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let meta = TemplateMeta {
         title,
         description,
         tags,
+        ai_generated: false,
     };
-    let yaml = serde_yaml::to_string(&meta).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join(format!("{name}.meta.yaml")), yaml).map_err(|e| e.to_string())
+    workspace::save_template_meta(&root, &name, &meta).map_err(|e| e.to_string())
 }
 
 /// Primer comentario (`// ...`) no vacio del archivo, como descripcion.

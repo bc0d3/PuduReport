@@ -12,8 +12,18 @@
 //! los hallazgos (crear vulnerabilidades, mejorar redaccion/campos). Puede SUBIR
 //! imagenes nuevas al proyecto (upload_asset) para ilustrar el reporte, con
 //! guardarrailes (solo imagenes, anti-traversal, tope de tamano), pero NUNCA lee
-//! evidencias existentes: no expone bytes de assets. No edita plantillas ni
-//! configuracion (workspace.yaml, branding, tipo de proyecto) ni borra nada.
+//! evidencias existentes: no expone bytes de assets. No edita configuracion
+//! (workspace.yaml, branding, tipo de proyecto) ni borra nada.
+//!
+//! Puede crear/modificar plantillas PDF (.typ) via `save_pdf_template`, pero
+//! SOLO en la biblioteca PROPIA del usuario (`library/templates` dentro del
+//! workspace): este binario no conoce la ruta de las plantillas incluidas (esa
+//! resolucion requiere el resource resolver de Tauri, que solo tiene la app),
+//! asi que no puede tocarlas ni por accidente. Tampoco puede sobreescribir una
+//! plantilla de la biblioteca que no haya creado el mismo (nunca pisa el
+//! trabajo de un humano) ni aplicar una plantilla a un proyecto: eso lo sigue
+//! haciendo un humano desde la app, que ve el preview (o el error de
+//! compilacion) antes de usarla en un reporte real.
 
 use std::path::PathBuf;
 
@@ -97,6 +107,26 @@ struct CalcCvssArgs {
     version: String,
     /// Vector CVSS completo, por ejemplo "CVSS:3.1/AV:N/AC:L/...".
     vector: String,
+}
+
+/// Argumentos de `save_pdf_template`. Crea o modifica una plantilla en la
+/// biblioteca PROPIA del usuario (nunca las incluidas).
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SavePdfTemplateArgs {
+    /// Nombre/id de la plantilla (sin extension). Si ya existe una plantilla
+    /// con este nombre en la biblioteca del usuario que NO fue creada por esta
+    /// misma herramienta, la llamada falla: use otro nombre.
+    name: String,
+    /// Codigo fuente Typst (.typ) completo de la plantilla.
+    typst_source: String,
+    /// Titulo legible para la lista de plantillas.
+    title: String,
+    /// Descripcion corta.
+    description: String,
+    /// Tags para filtrar y derivar la familia de render: el tag "retest" arma
+    /// el reporte como retest, "narrative" lo deja sin tabla de hallazgos, sin
+    /// tag especial es "findings" (con tabla de hallazgos por severidad).
+    tags: Vec<String>,
 }
 
 /// Crea un hallazgo (vulnerabilidad) nuevo en un proyecto.
@@ -568,6 +598,64 @@ impl PuduReportServer {
             vector: result.vector,
         }))
     }
+
+    // --- Plantillas PDF (solo biblioteca propia del usuario) ---
+
+    /// Crea o modifica una plantilla PDF en la biblioteca del usuario. Nunca
+    /// toca las incluidas ni pisa una que haya editado un humano.
+    #[tool(
+        description = "Crea o modifica una plantilla PDF (.typ) en TU biblioteca de plantillas (library/templates del workspace). NUNCA puede tocar las plantillas incluidas (pentest, oscp, etc.): este servidor no conoce su ruta. Si `name` ya existe en la biblioteca y no lo creaste vos con esta misma herramienta, la llamada falla (no se pisa el trabajo de un humano); en ese caso usa otro nombre. La plantilla queda marcada como generada por IA y NO se aplica sola a ningun proyecto: un humano tiene que abrirla en PuduReport (pestaña Plantillas), ver el preview (o el error de compilacion) y aplicarla explicitamente antes de usarla en un reporte real."
+    )]
+    async fn save_pdf_template(
+        &self,
+        Parameters(args): Parameters<SavePdfTemplateArgs>,
+    ) -> Result<String, McpError> {
+        const MAX_SOURCE_BYTES: usize = 512 * 1024;
+        if args.typst_source.len() > MAX_SOURCE_BYTES {
+            return Err(McpError::invalid_params(
+                format!(
+                    "codigo Typst muy grande: {} bytes (max {MAX_SOURCE_BYTES})",
+                    args.typst_source.len()
+                ),
+                None,
+            ));
+        }
+        let root = self.current_root()?;
+        workspace::validate_template_name(&args.name)
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+
+        // No pisar una plantilla que no creo esta misma herramienta: ni una
+        // editada a mano por un humano, ni una legacy sin metadata (ai_generated
+        // ausente = false, tratada igual de protegida).
+        let typ_path =
+            workspace::user_templates_dir(&root).join(format!("{}.typ", args.name));
+        let already_ai_generated = workspace::read_user_template_meta(&root, &args.name)
+            .is_some_and(|m| m.ai_generated);
+        if typ_path.exists() && !already_ai_generated {
+            return Err(McpError::invalid_params(
+                format!(
+                    "ya existe una plantilla \"{}\" en la biblioteca que no fue creada por esta herramienta; elegi otro nombre",
+                    args.name
+                ),
+                None,
+            ));
+        }
+
+        workspace::save_template_source(&root, &args.name, &args.typst_source)
+            .map_err(internal)?;
+        let meta = pudureport_core::models::TemplateMeta {
+            title: args.title,
+            description: args.description,
+            tags: args.tags,
+            ai_generated: true,
+        };
+        workspace::save_template_meta(&root, &args.name, &meta).map_err(internal)?;
+
+        Ok(format!(
+            "Plantilla \"{}\" guardada en tu biblioteca (library/templates/{}.typ). Todavia no esta aplicada a ningun proyecto: abrila en PuduReport (Plantillas) para revisarla, ver el preview y aplicarla.",
+            args.name, args.name
+        ))
+    }
 }
 
 #[tool_handler]
@@ -577,8 +665,11 @@ impl ServerHandler for PuduReportServer {
             "Servidor MCP de PuduReport. Lee proyectos e hallazgos del workspace expuesto y \
              mejora el texto de los hallazgos (crear vulnerabilidades, redaccion, campos). Puede \
              SUBIR imagenes nuevas al proyecto (upload_asset) para ilustrar el reporte, pero \
-             NUNCA lee evidencias existentes: no expone bytes de assets. No edita plantillas ni \
-             configuracion.",
+             NUNCA lee evidencias existentes: no expone bytes de assets. Puede crear o modificar \
+             plantillas PDF (save_pdf_template) SOLO en tu propia biblioteca (nunca las \
+             incluidas, nunca pisa una que edito un humano) y nunca las aplica sola a un \
+             proyecto: un humano la revisa y la aplica desde la app. No edita configuracion \
+             (workspace.yaml, branding, tipo de proyecto) ni borra nada.",
         )
     }
 }
@@ -760,6 +851,79 @@ mod tests {
             .expect("examen acepta severidad manual"),
         );
         assert_eq!(value["meta"]["severity"], "high");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn template_args(name: &str, source: &str) -> SavePdfTemplateArgs {
+        SavePdfTemplateArgs {
+            name: name.to_string(),
+            typst_source: source.to_string(),
+            title: "Plantilla de prueba".into(),
+            description: "".into(),
+            tags: vec![],
+        }
+    }
+
+    #[tokio::test]
+    async fn save_pdf_template_creates_in_user_library_marked_ai_generated() {
+        let (root, _pid) = temp_workspace("tpl-create", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        let msg = srv
+            .save_pdf_template(Parameters(template_args("mi-plantilla", "#set page(margin: 1cm)")))
+            .await
+            .expect("crea la plantilla");
+        assert!(msg.contains("mi-plantilla"));
+
+        let typ_path = workspace::user_templates_dir(&root).join("mi-plantilla.typ");
+        assert!(typ_path.exists());
+        let meta = workspace::read_user_template_meta(&root, "mi-plantilla").unwrap();
+        assert!(meta.ai_generated);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn save_pdf_template_rejects_overwriting_human_template() {
+        let (root, _pid) = temp_workspace("tpl-protect", "pentest");
+        // Simula una plantilla creada/editada por un humano desde la app: sin
+        // metadata ai_generated (o en false), como hace save_template_meta.
+        workspace::save_template_source(&root, "humana", "#set page(margin: 2cm)").unwrap();
+        let meta = pudureport_core::models::TemplateMeta {
+            title: "Hecha a mano".into(),
+            description: "".into(),
+            tags: vec![],
+            ai_generated: false,
+        };
+        workspace::save_template_meta(&root, "humana", &meta).unwrap();
+
+        let srv = PuduReportServer::new(root.clone());
+        let err = srv
+            .save_pdf_template(Parameters(template_args("humana", "codigo malicioso")))
+            .await;
+        assert!(err.is_err(), "no debe pisar una plantilla humana");
+
+        // El contenido original sigue intacto.
+        let content =
+            std::fs::read_to_string(workspace::user_templates_dir(&root).join("humana.typ"))
+                .unwrap();
+        assert_eq!(content, "#set page(margin: 2cm)");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn save_pdf_template_can_modify_its_own_previous_draft() {
+        let (root, _pid) = temp_workspace("tpl-modify", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        srv.save_pdf_template(Parameters(template_args("borrador-ia", "version 1")))
+            .await
+            .expect("crea el borrador");
+        srv.save_pdf_template(Parameters(template_args("borrador-ia", "version 2")))
+            .await
+            .expect("puede modificar su propio borrador");
+
+        let content =
+            std::fs::read_to_string(workspace::user_templates_dir(&root).join("borrador-ia.typ"))
+                .unwrap();
+        assert_eq!(content, "version 2");
         let _ = std::fs::remove_dir_all(&root);
     }
 

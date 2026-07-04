@@ -17,7 +17,10 @@ use pudureport_core::markdown;
 use pudureport_core::models::{
     Branding, ProjectMeta, ReportBlock, Severity, TeamMember, Watermark,
 };
+use pudureport_core::sections;
 use pudureport_core::workspace;
+
+use crate::naming;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PdfError {
@@ -191,6 +194,17 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
         .into_iter()
         .map(|f| {
             counts.add(f.meta.severity);
+            // Campos ocultados puntualmente (sin ocultar el hallazgo entero):
+            // "affected" se vacia (las plantillas ya omiten la linea si el
+            // vector esta vacio) y las secciones del body se filtran antes
+            // de convertir a markup de Typst.
+            let hide = |key: &str| f.meta.hidden_fields.iter().any(|h| h == key);
+            let affected = if hide("affected") {
+                Vec::new()
+            } else {
+                f.meta.affected
+            };
+            let body = sections::strip_hidden_sections(&f.body, &f.meta.hidden_fields);
             FindingData {
                 id: f.id,
                 title: f.meta.title,
@@ -201,9 +215,9 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
                 // La plantilla muestra los CWE en un chip; se unen por coma.
                 cwe: f.meta.cwe.join(", "),
                 status: status_str(f.meta.status),
-                affected: f.meta.affected,
+                affected,
                 new_in_retest: f.meta.new_in_retest,
-                body: markdown::to_typst(&f.body),
+                body: markdown::to_typst(&body),
             }
         })
         .collect();
@@ -400,12 +414,13 @@ fn effective_template(project: &ProjectMeta) -> String {
 }
 
 /// Nombre del PDF generado. Los tipos de examen siguen la convencion de
-/// submission (OSCP-OS-<OSID>-Exam-Report.pdf); el resto usa el id del proyecto.
-fn report_filename(project: &ProjectMeta, project_id: &str) -> String {
+/// submission (OSCP-OS-<OSID>-Exam-Report.pdf); el resto usa el nombre
+/// estandar `{Cliente}-{Tipo}-{fecha}` (ver `naming.rs`).
+fn report_filename(project: &ProjectMeta) -> String {
     match project.project_type.as_str() {
         "oscp" => format!("OSCP-OS-{}-Exam-Report.pdf", sanitize_osid(&project.osid)),
         "htb" => format!("HTB-{}-Exam-Report.pdf", sanitize_osid(&project.osid)),
-        _ => format!("{project_id}.pdf"),
+        _ => format!("{}.pdf", naming::standard_basename(project)),
     }
 }
 
@@ -422,7 +437,7 @@ pub fn generate_pdf(
     let project = workspace::read_project_meta(root, project_id)?;
     let template = effective_template(&project);
     let (build_dir, report_typ) = prepare_build(root, project_id, templates_dir, &template)?;
-    let primary = build_dir.join(report_filename(&project, project_id));
+    let primary = build_dir.join(report_filename(&project));
     run_typst(typst_bin, root, &report_typ, &primary, None)?;
     let mut out = vec![primary];
 
@@ -431,7 +446,8 @@ pub fn generate_pdf(
         let exec_src = resolve_template(root, templates_dir, "ejecutivo")?;
         let exec_typ = build_dir.join("report-ejecutivo.typ");
         std::fs::copy(&exec_src, &exec_typ)?;
-        let exec_pdf = build_dir.join(format!("{project_id}-ejecutivo.pdf"));
+        let exec_pdf =
+            build_dir.join(format!("{}-ejecutivo.pdf", naming::standard_basename(&project)));
         run_typst(typst_bin, root, &exec_typ, &exec_pdf, None)?;
         out.push(exec_pdf);
     }
@@ -486,6 +502,28 @@ pub fn preview_pdf(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hidden_fields_strip_affected_and_poc() {
+        let tmp = std::env::temp_dir().join(format!("pudu-pdf-hidden-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        workspace::create_workspace(&tmp, "WS").unwrap();
+        let (pid, _) = workspace::create_project(&tmp, "Web", "ACME", "pentest").unwrap();
+        let mut finding = workspace::create_finding(&tmp, &pid, "SQLi").unwrap();
+        finding.meta.affected = vec!["https://app.example/login".to_string()];
+        finding.meta.hidden_fields = vec!["affected".to_string(), "poc".to_string()];
+        finding.body = "## Descripcion\n\nTexto.\n\n## Prueba de concepto\n\nPayload secreto.\n\n## Remediacion\n\nArreglar.".to_string();
+        workspace::write_finding(&tmp, &pid, &finding).unwrap();
+
+        let data = build_data(&tmp, &pid).unwrap();
+        let f = &data.findings[0];
+        assert!(f.affected.is_empty());
+        assert!(!f.body.contains("Payload secreto"));
+        assert!(f.body.contains("Texto"));
+        assert!(f.body.contains("Arreglar"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn build_data_serializes() {

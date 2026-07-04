@@ -102,6 +102,14 @@ export function TemplateLibrary({
                     <i className="ti ti-file-type-pdf" />
                     <span className="tpl-title">{t.title || t.name}</span>
                     {active && <span className="tpl-badge">Activa</span>}
+                    {t.ai_generated && (
+                      <span
+                        className="tpl-badge-ai"
+                        title="La creo o edito una IA via MCP. Revisa el codigo antes de usarla en un reporte real."
+                      >
+                        Generado por IA
+                      </span>
+                    )}
                   </div>
                   <span className="tpl-id">{t.name}</span>
                 </td>

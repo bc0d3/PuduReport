@@ -16,19 +16,54 @@ Diseno completo en la documentacion de diseno del proyecto.
 
 `pudureport-mcp` es un binario aparte (miembro del workspace de Rust) que expone
 el workspace del usuario por **stdio** (JSON-RPC) para que la IA del usuario lea
-y mejore el TEXTO de los reportes. **No embebe ningun LLM** ni hace llamadas de
-red propias. El cliente MCP (ej. Claude Desktop) lanza el proceso y le habla por
-pipes.
+y mejore el TEXTO de los reportes, y (con guardarrailes propios, ver mas abajo)
+cree o modifique plantillas PDF en su propia biblioteca. **No embebe ningun
+LLM** ni hace llamadas de red propias. El cliente MCP (ej. Claude Desktop)
+lanza el proceso y le habla por pipes.
 
 Superficie actual (herramientas en `mcp/src/main.rs`):
 
 - Lectura: `list_projects`, `get_project`, `list_findings`, `get_finding`,
   `search_findings`, `get_workspace_info`.
 - Escritura (solo texto de hallazgos): `create_finding`, `update_finding`.
+- Escritura de imagenes: `upload_asset` (solo sube, nunca lee evidencias).
+- Escritura de plantillas PDF: `save_pdf_template` (crea/modifica, SOLO en la
+  biblioteca propia del usuario; ver "Plantillas PDF via MCP" mas abajo).
 - Calculo: `calc_cvss`.
 
-No expone herramientas de plantillas, de configuracion, de borrado ni de
-assets/evidencias.
+No expone herramientas de configuracion (workspace.yaml, branding, tipo de
+proyecto) ni de borrado.
+
+## Plantillas PDF via MCP (`save_pdf_template`)
+
+Unica excepcion deliberada a "sin escribir plantillas": permite crear o
+modificar una plantilla `.typ` para que la IA pueda reproducir el diseno de un
+PDF de referencia que el usuario le paso por fuera del MCP (ej. adjuntado en el
+chat). Se contuvo la agencia con varias barreras, no con una sola:
+
+- **No puede tocar las plantillas incluidas.** El binario `pudureport-mcp` no
+  tiene (ni puede resolver) la ruta de recursos de la app Tauri donde viven;
+  solo conoce `library/templates` dentro del workspace. No es una regla que se
+  respeta por convencion: no hay codigo que sepa donde estan las incluidas.
+- **Nunca pisa una plantilla que no creo la misma herramienta.** Si el nombre
+  ya existe en la biblioteca del usuario y no quedo marcado `ai_generated` por
+  una llamada anterior de esta herramienta, la llamada falla. Esto protege
+  tanto plantillas escritas a mano como plantillas viejas (de antes de esta
+  funcion) que no tienen el flag.
+- **Queda marcada `ai_generated: true`** en su metadata. La UI
+  (`TemplateLibrary.tsx`) la resalta con una etiqueta visible. El flag se
+  limpia SOLO cuando un humano la edita y guarda desde el editor de
+  plantillas de la app (`save_template_meta`) - ese guardado humano ES la
+  revision.
+- **Nunca se aplica sola a un proyecto.** La herramienta no toca
+  `template_override` de ningun proyecto; un humano tiene que elegirla
+  explicitamente desde la app, donde ve el preview en vivo (o el error de
+  compilacion de Typst) antes de que la plantilla se use en un reporte real.
+- **No hay validacion de que el `.typ` compile** dentro de la herramienta:
+  el binario `pudureport-mcp` no invoca Typst (evita duplicar el pipeline de
+  compilacion de `src-tauri/src/pdf.rs` en un binario que no depende de
+  Tauri). El guardrail equivalente es el punto anterior: el primer intento de
+  uso real pasa por un humano viendo el preview.
 
 ## Modelo de amenaza (resumen)
 
@@ -79,7 +114,7 @@ cliente (donde corre el modelo); aca se documenta la postura del servidor.
 | LLM03 | Supply chain | Dependencias pineadas (`Cargo.lock`), toolchain fijo (1.93.0), SDK oficial `rmcp`, `cargo audit` (RUSTSEC) en CI. | Bajo. |
 | LLM04 | Data / model poisoning | N/A. El servidor no entrena ni ajusta modelos. | N/A. |
 | LLM05 | Manejo inadecuado de la salida | El servidor no ejecuta la salida del modelo: las escrituras del modelo pasan por validacion de schema, `validate_id` y derivacion de severidad antes de tocar el `.md`. | Bajo. |
-| LLM06 | Agencia excesiva | Herramientas de minima agencia: sin borrar, sin escribir config/plantillas, sin assets; writes acotados al texto de hallazgos y reversibles (git). | Bajo. |
+| LLM06 | Agencia excesiva | Herramientas de minima agencia: sin borrar, sin escribir configuracion. La mayoria de los writes son texto de hallazgos, reversibles (git). `save_pdf_template` es la excepcion: escribe codigo Typst (se ejecuta al compilar), pero acotado a la biblioteca propia del usuario (sin acceso a las incluidas), sin poder pisar una plantilla que no creo el mismo, marcado `ai_generated` para exigir revision humana, y sin poder aplicarse solo a un proyecto. | Bajo para el resto de las herramientas; medio y contenido para `save_pdf_template` (ver seccion "Plantillas PDF via MCP"). |
 | LLM07 | Fuga del system prompt | N/A. El servidor no tiene system prompt; no embebe LLM. | N/A. |
 | LLM08 | Debilidades de vectores/embeddings | N/A. Sin RAG ni embeddings. | N/A. |
 | LLM09 | Desinformacion | La IA puede redactar contenido incorrecto en un hallazgo. Mitigacion: revision humana antes de exportar el PDF. | Si. Se gestiona con revision humana. |
@@ -102,7 +137,10 @@ NDA y aclara que las evidencias nunca se exponen. La accion es reversible
 - [x] Solo texto, nunca bytes de assets/evidencias.
 - [x] Severidad derivada del CVSS salvo tipos de examen.
 - [x] Validacion de schema en la entrada de cada herramienta.
-- [x] Minima agencia (sin borrados, sin config/plantillas).
+- [x] Minima agencia (sin borrados, sin configuracion). Excepcion contenida:
+      `save_pdf_template` puede escribir plantillas, pero solo en la
+      biblioteca propia del usuario, nunca sobre una que no creo el mismo, y
+      marcadas para revision humana obligatoria antes de usarse.
 - [x] Consentimiento explicito al conectar, reversible.
 - [x] Esta autoevaluacion ASVS (L1-L2) + checklist LLM Top 10.
 - [x] `cargo audit` (RUSTSEC) en CI (supply chain).

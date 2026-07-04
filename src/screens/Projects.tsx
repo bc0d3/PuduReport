@@ -25,6 +25,7 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
   const { guard } = useToast();
   const [creating, setCreating] = useState(false);
   const [toDelete, setToDelete] = useState<ProjectSummary | null>(null);
+  const [toRename, setToRename] = useState<ProjectSummary | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("client");
   const [sortDir, setSortDir] = useState<1 | -1>(1);
@@ -146,6 +147,16 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
                       <td>{p.end_date || "—"}</td>
                       <td className="ta-right">
                         <button
+                          className="btn small"
+                          title="Renombrar proyecto"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setToRename(p);
+                          }}
+                        >
+                          <i className="ti ti-edit" />
+                        </button>
+                        <button
                           className="btn small danger"
                           title="Eliminar proyecto"
                           onClick={(e) => {
@@ -191,7 +202,76 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
           onClose={() => setToDelete(null)}
         />
       )}
+
+      {toRename && (
+        <RenameProjectModal
+          project={toRename}
+          onClose={() => setToRename(null)}
+          onRenamed={async () => {
+            setToRename(null);
+            await onReload();
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function RenameProjectModal({
+  project,
+  onClose,
+  onRenamed,
+}: {
+  project: ProjectSummary;
+  onClose: () => void;
+  onRenamed: () => void;
+}) {
+  const { notify } = useToast();
+  const [name, setName] = useState(project.name);
+  const [saving, setSaving] = useState(false);
+
+  async function rename() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    try {
+      const meta = await api.loadProject(project.id);
+      await api.saveProject(project.id, { ...meta, name: trimmed });
+      notify("Proyecto renombrado", "ok");
+      onRenamed();
+    } catch (err) {
+      notify(String(err), "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      title="Renombrar proyecto"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="btn primary" onClick={rename} disabled={!name.trim() || saving}>
+            Guardar
+          </button>
+        </>
+      }
+    >
+      <div className="field">
+        <label>Nombre del proyecto</label>
+        <input
+          className="input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && rename()}
+          autoFocus
+        />
+      </div>
+    </Modal>
   );
 }
 

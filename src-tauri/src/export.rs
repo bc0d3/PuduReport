@@ -7,8 +7,10 @@
 
 use std::path::Path;
 
-use pudureport_core::models::{FindingStatus, Severity};
+use pudureport_core::models::{CvssVersion, FindingStatus, Severity};
 use pudureport_core::workspace;
+
+use crate::naming;
 
 /// Etiqueta de la cabecera de cada columna soportada.
 fn header_for(col: &str) -> &str {
@@ -17,6 +19,8 @@ fn header_for(col: &str) -> &str {
         "titulo" => "Titulo",
         "severidad" => "Severidad",
         "cvss" => "CVSS",
+        "cvss_vector" => "Vector CVSS",
+        "cvss_version" => "Version CVSS",
         "cwe" => "CWE",
         "estado" => "Estado",
         "afectados" => "Afectados",
@@ -63,6 +67,12 @@ fn value_for(col: &str, n: usize, f: &pudureport_core::models::Finding) -> Strin
         "titulo" => f.meta.title.clone(),
         "severidad" => severity_label(f.meta.severity).to_string(),
         "cvss" => f.meta.cvss.clone(),
+        "cvss_vector" => f.meta.cvss_vector.clone(),
+        "cvss_version" => match f.meta.cvss_version {
+            CvssVersion::V31 => "3.1",
+            CvssVersion::V40 => "4.0",
+        }
+        .to_string(),
         "cwe" => f.meta.cwe.join(", "),
         "estado" => status_label(f.meta.status).to_string(),
         "afectados" => f.meta.affected.join("; "),
@@ -71,12 +81,14 @@ fn value_for(col: &str, n: usize, f: &pudureport_core::models::Finding) -> Strin
     }
 }
 
-/// Escribe `build/<project_id>-resumen.csv` con las columnas pedidas (en ese
-/// orden) y devuelve la ruta. Excluye los hallazgos ocultos.
+/// Escribe `build/{Cliente}-{Tipo}-{fecha}-resumen.csv` (ver `naming.rs`) con
+/// las columnas pedidas (en ese orden) y devuelve la ruta. Excluye los
+/// hallazgos ocultos.
 pub fn export_csv(root: &Path, project_id: &str, columns: &[String]) -> Result<String, String> {
     if columns.is_empty() {
         return Err("elegi al menos una columna".to_string());
     }
+    let project = workspace::read_project_meta(root, project_id).map_err(|e| e.to_string())?;
     let findings: Vec<_> = workspace::list_findings(root, project_id)
         .map_err(|e| e.to_string())?
         .into_iter()
@@ -99,7 +111,7 @@ pub fn export_csv(root: &Path, project_id: &str, columns: &[String]) -> Result<S
 
     let build_dir = root.join(project_id).join("build");
     std::fs::create_dir_all(&build_dir).map_err(|e| e.to_string())?;
-    let path = build_dir.join(format!("{project_id}-resumen.csv"));
+    let path = build_dir.join(format!("{}-resumen.csv", naming::standard_basename(&project)));
     std::fs::write(&path, csv).map_err(|e| e.to_string())?;
     Ok(path.display().to_string())
 }

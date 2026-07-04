@@ -19,6 +19,8 @@ const CSV_COLUMNS: { key: string; label: string }[] = [
   { key: "titulo", label: "Titulo" },
   { key: "severidad", label: "Severidad" },
   { key: "cvss", label: "CVSS" },
+  { key: "cvss_vector", label: "Vector CVSS" },
+  { key: "cvss_version", label: "Version CVSS" },
   { key: "cwe", label: "CWE" },
   { key: "estado", label: "Estado" },
   { key: "afectados", label: "Afectados" },

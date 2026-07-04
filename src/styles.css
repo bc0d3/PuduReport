@@ -1359,6 +1359,16 @@ i.ti {
   padding: 2px 6px;
   font-weight: 600;
 }
+.tpl-badge-ai {
+  background: #b8860b;
+  color: #ffffff;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-weight: 600;
+}
 .tpl-desc {
   max-width: 380px;
 }

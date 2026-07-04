@@ -29,6 +29,10 @@ export interface FindingMeta {
   hidden?: boolean;
   /** Hallazgo nuevo detectado en un retest. Solo relevante en familia retest. */
   new_in_retest?: boolean;
+  /** Campos ocultos en el PDF sin ocultar el hallazgo entero: "affected" y
+   * las claves de FINDING_SECTIONS ("descripcion", "impacto", "poc",
+   * "remediacion"). Ausente o vacio = todo visible. */
+  hidden_fields?: string[];
 }
 
 /** Hallazgo completo: front-matter + cuerpo markdown. */
@@ -248,6 +252,9 @@ export interface PdfTemplate {
   tags: string[];
   /** Familia de render: define orden y render. La resuelve el backend. */
   family: "findings" | "retest" | "narrative";
+  /** La escribio/edito una IA via MCP, sin revision humana todavia. Se limpia
+   * cuando un humano la guarda desde el editor de plantillas. */
+  ai_generated?: boolean;
 }
 
 export interface CvssResult {
