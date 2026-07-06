@@ -194,13 +194,33 @@ fn escape_string(text: &str) -> String {
 }
 
 /// Construye la llamada #image centrada, aplicando el ancho si el alt lo indica.
+///
+/// Si `url` no es una ruta de asset del proyecto (ver `is_asset_path`), no se
+/// emite `#image(..)`: el usuario puede haber pegado markdown con una imagen
+/// referenciando un archivo de su disco (ruta absoluta de Windows, con `:` o
+/// `\`), y Typst no puede cargarla (sale del `--root` del proyecto) ni sabe
+/// interpretar backslashes como separador, lo que rompe toda la exportacion
+/// con un error de sistema operativo crudo. Se muestra un aviso en su lugar.
 fn image_typst(url: &str, alt: &str) -> String {
+    if !is_asset_path(url) {
+        return format!(
+            "#align(center, block(fill: luma(245), inset: 8pt, radius: 3pt)[#text(size: 8pt, style: \"italic\", fill: luma(120))[Imagen no disponible: {}]])",
+            escape(url)
+        );
+    }
     let img = match parse_width(alt) {
         Some(width) => format!("image(\"{}\", width: {})", escape_string(url), width),
         None => format!("image(\"{}\")", escape_string(url)),
     };
     // Las evidencias van centradas.
     format!("#align(center, {img})")
+}
+
+/// Es una ruta de asset valida del proyecto (la unica forma en que la app
+/// inserta imagenes, ver `workspace::save_asset`): relativa, bajo `assets/`,
+/// sin separador de Windows ni forma de escapar el `--root` del proyecto.
+fn is_asset_path(url: &str) -> bool {
+    url.starts_with("assets/") && !url.contains("..") && !url.contains('\\') && !url.contains(':')
 }
 
 /// Interpreta el alt como un ancho ("60%" o "60") y devuelve el ancho Typst.
@@ -316,6 +336,23 @@ mod tests {
         assert!(out.contains("align(center"));
         assert!(!out.contains("captura de evidencia"));
         assert!(!out.contains("width:"));
+    }
+
+    #[test]
+    fn image_with_windows_absolute_path_is_not_emitted_as_image() {
+        // Caso real reportado: el usuario pego markdown con una imagen
+        // apuntando a un archivo de su disco (ruta absoluta de Windows). Sin
+        // esta validacion, #image(..) con esa ruta rompe toda la exportacion
+        // (Typst no puede resolver `\` ni salir del --root del proyecto).
+        let out = to_typst("![captura](C:\\Users\\Cristobal.aguero\\Desktop\\captura.png)");
+        assert!(!out.contains("#image"), "out: {out}");
+        assert!(out.contains("Imagen no disponible"));
+    }
+
+    #[test]
+    fn image_path_traversal_is_not_emitted_as_image() {
+        let out = to_typst("![x](assets/../../../etc/passwd)");
+        assert!(!out.contains("#image"), "out: {out}");
     }
 
     #[test]
