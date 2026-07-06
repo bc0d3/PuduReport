@@ -2,6 +2,11 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.15] - 2026-07-06
+
+### Fixed
+- Exportacion de PDF que fallaba con "unclosed delimiter" de Typst cuando una negrita/cursiva quedaba pegada al texto siguiente sin espacio. El mensaje de error de compilacion tambien es mas claro (se descartan los warnings de fuentes y se muestra el diagnostico real).
+
 ## [0.0.14] - 2026-07-03
 
 ### Added
