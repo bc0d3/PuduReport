@@ -88,8 +88,12 @@ fn start_tag(out: &mut String, list_stack: &mut Vec<Option<u64>>, tag: Tag) {
             out.push(' ');
         }
         Tag::Paragraph => {}
-        Tag::Strong => out.push('*'),
-        Tag::Emphasis => out.push('_'),
+        // Se usa la funcion explicita en vez del shorthand `*.../_...`: el
+        // shorthand tiene reglas de flanking propias de Typst que no siempre
+        // coinciden con los limites que decidio pulldown-cmark, y un vecino
+        // escapado puede dejar el delimitador "sin cerrar" para Typst.
+        Tag::Strong => out.push_str("#strong["),
+        Tag::Emphasis => out.push_str("#emph["),
         Tag::List(start) => list_stack.push(start),
         Tag::Item => {
             let indent = "  ".repeat(list_stack.len().saturating_sub(1));
@@ -117,8 +121,8 @@ fn end_tag(out: &mut String, list_stack: &mut Vec<Option<u64>>, tag: TagEnd) {
     match tag {
         TagEnd::Heading(_) => out.push_str("\n\n"),
         TagEnd::Paragraph => out.push_str("\n\n"),
-        TagEnd::Strong => out.push('*'),
-        TagEnd::Emphasis => out.push('_'),
+        TagEnd::Strong => out.push(']'),
+        TagEnd::Emphasis => out.push(']'),
         TagEnd::List(_) => {
             list_stack.pop();
             out.push('\n');
@@ -228,8 +232,25 @@ mod tests {
     #[test]
     fn emphasis_and_strong() {
         let out = to_typst("Esto es **fuerte** y *enfasis*.");
-        assert!(out.contains("*fuerte*"));
-        assert!(out.contains("_enfasis_"));
+        assert!(out.contains("#strong[fuerte]"));
+        assert!(out.contains("#emph[enfasis]"));
+    }
+
+    #[test]
+    fn emphasis_followed_by_letter_stays_balanced() {
+        // Reproducido contra el binario de Typst: con el shorthand previo
+        // (`*a*mas` o `_b_mas`, con la palabra pegada justo despues del
+        // cierre) Typst reporta "error: unclosed delimiter" en el eval() del
+        // hallazgo, porque sus reglas de flanking no reconocen ese cierre
+        // como valido (le sigue una letra sin espacio) y nunca encuentra un
+        // cierre "aceptable" para la apertura. Esto rompia la exportacion
+        // completa del PDF con contenido de aspecto normal (ver caso real de
+        // un hallazgo cuyo cuerpo tenia una palabra en cursiva pegada al
+        // texto siguiente). #strong[..]/#emph[..] no dependen de flanking,
+        // asi que siempre quedan balanceados.
+        let out = to_typst("*a*mas y tambien _b_mas");
+        assert!(out.contains("#emph[a]mas"));
+        assert!(out.contains("\\_b\\_mas"), "out: {out}");
     }
 
     #[test]

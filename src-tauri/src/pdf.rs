@@ -32,7 +32,9 @@ pub enum PdfError {
     Json(#[from] serde_json::Error),
     #[error("no se encontro la plantilla: {0}")]
     TemplateNotFound(String),
-    #[error("Typst fallo al compilar:\n{0}")]
+    #[error(
+        "No se pudo generar el PDF. Revisa el formato del contenido (negrita/cursiva o corchetes sin cerrar) en los hallazgos o secciones.\n\n{0}"
+    )]
     Compile(String),
     #[error("no se encontro el binario de Typst")]
     TypstNotFound,
@@ -384,11 +386,24 @@ fn run_typst(
         }
     })?;
     if !output.status.success() {
-        return Err(PdfError::Compile(
-            String::from_utf8_lossy(&output.stderr).to_string(),
-        ));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(PdfError::Compile(compile_error_summary(&stderr)));
     }
     Ok(())
+}
+
+/// Se queda solo con el diagnostico real de Typst (a partir de la primera
+/// linea "error:"), descartando los warnings previos (tipicamente de fuentes
+/// no instaladas) que no aportan al diagnostico del usuario.
+fn compile_error_summary(stderr: &str) -> String {
+    let lines: Vec<&str> = stderr.lines().collect();
+    match lines
+        .iter()
+        .position(|l| l.trim_start().starts_with("error:"))
+    {
+        Some(pos) => lines[pos..].join("\n"),
+        None => stderr.to_string(),
+    }
 }
 
 /// Deja solo caracteres seguros para un nombre de archivo; cae a "XXXXX" vacio.
@@ -547,6 +562,20 @@ mod tests {
         assert!(data.project.layout.iter().any(|b| b.kind == "findings"));
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn compile_error_summary_drops_font_warnings() {
+        let stderr = "warning: unknown font family: helvetica neue\n  ┌─ report.typ:107:19\n  │\n107 │ #set text(font: body-font)\n  │                   ^^^^^^^^^\n\nerror: unclosed delimiter\n  ┌─ report.typ:422:7\n  │\n422 │       eval(f.body, mode: \"markup\")\n  │       ^^^^\n";
+        let summary = compile_error_summary(stderr);
+        assert!(!summary.contains("warning:"));
+        assert!(summary.starts_with("error: unclosed delimiter"));
+    }
+
+    #[test]
+    fn compile_error_summary_keeps_stderr_without_error_line() {
+        let stderr = "warning: unknown font family: helvetica neue\n";
+        assert_eq!(compile_error_summary(stderr), stderr);
     }
 
     /// Devuelve true si hay un binario de Typst ejecutable disponible.
