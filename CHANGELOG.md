@@ -2,6 +2,11 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.16] - 2026-07-06
+
+### Fixed
+- Exportacion de PDF que fallaba con un error de sistema operativo (Windows) cuando el cuerpo de un hallazgo o seccion tenia una imagen con una ruta ajena al proyecto (por ejemplo, pegada manualmente en modo markdown apuntando a un archivo del disco). Ahora se muestra un aviso en el PDF en vez de romper toda la exportacion.
+
 ## [0.0.15] - 2026-07-06
 
 ### Fixed
