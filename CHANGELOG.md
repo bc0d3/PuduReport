@@ -2,6 +2,14 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.19] - 2026-07-09
+
+### Fixed
+- Los editores de la pestana Reporte (bloques de texto, resumen/alcance/metodologia/conclusiones, y el lienzo de contenido libre) abrian en modo texto plano: el markdown recien escrito no se interpretaba hasta cambiar de vista a mano. Ahora abren renderizados por defecto, igual que el editor de hallazgos.
+
+### Added
+- El campo "Prueba de concepto" del editor de hallazgos limita su alto y agrega scroll interno, para que un PoC largo (varios pasos y capturas) no estire el resto del formulario.
+
 ## [0.0.18] - 2026-07-09
 
 ### Fixed
