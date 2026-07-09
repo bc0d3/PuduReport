@@ -548,11 +548,13 @@ fn ensure_within_workspace(
     let root = current_root(state)?
         .canonicalize()
         .map_err(|e| e.to_string())?;
-    let target = std::path::Path::new(path)
-        .canonicalize()
-        .map_err(|e| e.to_string())?;
+    // No devolvemos la ruta canonicalizada: en Windows lleva el prefijo NT
+    // verbatim (\\?\...), que rompe opener::open/reveal (ShellExecuteW e
+    // ILCreateFromPathW no lo soportan). Canonicalizamos solo para el check.
+    let original = std::path::Path::new(path).to_path_buf();
+    let target = original.canonicalize().map_err(|e| e.to_string())?;
     if target.starts_with(&root) {
-        Ok(target)
+        Ok(original)
     } else {
         Err("la ruta esta fuera del workspace".to_string())
     }
