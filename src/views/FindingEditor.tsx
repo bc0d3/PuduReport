@@ -480,7 +480,10 @@ export function FindingEditor({
 
           <div className="section-grid">
             {FINDING_SECTIONS.map((s) => (
-              <div className={`field ${s.full ? "full" : ""}`} key={s.key}>
+              <div
+                className={`field ${s.full ? "full" : ""} ${s.key === "poc" ? "poc-field" : ""}`}
+                key={s.key}
+              >
                 <div className="row" style={{ justifyContent: "space-between" }}>
                   <label>{s.title}</label>
                   <button

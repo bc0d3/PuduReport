@@ -99,7 +99,6 @@ export function ContentEditor({ projectId, assetBase, onGoToPreview, onPickProje
             placeholder="Escribi el reporte en markdown. Usa encabezados (##) para las secciones."
             assetBase={assetBase}
             projectId={projectId}
-            sourceFirst
           />
         )}
       </div>

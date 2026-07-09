@@ -70,8 +70,6 @@ interface Props {
   assetBase?: string | null;
   /** Id del proyecto, requerido para guardar assets. */
   projectId?: string | null;
-  /** Si abre en vista de codigo markdown (true) o renderizada (false, por defecto). */
-  sourceFirst?: boolean;
 }
 
 /** Resuelve una ruta relativa de asset a una URL cargable por la webview. */
@@ -128,12 +126,11 @@ export function MarkdownEditor({
   placeholder,
   assetBase,
   projectId,
-  sourceFirst,
 }: Props) {
   const editorRef = useRef<Editor | null>(null);
   // Vista activa: "source" muestra el markdown crudo en un textarea; "rich" el
   // editor WYSIWYG renderizado. Se alterna desde la barra.
-  const [mode, setMode] = useState<"source" | "rich">(sourceFirst ? "source" : "rich");
+  const [mode, setMode] = useState<"source" | "rich">("rich");
   const [source, setSource] = useState(value);
   // Ruta relativa (assets/...) de la imagen que se esta anotando, o null si
   // el dialogo de anotacion esta cerrado.

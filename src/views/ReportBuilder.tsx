@@ -543,7 +543,6 @@ function BlockEditor({
           placeholder="Contenido del bloque..."
           assetBase={assetBase}
           projectId={projectId}
-          sourceFirst
         />
       </div>
     );
@@ -772,7 +771,6 @@ function SectionEditor({
         placeholder={`${title}...`}
         assetBase={assetBase}
         projectId={projectId}
-        sourceFirst
       />
     </div>
   );

@@ -1419,6 +1419,11 @@ i.ti {
 .section-grid .full {
   grid-column: 1 / -1;
 }
+.poc-field .ProseMirror,
+.poc-field .md-source {
+  max-height: 50vh;
+  overflow-y: auto;
+}
 
 /* Lista de secciones del reporte (reorder + toggle) */
 .section-list .row {
