@@ -45,6 +45,10 @@ export default [
         HTMLInputElement: "readonly",
         HTMLDivElement: "readonly",
         HTMLElement: "readonly",
+        HTMLCanvasElement: "readonly",
+        HTMLImageElement: "readonly",
+        CanvasRenderingContext2D: "readonly",
+        Image: "readonly",
       },
     },
     plugins: {

@@ -25,6 +25,7 @@ import { Markdown } from "tiptap-markdown";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import * as api from "../lib/api";
 import { PromptDialog } from "./PromptDialog";
+import { ImageAnnotator } from "./ImageAnnotator";
 
 // Resaltado de sintaxis para los bloques de codigo (se empaqueta, sin red).
 const lowlight = createLowlight();
@@ -134,6 +135,9 @@ export function MarkdownEditor({
   // editor WYSIWYG renderizado. Se alterna desde la barra.
   const [mode, setMode] = useState<"source" | "rich">(sourceFirst ? "source" : "rich");
   const [source, setSource] = useState(value);
+  // Ruta relativa (assets/...) de la imagen que se esta anotando, o null si
+  // el dialogo de anotacion esta cerrado.
+  const [annotateRel, setAnnotateRel] = useState<string | null>(null);
 
   async function insertFile(file: File) {
     if (!projectId) return;
@@ -158,6 +162,28 @@ export function MarkdownEditor({
     } catch (err) {
       // No interrumpir la edicion si falla el guardado.
       console.error("No se pudo adjuntar el archivo:", err);
+    }
+  }
+
+  // Abre el editor de anotaciones sobre la imagen seleccionada en el editor.
+  function annotateSelectedImage() {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const rel = String(editor.getAttributes("image").src ?? "");
+    if (rel) setAnnotateRel(rel);
+  }
+
+  // Guarda el PNG anotado como un asset nuevo y lo deja en lugar del original
+  // (la imagen sin anotar queda en disco, sin referencias).
+  async function handleAnnotateConfirm(dataUrl: string) {
+    setAnnotateRel(null);
+    if (!projectId) return;
+    try {
+      const base64 = dataUrl.split(",")[1] ?? "";
+      const rel = await api.saveAsset(projectId, "png", base64);
+      editorRef.current?.chain().focus().updateAttributes("image", { src: rel }).run();
+    } catch (err) {
+      console.error("No se pudo guardar la anotacion:", err);
     }
   }
 
@@ -234,6 +260,7 @@ export function MarkdownEditor({
         onSetMode={applyMode}
         uploadEnabled={uploadEnabled}
         onPickFile={insertFile}
+        onAnnotate={annotateSelectedImage}
       />
       {mode === "source" ? (
         <textarea
@@ -248,6 +275,13 @@ export function MarkdownEditor({
       ) : (
         <EditorContent editor={editor} />
       )}
+      {annotateRel && (
+        <ImageAnnotator
+          src={resolveSrc(annotateRel, assetBase)}
+          onCancel={() => setAnnotateRel(null)}
+          onConfirm={(dataUrl) => void handleAnnotateConfirm(dataUrl)}
+        />
+      )}
     </div>
   );
 }
@@ -258,12 +292,14 @@ function Toolbar({
   onSetMode,
   uploadEnabled,
   onPickFile,
+  onAnnotate,
 }: {
   editor: Editor;
   mode: "source" | "rich";
   onSetMode: (mode: "source" | "rich") => void;
   uploadEnabled: boolean;
   onPickFile: (file: File) => void;
+  onAnnotate: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -420,6 +456,19 @@ function Toolbar({
             false,
             () => editor.chain().focus().updateAttributes("image", { alt: "" }).run(),
             "Tamano original",
+          )}
+          {uploadEnabled && (
+            <>
+              <span className="md-sep" />
+              {btn(
+                <>
+                  <i className="ti ti-pencil" /> Anotar
+                </>,
+                false,
+                onAnnotate,
+                "Dibujar flecha o rectangulo sobre la imagen",
+              )}
+            </>
           )}
         </>
       )}
