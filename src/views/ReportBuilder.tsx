@@ -702,7 +702,7 @@ function ProjectDataForm({
         <div className="inline-form">
           <input
             className="input"
-            placeholder="https://app.acme.com"
+            placeholder="https://app.acme.com — admite **negrita**, *cursiva*, [links](url)"
             value={scopeInput}
             onChange={(e) => setScopeInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addScope()}

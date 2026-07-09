@@ -233,7 +233,7 @@
   if project.scope.len() > 0 {
     v(0.4cm)
     [*Alcance:*]
-    list(..project.scope.map(s => [#raw(s)]))
+    list(..project.scope.map(s => eval(s, mode: "markup")))
   }
 }
 

@@ -9,11 +9,15 @@
 //! accede (ver README.dev.md).
 //!
 //! Alcance actual (Fase 2): leer proyectos e hallazgos y modificar el TEXTO de
-//! los hallazgos (crear vulnerabilidades, mejorar redaccion/campos). Puede SUBIR
+//! los hallazgos (crear vulnerabilidades, mejorar redaccion/campos). Tambien
+//! puede editar el TEXTO de secciones de prosa YA EXISTENTES del reporte
+//! (resumen, alcance, metodologia, conclusiones, etc.) via `update_section`:
+//! title/body/enabled unicamente, nunca crea secciones nuevas. Puede SUBIR
 //! imagenes nuevas al proyecto (upload_asset) para ilustrar el reporte, con
 //! guardarrailes (solo imagenes, anti-traversal, tope de tamano), pero NUNCA lee
 //! evidencias existentes: no expone bytes de assets. No edita configuracion
-//! (workspace.yaml, branding, tipo de proyecto) ni borra nada.
+//! (workspace.yaml, branding, tipo de proyecto, layout, portada, indice) ni
+//! borra nada.
 //!
 //! Puede crear/modificar plantillas PDF (.typ) via `save_pdf_template`, pero
 //! SOLO en la biblioteca PROPIA del usuario (`library/templates` dentro del
@@ -179,6 +183,23 @@ struct UpdateFindingArgs {
     status: Option<String>,
     /// Recursos afectados (URLs, hosts, endpoints).
     affected: Option<Vec<String>>,
+}
+
+/// Actualiza titulo, cuerpo o estado de una seccion de prosa existente
+/// (resumen, alcance, metodologia, conclusiones, etc.). NO crea secciones
+/// nuevas ni toca portada/branding/tipo de proyecto/layout.
+#[derive(Debug, Deserialize, JsonSchema)]
+struct UpdateSectionArgs {
+    /// Id del proyecto.
+    project_id: String,
+    /// Key de la seccion a editar (ver `get_project` para las disponibles).
+    section_key: String,
+    /// Nuevo titulo visible.
+    title: Option<String>,
+    /// Nuevo cuerpo markdown completo.
+    body: Option<String>,
+    /// Si la seccion se incluye en el PDF.
+    enabled: Option<bool>,
 }
 
 // --- Resultados estructurados ---
@@ -526,6 +547,45 @@ impl PuduReportServer {
         to_json(&finding)
     }
 
+    // --- Escritura (solo texto de secciones de prosa existentes) ---
+
+    /// Actualiza el texto de una seccion de prosa existente (resumen, alcance,
+    /// metodologia, conclusiones, etc.). No crea secciones nuevas ni toca
+    /// portada, branding, tipo de proyecto ni el orden del cuerpo (layout).
+    #[tool(
+        description = "Actualiza titulo, cuerpo markdown o si esta habilitada una seccion de prosa EXISTENTE del reporte (ej. resumen, alcance, metodologia, conclusiones). Solo cambia lo que se envia. Use `get_project` para ver las keys de seccion disponibles en el proyecto. NO crea secciones nuevas y NUNCA toca portada, branding, tipo de proyecto ni el layout del reporte."
+    )]
+    async fn update_section(
+        &self,
+        Parameters(args): Parameters<UpdateSectionArgs>,
+    ) -> Result<String, McpError> {
+        let root = self.current_root()?;
+        let mut project = workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
+        let Some(idx) = project.sections.iter().position(|s| s.key == args.section_key) else {
+            let keys: Vec<_> = project.sections.iter().map(|s| s.key.clone()).collect();
+            return Err(McpError::invalid_params(
+                format!(
+                    "no existe la seccion '{}'; disponibles: {}",
+                    args.section_key,
+                    keys.join(", ")
+                ),
+                None,
+            ));
+        };
+        let section = &mut project.sections[idx];
+        if let Some(title) = args.title {
+            section.title = title;
+        }
+        if let Some(body) = args.body {
+            section.body = body;
+        }
+        if let Some(enabled) = args.enabled {
+            section.enabled = enabled;
+        }
+        workspace::write_project_meta(&root, &args.project_id, &project).map_err(internal)?;
+        to_json(&project.sections[idx])
+    }
+
     // --- Escritura de imagenes (assets) ---
 
     /// Sube una imagen al proyecto para ilustrar el reporte. SOLO escribe; nunca
@@ -661,13 +721,16 @@ impl ServerHandler for PuduReportServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "Servidor MCP de PuduReport. Lee proyectos e hallazgos del workspace expuesto y \
-             mejora el texto de los hallazgos (crear vulnerabilidades, redaccion, campos). Puede \
-             SUBIR imagenes nuevas al proyecto (upload_asset) para ilustrar el reporte, pero \
-             NUNCA lee evidencias existentes: no expone bytes de assets. Puede crear o modificar \
-             plantillas PDF (save_pdf_template) SOLO en tu propia biblioteca (nunca las \
-             incluidas, nunca pisa una que edito un humano) y nunca las aplica sola a un \
-             proyecto: un humano la revisa y la aplica desde la app. No edita configuracion \
-             (workspace.yaml, branding, tipo de proyecto) ni borra nada.",
+             mejora el texto de los hallazgos (crear vulnerabilidades, redaccion, campos). \
+             Tambien puede editar el texto (titulo/cuerpo/habilitada) de secciones de prosa YA \
+             EXISTENTES del reporte (resumen, alcance, metodologia, conclusiones) via \
+             update_section, sin crear secciones nuevas. Puede SUBIR imagenes nuevas al proyecto \
+             (upload_asset) para ilustrar el reporte, pero NUNCA lee evidencias existentes: no \
+             expone bytes de assets. Puede crear o modificar plantillas PDF (save_pdf_template) \
+             SOLO en tu propia biblioteca (nunca las incluidas, nunca pisa una que edito un \
+             humano) y nunca las aplica sola a un proyecto: un humano la revisa y la aplica desde \
+             la app. No edita configuracion (workspace.yaml, branding, tipo de proyecto, layout, \
+             portada, indice) ni borra nada.",
         )
     }
 }
@@ -966,6 +1029,100 @@ mod tests {
         );
         assert_eq!(updated["id"].as_str().unwrap(), fid);
         assert_eq!(updated["meta"]["title"], "Titulo nuevo");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn update_section_changes_body_and_title() {
+        let (root, pid) = temp_workspace("section-body", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        let updated = parse(
+            srv.update_section(Parameters(UpdateSectionArgs {
+                project_id: pid.clone(),
+                section_key: "resumen".into(),
+                title: Some("Resumen ejecutivo (v2)".into()),
+                body: Some("Nuevo cuerpo del resumen.".into()),
+                enabled: None,
+            }))
+            .await
+            .expect("la seccion 'resumen' existe en el scaffold de pentest"),
+        );
+        assert_eq!(updated["title"], "Resumen ejecutivo (v2)");
+        assert_eq!(updated["body"], "Nuevo cuerpo del resumen.");
+
+        let persisted = workspace::read_project_meta(&root, &pid).unwrap();
+        let section = persisted.sections.iter().find(|s| s.key == "resumen").unwrap();
+        assert_eq!(section.title, "Resumen ejecutivo (v2)");
+        assert_eq!(section.body, "Nuevo cuerpo del resumen.");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn update_section_toggle_enabled_only() {
+        let (root, pid) = temp_workspace("section-toggle", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        let before = workspace::read_project_meta(&root, &pid).unwrap();
+        let original = before.sections.iter().find(|s| s.key == "alcance").unwrap().clone();
+
+        let updated = parse(
+            srv.update_section(Parameters(UpdateSectionArgs {
+                project_id: pid.clone(),
+                section_key: "alcance".into(),
+                title: None,
+                body: None,
+                enabled: Some(false),
+            }))
+            .await
+            .unwrap(),
+        );
+        assert_eq!(updated["enabled"], false);
+        assert_eq!(updated["title"], original.title);
+        assert_eq!(updated["body"], original.body);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn update_section_unknown_key_fails() {
+        let (root, pid) = temp_workspace("section-unknown", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        let err = srv
+            .update_section(Parameters(UpdateSectionArgs {
+                project_id: pid,
+                section_key: "no-existe".into(),
+                title: None,
+                body: Some("x".into()),
+                enabled: None,
+            }))
+            .await
+            .expect_err("la key 'no-existe' no existe en el scaffold");
+        let msg = err.to_string();
+        assert!(msg.contains("no-existe"), "mensaje: {msg}");
+        assert!(msg.contains("resumen"), "mensaje deberia listar las keys disponibles: {msg}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn update_section_does_not_touch_other_project_fields() {
+        let (root, pid) = temp_workspace("section-scoped", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        let before = workspace::read_project_meta(&root, &pid).unwrap();
+
+        srv.update_section(Parameters(UpdateSectionArgs {
+            project_id: pid.clone(),
+            section_key: "metodologia".into(),
+            title: None,
+            body: Some("Metodologia actualizada.".into()),
+            enabled: None,
+        }))
+        .await
+        .unwrap();
+
+        let after = workspace::read_project_meta(&root, &pid).unwrap();
+        assert_eq!(after.name, before.name);
+        assert_eq!(after.client, before.client);
+        assert_eq!(after.project_type, before.project_type);
+        assert_eq!(after.layout, before.layout);
+        assert_eq!(after.scope, before.scope);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

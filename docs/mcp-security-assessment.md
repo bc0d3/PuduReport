@@ -26,13 +26,18 @@ Superficie actual (herramientas en `mcp/src/main.rs`):
 - Lectura: `list_projects`, `get_project`, `list_findings`, `get_finding`,
   `search_findings`, `get_workspace_info`.
 - Escritura (solo texto de hallazgos): `create_finding`, `update_finding`.
+- Escritura (solo texto de secciones de prosa YA EXISTENTES): `update_section`
+  (title/body/enabled de una `ReportSection` por `key`; nunca crea secciones
+  nuevas, nunca toca `workspace.yaml`, branding, tipo de proyecto, layout,
+  portada ni indice — esos campos del `project.yaml` viajan sin cambios en el
+  mismo round-trip de lectura/escritura).
 - Escritura de imagenes: `upload_asset` (solo sube, nunca lee evidencias).
 - Escritura de plantillas PDF: `save_pdf_template` (crea/modifica, SOLO en la
   biblioteca propia del usuario; ver "Plantillas PDF via MCP" mas abajo).
 - Calculo: `calc_cvss`.
 
 No expone herramientas de configuracion (workspace.yaml, branding, tipo de
-proyecto) ni de borrado.
+proyecto, layout, portada, indice) ni de borrado.
 
 ## Plantillas PDF via MCP (`save_pdf_template`)
 
@@ -114,7 +119,7 @@ cliente (donde corre el modelo); aca se documenta la postura del servidor.
 | LLM03 | Supply chain | Dependencias pineadas (`Cargo.lock`), toolchain fijo (1.93.0), SDK oficial `rmcp`, `cargo audit` (RUSTSEC) en CI. | Bajo. |
 | LLM04 | Data / model poisoning | N/A. El servidor no entrena ni ajusta modelos. | N/A. |
 | LLM05 | Manejo inadecuado de la salida | El servidor no ejecuta la salida del modelo: las escrituras del modelo pasan por validacion de schema, `validate_id` y derivacion de severidad antes de tocar el `.md`. | Bajo. |
-| LLM06 | Agencia excesiva | Herramientas de minima agencia: sin borrar, sin escribir configuracion. La mayoria de los writes son texto de hallazgos, reversibles (git). `save_pdf_template` es la excepcion: escribe codigo Typst (se ejecuta al compilar), pero acotado a la biblioteca propia del usuario (sin acceso a las incluidas), sin poder pisar una plantilla que no creo el mismo, marcado `ai_generated` para exigir revision humana, y sin poder aplicarse solo a un proyecto. | Bajo para el resto de las herramientas; medio y contenido para `save_pdf_template` (ver seccion "Plantillas PDF via MCP"). |
+| LLM06 | Agencia excesiva | Herramientas de minima agencia: sin borrar, sin escribir configuracion. La mayoria de los writes son texto de hallazgos o de secciones de prosa ya existentes, reversibles (git). `save_pdf_template` es la excepcion: escribe codigo Typst (se ejecuta al compilar), pero acotado a la biblioteca propia del usuario (sin acceso a las incluidas), sin poder pisar una plantilla que no creo el mismo, marcado `ai_generated` para exigir revision humana, y sin poder aplicarse solo a un proyecto. | Bajo para el resto de las herramientas; medio y contenido para `save_pdf_template` (ver seccion "Plantillas PDF via MCP"). |
 | LLM07 | Fuga del system prompt | N/A. El servidor no tiene system prompt; no embebe LLM. | N/A. |
 | LLM08 | Debilidades de vectores/embeddings | N/A. Sin RAG ni embeddings. | N/A. |
 | LLM09 | Desinformacion | La IA puede redactar contenido incorrecto en un hallazgo. Mitigacion: revision humana antes de exportar el PDF. | Si. Se gestiona con revision humana. |
