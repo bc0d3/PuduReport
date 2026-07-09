@@ -560,8 +560,13 @@ impl PuduReportServer {
         Parameters(args): Parameters<UpdateSectionArgs>,
     ) -> Result<String, McpError> {
         let root = self.current_root()?;
-        let mut project = workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
-        let Some(idx) = project.sections.iter().position(|s| s.key == args.section_key) else {
+        let mut project =
+            workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
+        let Some(idx) = project
+            .sections
+            .iter()
+            .position(|s| s.key == args.section_key)
+        else {
             let keys: Vec<_> = project.sections.iter().map(|s| s.key.clone()).collect();
             return Err(McpError::invalid_params(
                 format!(
@@ -1051,7 +1056,11 @@ mod tests {
         assert_eq!(updated["body"], "Nuevo cuerpo del resumen.");
 
         let persisted = workspace::read_project_meta(&root, &pid).unwrap();
-        let section = persisted.sections.iter().find(|s| s.key == "resumen").unwrap();
+        let section = persisted
+            .sections
+            .iter()
+            .find(|s| s.key == "resumen")
+            .unwrap();
         assert_eq!(section.title, "Resumen ejecutivo (v2)");
         assert_eq!(section.body, "Nuevo cuerpo del resumen.");
         let _ = std::fs::remove_dir_all(&root);
@@ -1062,7 +1071,12 @@ mod tests {
         let (root, pid) = temp_workspace("section-toggle", "pentest");
         let srv = PuduReportServer::new(root.clone());
         let before = workspace::read_project_meta(&root, &pid).unwrap();
-        let original = before.sections.iter().find(|s| s.key == "alcance").unwrap().clone();
+        let original = before
+            .sections
+            .iter()
+            .find(|s| s.key == "alcance")
+            .unwrap()
+            .clone();
 
         let updated = parse(
             srv.update_section(Parameters(UpdateSectionArgs {
@@ -1097,7 +1111,10 @@ mod tests {
             .expect_err("la key 'no-existe' no existe en el scaffold");
         let msg = err.to_string();
         assert!(msg.contains("no-existe"), "mensaje: {msg}");
-        assert!(msg.contains("resumen"), "mensaje deberia listar las keys disponibles: {msg}");
+        assert!(
+            msg.contains("resumen"),
+            "mensaje deberia listar las keys disponibles: {msg}"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 

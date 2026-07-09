@@ -251,7 +251,11 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
             osid: project.osid,
             start_date: project.start_date,
             end_date: project.end_date,
-            scope: project.scope.into_iter().map(|s| markdown::to_typst(&s)).collect(),
+            scope: project
+                .scope
+                .into_iter()
+                .map(|s| markdown::to_typst(&s))
+                .collect(),
             team: project.team,
             sections,
             layout: layout_for_data(project.layout),
