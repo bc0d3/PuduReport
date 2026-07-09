@@ -2,6 +2,14 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.18] - 2026-07-09
+
+### Fixed
+- En Windows, "Abrir carpeta" (y "Abrir PDF") tras exportar fallaba: se le pasaba al explorador una ruta canonicalizada con el prefijo NT (\\?\), que Shell32 no soporta.
+
+### Added
+- Editor de anotaciones sobre imagenes ya insertadas en un hallazgo: flecha o rectangulo en rojo (u otro color), antes de que queden en el reporte.
+
 ## [0.0.17] - 2026-07-09
 
 ### Fixed
