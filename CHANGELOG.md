@@ -2,6 +2,14 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.17] - 2026-07-09
+
+### Fixed
+- El campo "Alcance" del proyecto ahora admite Markdown basico (negrita, cursiva, enlaces, codigo en linea) tanto en la vista previa como en el PDF exportado; antes se imprimia como texto literal.
+
+### Added
+- Herramienta MCP `update_section`: el asistente de IA conectado puede editar el titulo, cuerpo o habilitacion de una seccion de prosa ya existente del reporte (resumen, alcance, metodologia, conclusiones, etc.). No crea secciones nuevas ni toca portada, branding, tipo de proyecto o el orden del reporte. Documentado en `docs/mcp-security-assessment.md`.
+
 ## [0.0.16] - 2026-07-06
 
 ### Fixed
