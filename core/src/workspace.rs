@@ -25,8 +25,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::models::{
-    Finding, FindingMeta, FindingStatus, FindingTemplate, ProjectMeta, ProjectStats,
-    ProjectSummary, SeverityCounts, Snippet, TemplateMeta, WorkspaceMeta, WorkspaceStats,
+    Finding, FindingMeta, FindingStatus, FindingTemplate, ProjectAssignment, ProjectMeta,
+    ProjectStats, ProjectStatus, ProjectSummary, SeverityCounts, Snippet, TemplateMeta,
+    WorkspaceMeta, WorkspaceStats,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -202,8 +203,11 @@ pub fn list_projects(root: &Path) -> Result<Vec<ProjectSummary>> {
             name: meta.name,
             client: meta.client,
             project_type: meta.project_type,
+            start_date: meta.start_date,
             end_date: meta.end_date,
             finding_count,
+            project_status: meta.project_status,
+            assignment_history: meta.assignment_history,
         });
     }
     out.sort_by_key(|a| a.name.to_lowercase());
@@ -267,6 +271,7 @@ pub fn create_project(
         client: client.to_string(),
         project_type: project_type.to_string(),
         sections: sections_for_type(project_type),
+        project_status: ProjectStatus::Todo,
         ..Default::default()
     };
     write_project_meta(root, &id, &meta)?;
@@ -318,6 +323,7 @@ pub fn create_example_project(root: &Path) -> Result<(String, ProjectMeta)> {
         ],
         sections: default_sections(),
         finding_order: order,
+        project_status: ProjectStatus::Todo,
         ..Default::default()
     };
     write_project_meta(root, &id, &meta)?;
@@ -624,6 +630,37 @@ pub fn write_project_meta(root: &Path, id: &str, meta: &ProjectMeta) -> Result<(
     Ok(())
 }
 
+/// Fecha y hora actual en UTC, ISO-8601 (`YYYY-MM-DDTHH:MM:SSZ`). Mismo
+/// algoritmo civil_from_days (Howard Hinnant) que
+/// `src-tauri/src/naming.rs::today_utc_date`, para no depender de un crate de
+/// fechas (evita el feature `local-offset` de crates como `time`, que en Unix
+/// tiene problemas documentados de unsafe/threads).
+pub fn now_utc_iso() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let days = (secs / 86_400) as i64;
+    let time_of_day = secs % 86_400;
+    let (h, m, s) = (time_of_day / 3600, (time_of_day % 3600) / 60, time_of_day % 60);
+
+    // civil_from_days: dias desde 1970-01-01 -> (anio, mes, dia).
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let mth = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if mth <= 2 { y + 1 } else { y };
+
+    format!("{y:04}-{mth:02}-{d:02}T{h:02}:{m:02}:{s:02}Z")
+}
+
 // ---------------------------------------------------------------------------
 // Hallazgos
 // ---------------------------------------------------------------------------
@@ -778,6 +815,40 @@ pub fn reorder_findings(root: &Path, project_id: &str, order: Vec<String>) -> Re
     let mut meta = read_project_meta(root, project_id)?;
     meta.finding_order = order;
     write_project_meta(root, project_id, &meta)?;
+    Ok(())
+}
+
+/// Mueve el proyecto a "Asignado/En cierre" y agrega un registro al
+/// historial de asignaciones (no sobreescribe las anteriores). El timestamp
+/// se genera en el backend para que no dependa del reloj del cliente.
+pub fn assign_project_closure(
+    root: &Path,
+    project_id: &str,
+    name: &str,
+    email: &str,
+) -> Result<ProjectAssignment> {
+    validate_id(project_id)?;
+    let mut meta = read_project_meta(root, project_id)?;
+    let entry = ProjectAssignment {
+        name: name.trim().to_string(),
+        email: email.trim().to_string(),
+        assigned_at: now_utc_iso(),
+    };
+    meta.assignment_history.push(entry.clone());
+    meta.project_status = ProjectStatus::Assigned;
+    write_project_meta(root, project_id, &meta)?;
+    Ok(entry)
+}
+
+/// Reordena las tarjetas del tablero Kanban de Proyectos (orden global,
+/// filtrado por columna al renderizar).
+pub fn reorder_projects(root: &Path, order: Vec<String>) -> Result<()> {
+    for id in &order {
+        validate_id(id)?;
+    }
+    let mut meta = read_workspace_meta(root)?;
+    meta.project_order = order;
+    write_workspace_meta(root, &meta)?;
     Ok(())
 }
 
@@ -1149,6 +1220,77 @@ mod tests {
         delete_project(&tmp, &pid).unwrap();
         assert!(!project_dir(&tmp, &pid).exists());
         assert_eq!(list_projects(&tmp).unwrap().len(), 0);
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn project_status_defaults_to_done_for_legacy_yaml() {
+        // Un project.yaml sin `project_status` (formato previo a esta version)
+        // debe caer en `Done`, no en `Todo`, para no amontonar informes ya
+        // entregados en la primera columna del tablero.
+        let yaml = "name: Legado\nclient: ACME\n";
+        let meta: ProjectMeta = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(meta.project_status, ProjectStatus::Done);
+        assert!(meta.assignment_history.is_empty());
+    }
+
+    #[test]
+    fn project_status_roundtrip() {
+        let mut meta = ProjectMeta {
+            project_status: ProjectStatus::Inprogress,
+            ..Default::default()
+        };
+        meta.assignment_history.push(ProjectAssignment {
+            name: "Ana".to_string(),
+            email: "ana@acme.com".to_string(),
+            assigned_at: "2026-01-01T00:00:00Z".to_string(),
+        });
+        let yaml = serde_yaml::to_string(&meta).unwrap();
+        let parsed: ProjectMeta = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(parsed.project_status, ProjectStatus::Inprogress);
+        assert_eq!(parsed.assignment_history.len(), 1);
+        assert_eq!(parsed.assignment_history[0].name, "Ana");
+    }
+
+    #[test]
+    fn new_project_starts_in_todo() {
+        let tmp = std::env::temp_dir().join(format!("pudu-status-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        create_workspace(&tmp, "Test WS").unwrap();
+
+        let (pid, meta) = create_project(&tmp, "Web App", "ACME", "pentest").unwrap();
+        assert_eq!(meta.project_status, ProjectStatus::Todo);
+        let projects = list_projects(&tmp).unwrap();
+        assert_eq!(projects[0].project_status, ProjectStatus::Todo);
+
+        let _ = fs::remove_dir_all(&tmp);
+        let _ = pid;
+    }
+
+    #[test]
+    fn assign_project_closure_appends_history_and_persists_order() {
+        let tmp = std::env::temp_dir().join(format!("pudu-assign-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        create_workspace(&tmp, "Test WS").unwrap();
+        let (pid, _) = create_project(&tmp, "Web App", "ACME", "pentest").unwrap();
+
+        let first = assign_project_closure(&tmp, &pid, "Ana", "ana@acme.com").unwrap();
+        assert_eq!(first.name, "Ana");
+        let meta = read_project_meta(&tmp, &pid).unwrap();
+        assert_eq!(meta.project_status, ProjectStatus::Assigned);
+        assert_eq!(meta.assignment_history.len(), 1);
+
+        // Reasignar no debe sobreescribir el historial, sino agregar.
+        assign_project_closure(&tmp, &pid, "Beto", "beto@acme.com").unwrap();
+        let meta = read_project_meta(&tmp, &pid).unwrap();
+        assert_eq!(meta.assignment_history.len(), 2);
+        assert_eq!(meta.assignment_history[0].name, "Ana");
+        assert_eq!(meta.assignment_history[1].name, "Beto");
+
+        reorder_projects(&tmp, vec![pid.clone()]).unwrap();
+        let ws = read_workspace_meta(&tmp).unwrap();
+        assert_eq!(ws.project_order, vec![pid.clone()]);
 
         let _ = fs::remove_dir_all(&tmp);
     }

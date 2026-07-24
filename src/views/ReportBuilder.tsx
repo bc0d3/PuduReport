@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (c) 2026 bc0d3
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import * as api from "../lib/api";
 import type {
   BlockKind,
@@ -92,17 +98,13 @@ interface Props {
 
 type Selection = { kind: "data" } | { kind: "block"; index: number };
 
-export function ReportBuilder({
-  projectId,
-  assetBase,
-  onProjectMetaChange,
-  onPickProject,
-}: Props) {
+export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPickProject }: Props) {
   const { guard } = useToast();
   const [project, setProject] = useState<ProjectMeta | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [selection, setSelection] = useState<Selection>({ kind: "data" });
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
   const [scopeInput, setScopeInput] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const saveTimer = useRef<number | undefined>(undefined);
@@ -148,6 +150,59 @@ export function ReportBuilder({
     });
   }
 
+  // Arrastre por eventos de mouse en vez de drag-and-drop nativo HTML5: en el
+  // WKWebView de macOS (Tauri) el DnD nativo no dispara de forma confiable (el
+  // mismo motivo por el que el tablero Kanban usa este enfoque).
+  const dragFromRef = useRef<number | null>(null);
+  const overIdxRef = useRef<number | null>(null);
+  const candidateRef = useRef<{ idx: number; x: number; y: number } | null>(null);
+  const draggedRef = useRef(false);
+
+  function startBlockDrag(idx: number, e: ReactMouseEvent) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    draggedRef.current = false;
+    candidateRef.current = { idx, x: e.clientX, y: e.clientY };
+  }
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      if (dragFromRef.current === null && candidateRef.current) {
+        const c = candidateRef.current;
+        if (Math.hypot(e.clientX - c.x, e.clientY - c.y) > 4) {
+          draggedRef.current = true;
+          dragFromRef.current = c.idx;
+          window.getSelection()?.removeAllRanges();
+          setDragIdx(c.idx);
+        }
+      }
+      if (dragFromRef.current !== null) {
+        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+        const rowEl = el?.closest<HTMLElement>("[data-block-row]") ?? null;
+        const idx = rowEl ? Number(rowEl.dataset.blockRow) : null;
+        overIdxRef.current = idx;
+        setOverIdx(idx);
+      }
+    }
+    function onUp() {
+      candidateRef.current = null;
+      const from = dragFromRef.current;
+      const to = overIdxRef.current;
+      dragFromRef.current = null;
+      overIdxRef.current = null;
+      setDragIdx(null);
+      setOverIdx(null);
+      if (from !== null && to !== null && from !== to) reorderBlocks(from, to);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Toggle de visibilidad: para una seccion escribe section.enabled (un solo
   // toggle por seccion); para el resto de los bloques, block.enabled.
   function toggleBlock(index: number) {
@@ -190,7 +245,9 @@ export function ReportBuilder({
   function updateBlockConfig(index: number, next: Record<string, unknown>) {
     patch((p) => ({
       ...p,
-      layout: p.layout.map((b, i) => (i === index ? { ...b, config: { ...b.config, ...next } } : b)),
+      layout: p.layout.map((b, i) =>
+        i === index ? { ...b, config: { ...b.config, ...next } } : b,
+      ),
     }));
   }
 
@@ -270,8 +327,8 @@ export function ReportBuilder({
                 className="faint"
                 style={{ fontSize: 11, marginBottom: 8, color: "var(--warning, #b4690e)" }}
               >
-                Estas usando una plantilla personalizada. Si la duplicaste antes de esta version,
-                el PDF puede no reflejar el orden de los bloques: usa una plantilla incluida (desde
+                Estas usando una plantilla personalizada. Si la duplicaste antes de esta version, el
+                PDF puede no reflejar el orden de los bloques: usa una plantilla incluida (desde
                 Plantillas) o actualiza tu copia.
               </p>
             )}
@@ -280,17 +337,18 @@ export function ReportBuilder({
                 {project.layout.map((b, i) => (
                   <BlockRow
                     key={`${b.kind}-${b.kind === "section" ? cfgStr(b, "key") : i}`}
+                    index={i}
                     block={b}
                     section={b.kind === "section" ? sectionByKey(cfgStr(b, "key")) : undefined}
                     findingsCount={findings.length}
                     selected={selection.kind === "block" && selection.index === i}
                     dragging={dragIdx === i}
-                    onDragStart={() => setDragIdx(i)}
-                    onDrop={() => {
-                      if (dragIdx !== null && dragIdx !== i) reorderBlocks(dragIdx, i);
-                      setDragIdx(null);
+                    dropTarget={dragIdx !== null && overIdx === i && dragIdx !== i}
+                    onDragHandleDown={(e) => startBlockDrag(i, e)}
+                    onSelect={() => {
+                      if (draggedRef.current) return;
+                      setSelection({ kind: "block", index: i });
                     }}
-                    onSelect={() => setSelection({ kind: "block", index: i })}
                     onToggle={() => toggleBlock(i)}
                   />
                 ))}
@@ -414,23 +472,25 @@ export function ReportBuilder({
 }
 
 function BlockRow({
+  index,
   block,
   section,
   findingsCount,
   selected,
   dragging,
-  onDragStart,
-  onDrop,
+  dropTarget,
+  onDragHandleDown,
   onSelect,
   onToggle,
 }: {
+  index: number;
   block: ReportBlock;
   section: { title: string; enabled: boolean } | undefined;
   findingsCount: number;
   selected: boolean;
   dragging: boolean;
-  onDragStart: () => void;
-  onDrop: () => void;
+  dropTarget: boolean;
+  onDragHandleDown: (e: ReactMouseEvent) => void;
   onSelect: () => void;
   onToggle: () => void;
 }) {
@@ -452,12 +512,15 @@ function BlockRow({
 
   return (
     <div
-      className={`row ${selected ? "on" : ""} ${dragging ? "dragging" : ""}`}
-      style={{ cursor: "pointer", opacity: enabled ? 1 : 0.5 }}
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
+      data-block-row={index}
+      className={`row ${selected ? "on" : ""} ${dragging ? "dragging" : ""} ${
+        dropTarget ? "drop-target" : ""
+      }`}
+      style={{
+        cursor: dragging ? "grabbing" : "grab",
+        opacity: dragging ? 0.4 : enabled ? 1 : 0.5,
+      }}
+      onMouseDown={onDragHandleDown}
       onClick={onSelect}
     >
       <i className="ti ti-grip-vertical grip" />
@@ -472,6 +535,7 @@ function BlockRow({
         className={`toggle ${enabled ? "" : "off"}`}
         title={enabled ? "Visible en el PDF" : "Oculto"}
         style={{ marginLeft: "auto" }}
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           onToggle();
@@ -574,8 +638,8 @@ function BlockEditor({
         {meta.desc}
       </p>
       <p className="faint" style={{ fontSize: 12 }}>
-        Este bloque es automatico: no se edita aca. Podes reordenarlo u ocultarlo desde la lista
-        de la izquierda.
+        Este bloque es automatico: no se edita aca. Podes reordenarlo u ocultarlo desde la lista de
+        la izquierda.
       </p>
     </div>
   );

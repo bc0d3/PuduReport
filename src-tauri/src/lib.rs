@@ -23,8 +23,8 @@ use tauri_plugin_store::StoreExt;
 
 // Logica compartida en el crate pudureport-core.
 use pudureport_core::models::{
-    CvssResult, CvssVersion, Finding, FindingTemplate, PdfTemplate, ProjectMeta, ProjectSummary,
-    Snippet, TemplateMeta, WorkspaceMeta, WorkspaceStats,
+    CvssResult, CvssVersion, Finding, FindingTemplate, PdfTemplate, ProjectAssignment, ProjectMeta,
+    ProjectSummary, Snippet, TemplateMeta, WorkspaceMeta, WorkspaceStats,
 };
 use pudureport_core::{cvss, workspace};
 
@@ -221,6 +221,15 @@ fn save_workspace_meta(state: State<AppState>, meta: WorkspaceMeta) -> Result<()
     workspace::write_workspace_meta(&root, &meta).map_err(|e| e.to_string())
 }
 
+/// Relee `workspace.yaml` sin efectos secundarios (a diferencia de
+/// `open_workspace`, que reindexa y toca el store de recientes). Usado para
+/// refrescar campos como `project_order` tras reordenar el tablero Kanban.
+#[tauri::command]
+fn get_workspace_meta(state: State<AppState>) -> Result<WorkspaceMeta, String> {
+    let root = current_root(&state)?;
+    workspace::read_workspace_meta(&root).map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
 // Proyectos
 // ---------------------------------------------------------------------------
@@ -253,8 +262,11 @@ fn create_project(
         name: meta.name,
         client: meta.client,
         project_type: meta.project_type,
+        start_date: meta.start_date,
         end_date: meta.end_date,
         finding_count: 0,
+        project_status: meta.project_status,
+        assignment_history: meta.assignment_history,
     })
 }
 
@@ -271,8 +283,11 @@ fn create_example_project(state: State<AppState>) -> Result<ProjectSummary, Stri
         name: meta.name,
         client: meta.client,
         project_type: meta.project_type,
+        start_date: meta.start_date,
         end_date: meta.end_date,
         finding_count,
+        project_status: meta.project_status,
+        assignment_history: meta.assignment_history,
     })
 }
 
@@ -368,6 +383,26 @@ fn reorder_findings(
 ) -> Result<(), String> {
     let root = current_root(&state)?;
     workspace::reorder_findings(&root, &project_id, order).map_err(|e| e.to_string())
+}
+
+/// Asigna el cierre de un proyecto (nombre + correo) y lo mueve a la columna
+/// "Asignado/En cierre" del tablero Kanban. El timestamp lo genera el backend.
+#[tauri::command]
+fn assign_project_closure(
+    state: State<AppState>,
+    project_id: String,
+    name: String,
+    email: String,
+) -> Result<ProjectAssignment, String> {
+    let root = current_root(&state)?;
+    workspace::assign_project_closure(&root, &project_id, &name, &email).map_err(|e| e.to_string())
+}
+
+/// Reordena las tarjetas del tablero Kanban de Proyectos.
+#[tauri::command]
+fn reorder_projects(state: State<AppState>, order: Vec<String>) -> Result<(), String> {
+    let root = current_root(&state)?;
+    workspace::reorder_projects(&root, order).map_err(|e| e.to_string())
 }
 
 /// Busca hallazgos por titulo o cuerpo en todo el workspace.
@@ -860,6 +895,7 @@ pub fn run() {
             open_workspace,
             create_workspace,
             save_workspace_meta,
+            get_workspace_meta,
             workspace_stats,
             list_projects,
             create_project,
@@ -874,6 +910,8 @@ pub fn run() {
             save_finding,
             delete_finding,
             reorder_findings,
+            assign_project_closure,
+            reorder_projects,
             save_asset,
             save_branding_asset,
             search_findings,

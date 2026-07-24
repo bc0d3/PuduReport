@@ -70,10 +70,14 @@
 } else {
   ("Helvetica Neue", "Arial", "Liberation Sans")
 }
+// La cadena termina en "DejaVu Sans Mono", que Typst trae embebida en su
+// binario: garantiza una monoespaciada real en cualquier ambiente (macOS,
+// Windows, Linux, CI) sin instalar fuentes. No usar el generico "monospace":
+// Typst no lo resuelve y cae a una serif (codigo desalineado y feo).
 #let default-mono-font(branding) = if branding.at("mono_font", default: "") != "" {
-  (branding.mono_font, "JetBrains Mono", "SF Mono", "monospace")
+  (branding.mono_font, "JetBrains Mono", "Menlo", "Consolas", "DejaVu Sans Mono")
 } else {
-  ("JetBrains Mono", "SF Mono", "monospace")
+  ("JetBrains Mono", "Menlo", "Consolas", "DejaVu Sans Mono")
 }
 
 // --- Bloques de codigo: fondo oscuro con resaltado + etiqueta de lenguaje.

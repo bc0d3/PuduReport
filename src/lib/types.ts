@@ -59,6 +59,17 @@ export interface TeamMember {
   role: string;
 }
 
+/** Estado del proyecto en el tablero Kanban de la vista de Proyectos. */
+export type ProjectStatus = "todo" | "inprogress" | "done" | "assigned";
+
+/** Registro de asignacion de cierre de un proyecto (historial append-only). */
+export interface ProjectAssignment {
+  name: string;
+  email: string;
+  /** UTC ISO-8601, generado por el backend. */
+  assigned_at: string;
+}
+
 /** Tipo de bloque del cuerpo del reporte. */
 export type BlockKind =
   | "cover"
@@ -102,6 +113,10 @@ export interface ProjectMeta {
   end_date: string;
   scope: string[];
   team: TeamMember[];
+  /** Etapa en el tablero Kanban de Proyectos. */
+  project_status: ProjectStatus;
+  /** Historial de asignaciones de cierre (append-only). */
+  assignment_history: ProjectAssignment[];
   /** Secciones de prosa del reporte, en orden. */
   sections: ReportSection[];
   /** Cuerpo del PDF como lista ordenada de bloques. El backend lo reconcilia. */
@@ -174,6 +189,8 @@ export interface WorkspaceMeta {
   name: string;
   branding: Branding;
   watermark: Watermark;
+  /** Orden de las tarjetas del tablero Kanban de Proyectos (ids). */
+  project_order: string[];
 }
 
 /** Un archivo con cambios sin commitear (relativo al workspace). */
@@ -218,8 +235,11 @@ export interface ProjectSummary {
   name: string;
   client: string;
   project_type: string;
+  start_date: string;
   end_date: string;
   finding_count: number;
+  project_status: ProjectStatus;
+  assignment_history: ProjectAssignment[];
 }
 
 /** Hallazgo reutilizable de la libreria (con variables {{cliente}}, {{target}}). */

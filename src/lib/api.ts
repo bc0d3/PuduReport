@@ -16,6 +16,7 @@ import type {
   McpClient,
   McpStatus,
   PdfTemplate,
+  ProjectAssignment,
   ProjectMeta,
   ProjectSummary,
   WorkspaceStats,
@@ -58,6 +59,11 @@ export function createWorkspace(path: string, name: string): Promise<WorkspaceMe
 
 export function saveWorkspaceMeta(meta: WorkspaceMeta): Promise<void> {
   return invoke("save_workspace_meta", { meta });
+}
+
+/** Relee workspace.yaml sin efectos secundarios (ej. tras reordenar el tablero Kanban). */
+export function getWorkspaceMeta(): Promise<WorkspaceMeta> {
+  return invoke("get_workspace_meta");
 }
 
 // --- Proyectos ---
@@ -122,6 +128,20 @@ export function deleteFinding(projectId: string, findingId: string): Promise<voi
 
 export function reorderFindings(projectId: string, order: string[]): Promise<void> {
   return invoke("reorder_findings", { projectId, order });
+}
+
+/** Asigna el cierre de un proyecto (nombre + correo) y lo mueve a esa columna del tablero. */
+export function assignProjectClosure(
+  id: string,
+  name: string,
+  email: string,
+): Promise<ProjectAssignment> {
+  return invoke("assign_project_closure", { projectId: id, name, email });
+}
+
+/** Reordena las tarjetas del tablero Kanban de Proyectos. */
+export function reorderProjects(order: string[]): Promise<void> {
+  return invoke("reorder_projects", { order });
 }
 
 /** Guarda un asset (evidencia) y devuelve su ruta relativa (assets/<uuid>.<ext>). */

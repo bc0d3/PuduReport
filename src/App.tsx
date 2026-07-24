@@ -67,6 +67,10 @@ function AppInner() {
       setProjects(list);
       setActiveProjectId((prev) => prev ?? (list.length > 0 ? list[0].id : null));
     }
+    // Tambien refresca el workspace (ej. project_order del tablero Kanban,
+    // que cambia con cada arrastre y no se refleja solo con listProjects).
+    const ws = await guard(api.getWorkspaceMeta());
+    if (ws) setWorkspace(ws);
   }, [guard]);
 
   // Al arrancar mostramos el launcher (no auto-abrimos): el usuario elige un

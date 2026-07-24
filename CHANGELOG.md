@@ -2,6 +2,17 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.20] - 2026-07-24
+
+### Added
+- Vista de tablero (Kanban) para los proyectos, ademas de la tabla: columnas To Do, In Progress, Done y Asignado/En cierre. Las tarjetas se arrastran entre columnas y se reordenan dentro de cada una; el orden y el estado se guardan. Al pasar un proyecto a "Asignado/En cierre" se registra quien se hizo cargo (nombre y correo) con la fecha, como historial. Cada tarjeta muestra el tipo, los hallazgos por severidad y botones para renombrar o eliminar. La vista elegida (tabla o tablero) se recuerda por usuario.
+- La tabla de proyectos suma columnas ordenables de Estado y fecha de Inicio.
+
+### Fixed
+- Los bloques de codigo del PDF ya no se salen del margen: los tokens largos sin espacios (JWT, hashes, base64) ahora se quiebran para quedar dentro del ancho.
+- El codigo del PDF (en linea y en bloque) se veia con una fuente distinta y desalineada cuando la monoespaciada de marca no estaba instalada; ahora cae a una monoespaciada garantizada en cualquier equipo, sin instalar nada.
+- La estructura del reporte se puede reordenar arrastrando de nuevo (el arrastre no respondia en la app de escritorio).
+
 ## [0.0.19] - 2026-07-09
 
 ### Fixed

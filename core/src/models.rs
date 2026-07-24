@@ -80,6 +80,34 @@ pub enum FindingStatus {
     Wontfix,
 }
 
+/// Estado del proyecto en el tablero Kanban (vista de Proyectos). El default
+/// es `Done` (no `Todo`) a proposito: es lo que usa `#[serde(default)]` para
+/// los `project.yaml` legados sin este campo, para no amontonar informes ya
+/// entregados en "To Do". Los proyectos nuevos fijan `Todo` explicitamente
+/// (ver `create_project`/`create_example_project`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ProjectStatus {
+    Todo,
+    Inprogress,
+    #[default]
+    Done,
+    Assigned,
+}
+
+/// Registro de asignacion de cierre de un proyecto: quien se hizo cargo y
+/// cuando. Se agrega uno por cada vez que la tarjeta entra a la columna
+/// "Asignado/En cierre" (historial append-only, no se sobreescribe, para
+/// llevar el balance de asignaciones).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectAssignment {
+    pub name: String,
+    pub email: String,
+    /// UTC ISO-8601, ej "2026-07-24T15:32:00Z". Generado en el backend (ver
+    /// `workspace::now_utc_iso`), no en el frontend.
+    pub assigned_at: String,
+}
+
 /// Front-matter estructurado de un hallazgo.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FindingMeta {
@@ -322,6 +350,10 @@ pub struct ProjectMeta {
     pub scope: Vec<String>,
     #[serde(default)]
     pub team: Vec<TeamMember>,
+    #[serde(default)]
+    pub project_status: ProjectStatus,
+    #[serde(default)]
+    pub assignment_history: Vec<ProjectAssignment>,
     #[serde(default)]
     pub sections: Vec<ReportSection>,
     /// Orden/estructura del cuerpo del PDF (lista de bloques). Vacio = usar el
@@ -581,6 +613,11 @@ pub struct WorkspaceMeta {
     pub branding: Branding,
     #[serde(default)]
     pub watermark: Watermark,
+    /// Orden de las tarjetas del tablero Kanban de Proyectos (ids), definido
+    /// arrastrando. Los proyectos que no aparecen aca van al final de su
+    /// columna, ordenados por nombre.
+    #[serde(default)]
+    pub project_order: Vec<String>,
 }
 
 /// Resumen liviano de un proyecto para listados.
@@ -590,8 +627,12 @@ pub struct ProjectSummary {
     pub name: String,
     pub client: String,
     pub project_type: String,
+    pub start_date: String,
     pub end_date: String,
     pub finding_count: usize,
+    pub project_status: ProjectStatus,
+    #[serde(default)]
+    pub assignment_history: Vec<ProjectAssignment>,
 }
 
 /// Hallazgo reutilizable de la libreria.

@@ -66,7 +66,7 @@ pub fn to_typst(markdown: &str) -> String {
             }
             Event::Code(code) => {
                 out.push('`');
-                out.push_str(&code.replace('`', "\u{2018}"));
+                out.push_str(&soft_break_long_runs(&code.replace('`', "\u{2018}")));
                 out.push('`');
             }
             Event::SoftBreak => out.push(' '),
@@ -185,7 +185,33 @@ fn code_block_typst(lang: &str, content: &str) -> String {
     let fence = "`".repeat(longest_backtick_run(content).max(2) + 1);
     // El contenido suele venir con un salto final; se normaliza a uno solo.
     let body = content.strip_suffix('\n').unwrap_or(content);
+    let body = soft_break_long_runs(body);
     format!("{fence}{lang}\n{body}\n{fence}\n\n")
+}
+
+/// Inserta oportunidades de corte (espacio de ancho cero, U+200B) dentro de
+/// rachas largas de caracteres sin espacios —tokens tipo JWT, hash o base64—
+/// para que Typst pueda quebrarlas y el bloque de codigo no se salga del ancho
+/// de la pagina. Solo afecta rachas de mas de `MAX_RUN` caracteres, asi que los
+/// identificadores y palabras clave cortas quedan intactos (no rompe el
+/// resaltado de sintaxis). El ZWSP es invisible en el PDF.
+fn soft_break_long_runs(s: &str) -> String {
+    const MAX_RUN: usize = 42;
+    let mut out = String::with_capacity(s.len());
+    let mut run = 0usize;
+    for ch in s.chars() {
+        out.push(ch);
+        if ch.is_whitespace() {
+            run = 0;
+        } else {
+            run += 1;
+            if run >= MAX_RUN {
+                out.push('\u{200B}');
+                run = 0;
+            }
+        }
+    }
+    out
 }
 
 /// Escapa una cadena para usar dentro de comillas dobles de Typst.
@@ -286,6 +312,25 @@ mod tests {
         let out = to_typst("```\npassword: cualquier_cosa <token>\n```");
         assert!(out.contains("cualquier_cosa <token>"));
         assert!(!out.contains("cualquier\\_cosa"));
+    }
+
+    #[test]
+    fn long_token_gets_soft_break_opportunities() {
+        // Un token largo sin espacios (JWT/hash) recibe ZWSP para poder
+        // quebrarse y no salirse del ancho del bloque en el PDF.
+        let token = "a".repeat(120);
+        let out = to_typst(&format!("```\n{token}\n```"));
+        assert!(out.contains('\u{200B}'), "deberia insertar ZWSP: {out}");
+    }
+
+    #[test]
+    fn short_code_is_left_intact() {
+        // Codigo corto (keywords, identificadores) no debe recibir ZWSP, para
+        // no romper el resaltado de sintaxis.
+        let out = to_typst("```\nSELECT * FROM users WHERE id = 1\n```");
+        assert!(!out.contains('\u{200B}'), "no deberia insertar ZWSP: {out}");
+        let inline = to_typst("El valor `admin` es sensible.");
+        assert!(!inline.contains('\u{200B}'));
     }
 
     #[test]
