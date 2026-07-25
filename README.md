@@ -16,6 +16,11 @@
 
 Aplicacion de escritorio local-first para redactar reportes de vulnerabilidades y generar PDF profesionales. Pensada para pentesters y bug hunters. Funciona offline, sin servidor y sin que los datos salgan de tu equipo.
 
+<p align="center">
+  <img src="images/Dashboard.png" alt="Panel de inicio de PuduReport" width="820" />
+</p>
+<p align="center"><sub>Panel de inicio: proyectos, hallazgos y distribucion por severidad de un vistazo.</sub></p>
+
 ## Caracteristicas
 
 - Editor de hallazgos tipo formulario: campos estructurados (severidad, CVSS, estado, CWE) y bloques markdown que se llenan pegando contenido.
@@ -24,6 +29,33 @@ Aplicacion de escritorio local-first para redactar reportes de vulnerabilidades 
 - Generacion de PDF con plantillas personalizables: portada con tu logo y colores, marca de agua, secciones activables.
 - Workspaces locales en la carpeta que elijas. Cada workspace es git-friendly (solo texto + assets).
 - Multiplataforma: macOS, Windows y Linux.
+
+## Capturas
+
+<p align="center">
+  <img src="images/Proyectos.png" alt="Tablero de proyectos" width="820" />
+</p>
+<p align="center"><sub>Tablero de proyectos estilo kanban (To Do, In Progress, Done, En cierre) o vista de tabla.</sub></p>
+
+<p align="center">
+  <img src="images/Hallazgos.png" alt="Editor de hallazgos" width="820" />
+</p>
+<p align="center"><sub>Editor de hallazgos: campos estructurados (severidad, CVSS, CWE, estado) y bloques markdown. La severidad se deriva del vector CVSS.</sub></p>
+
+<p align="center">
+  <img src="images/Plantillas.png" alt="Libreria de plantillas" width="820" />
+</p>
+<p align="center"><sub>Libreria de plantillas: PDF por tipo de reporte (Pentest, OSCP, HTB, ejecutivo, CTI, DFIR, retest), hallazgos reutilizables y snippets.</sub></p>
+
+<p align="center">
+  <img src="images/Portada.png" alt="Portada y marca" width="820" />
+</p>
+<p align="center"><sub>Portada y marca: disposiciones predefinidas, logo, colores, tipografia y marca de agua, con vista previa en vivo.</sub></p>
+
+<p align="center">
+  <img src="images/MCP.png" alt="Ajustes: git y conexion MCP" width="820" />
+</p>
+<p align="center"><sub>Ajustes locales: control de versiones git y conexion opcional a tu cliente de IA (MCP) para Claude Desktop o Claude Code. Nada se sincroniza.</sub></p>
 
 ## Stack
 
