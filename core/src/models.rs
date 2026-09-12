@@ -618,6 +618,34 @@ pub struct WorkspaceMeta {
     /// columna, ordenados por nombre.
     #[serde(default)]
     pub project_order: Vec<String>,
+    /// Destinos de exportacion a API externa (opt-in, editables). Vacio por
+    /// default: sin destinos, la app no hace ninguna llamada de red.
+    #[serde(default)]
+    pub export_targets: Vec<ExportTarget>,
+}
+
+/// Destino de exportacion a una API externa (opt-in, configurable y editable
+/// por el usuario, por workspace).
+///
+/// Rompe conscientemente el default "nada sale del equipo": solo envia lo que
+/// el usuario configura y confirma. Por eso el `token` NO se guarda aca
+/// (workspace.yaml es git-friendly y versionable): vive en el keychain del SO,
+/// referenciado por `name`. `fields` es la lista fija de campos de metadata que
+/// se envian en cada exportacion, para que la API receptora reciba siempre el
+/// mismo esquema (util para KPIs). El cuerpo/PoC de los hallazgos nunca se
+/// incluye por este canal.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportTarget {
+    /// Nombre unico del destino (identifica tambien la entrada en el keychain).
+    pub name: String,
+    /// URL del endpoint (se exige https:// al enviar).
+    pub url: String,
+    /// Campos de metadata a incluir por hallazgo (esquema estable).
+    #[serde(default)]
+    pub fields: Vec<String>,
+    /// Incluir el bloque de conteos por severidad (summary) en el payload.
+    #[serde(default)]
+    pub include_summary: bool,
 }
 
 /// Resumen liviano de un proyecto para listados.

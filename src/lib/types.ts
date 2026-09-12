@@ -191,6 +191,29 @@ export interface WorkspaceMeta {
   watermark: Watermark;
   /** Orden de las tarjetas del tablero Kanban de Proyectos (ids). */
   project_order: string[];
+  /** Destinos de exportacion a API externa (opt-in, editables). */
+  export_targets: ExportTarget[];
+}
+
+/**
+ * Destino de exportacion a una API externa (opt-in, editable). El token NO
+ * viaja en este objeto: vive en el keychain del SO y se maneja aparte
+ * (setExportToken / hasExportToken).
+ */
+export interface ExportTarget {
+  name: string;
+  url: string;
+  /** Campos de metadata a incluir por hallazgo (esquema estable). */
+  fields: string[];
+  /** Incluir el bloque de conteos por severidad. */
+  include_summary: boolean;
+}
+
+/** Resultado de un envio a la API externa. */
+export interface ApiSendResult {
+  status: number;
+  ok: boolean;
+  body: string;
 }
 
 /** Un archivo con cambios sin commitear (relativo al workspace). */

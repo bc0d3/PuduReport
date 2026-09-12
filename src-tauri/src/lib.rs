@@ -23,8 +23,9 @@ use tauri_plugin_store::StoreExt;
 
 // Logica compartida en el crate pudureport-core.
 use pudureport_core::models::{
-    CvssResult, CvssVersion, Finding, FindingTemplate, PdfTemplate, ProjectAssignment, ProjectMeta,
-    ProjectSummary, Snippet, TemplateMeta, WorkspaceMeta, WorkspaceStats,
+    CvssResult, CvssVersion, ExportTarget, Finding, FindingTemplate, PdfTemplate,
+    ProjectAssignment, ProjectMeta, ProjectSummary, Snippet, TemplateMeta, WorkspaceMeta,
+    WorkspaceStats,
 };
 use pudureport_core::{cvss, workspace};
 
@@ -322,6 +323,126 @@ fn export_csv(
 ) -> Result<String, String> {
     let root = current_root(&state)?;
     export::export_csv(&root, &project_id, &columns)
+}
+
+// ---------------------------------------------------------------------------
+// Exportacion a API externa (opt-in). El token vive en el keychain del SO,
+// nunca en workspace.yaml. La unica salida de red de la app ademas del updater.
+// ---------------------------------------------------------------------------
+
+/// Servicio del keychain para los tokens de exportacion.
+const KEYRING_SERVICE: &str = "PuduReport-export";
+
+/// Entrada de keychain para un destino, namespaced por workspace + nombre, para
+/// que dos workspaces con destinos homonimos no colisionen.
+fn token_entry(root: &std::path::Path, name: &str) -> Result<keyring::Entry, String> {
+    let account = format!("{}::{}", root.display(), name);
+    keyring::Entry::new(KEYRING_SERVICE, &account).map_err(|e| e.to_string())
+}
+
+/// Devuelve el destino por nombre desde workspace.yaml, o un error legible.
+fn find_target(root: &std::path::Path, name: &str) -> Result<ExportTarget, String> {
+    workspace::read_workspace_meta(root)
+        .map_err(|e| e.to_string())?
+        .export_targets
+        .into_iter()
+        .find(|t| t.name == name)
+        .ok_or_else(|| format!("no existe el destino: {name}"))
+}
+
+/// Lista los destinos de exportacion configurados en el workspace.
+#[tauri::command]
+fn list_export_targets(state: State<AppState>) -> Result<Vec<ExportTarget>, String> {
+    let root = current_root(&state)?;
+    Ok(workspace::read_workspace_meta(&root)
+        .map_err(|e| e.to_string())?
+        .export_targets)
+}
+
+/// Crea o actualiza (por nombre) un destino de exportacion. Editable siempre.
+#[tauri::command]
+fn save_export_target(state: State<AppState>, target: ExportTarget) -> Result<(), String> {
+    if target.name.trim().is_empty() {
+        return Err("el destino necesita un nombre".to_string());
+    }
+    let root = current_root(&state)?;
+    let mut meta = workspace::read_workspace_meta(&root).map_err(|e| e.to_string())?;
+    match meta
+        .export_targets
+        .iter_mut()
+        .find(|t| t.name == target.name)
+    {
+        Some(existing) => *existing = target,
+        None => meta.export_targets.push(target),
+    }
+    workspace::write_workspace_meta(&root, &meta).map_err(|e| e.to_string())
+}
+
+/// Borra un destino y su token del keychain.
+#[tauri::command]
+fn delete_export_target(state: State<AppState>, name: String) -> Result<(), String> {
+    let root = current_root(&state)?;
+    let mut meta = workspace::read_workspace_meta(&root).map_err(|e| e.to_string())?;
+    meta.export_targets.retain(|t| t.name != name);
+    workspace::write_workspace_meta(&root, &meta).map_err(|e| e.to_string())?;
+    if let Ok(entry) = token_entry(&root, &name) {
+        let _ = entry.delete_credential();
+    }
+    Ok(())
+}
+
+/// Guarda (o borra, si viene vacio) el token de un destino en el keychain.
+#[tauri::command]
+fn set_export_token(state: State<AppState>, name: String, token: String) -> Result<(), String> {
+    let root = current_root(&state)?;
+    let entry = token_entry(&root, &name)?;
+    if token.is_empty() {
+        let _ = entry.delete_credential();
+        Ok(())
+    } else {
+        entry.set_password(&token).map_err(|e| e.to_string())
+    }
+}
+
+/// Indica si el destino ya tiene un token guardado (sin exponerlo).
+#[tauri::command]
+fn has_export_token(state: State<AppState>, name: String) -> Result<bool, String> {
+    let root = current_root(&state)?;
+    let entry = token_entry(&root, &name)?;
+    match entry.get_password() {
+        Ok(_) => Ok(true),
+        Err(keyring::Error::NoEntry) => Ok(false),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Arma y devuelve el payload JSON exacto que se enviaria (para la vista previa
+/// y el consentimiento). No hace red.
+#[tauri::command]
+fn preview_export_payload(
+    state: State<AppState>,
+    project_id: String,
+    target_name: String,
+) -> Result<serde_json::Value, String> {
+    let root = current_root(&state)?;
+    let target = find_target(&root, &target_name)?;
+    export::build_api_payload(&root, &project_id, &target)
+}
+
+/// Envia el proyecto al destino (POST JSON con Bearer). Requiere token guardado.
+#[tauri::command]
+async fn send_export_to_api(
+    state: State<'_, AppState>,
+    project_id: String,
+    target_name: String,
+) -> Result<export::ApiSendResult, String> {
+    let root = current_root(&state)?;
+    let target = find_target(&root, &target_name)?;
+    let token = token_entry(&root, &target.name)?
+        .get_password()
+        .map_err(|_| "no hay token configurado para este destino".to_string())?;
+    let payload = export::build_api_payload(&root, &project_id, &target)?;
+    export::send_to_api(&target.url, &token, &payload).await
 }
 
 // ---------------------------------------------------------------------------
@@ -904,6 +1025,13 @@ pub fn run() {
             delete_project,
             save_project,
             export_csv,
+            list_export_targets,
+            save_export_target,
+            delete_export_target,
+            set_export_token,
+            has_export_token,
+            preview_export_payload,
+            send_export_to_api,
             list_findings,
             load_finding,
             create_finding,

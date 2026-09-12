@@ -77,6 +77,65 @@ fn join_front_matter<T: serde::Serialize>(meta: &T, body: &str) -> Result<String
 }
 
 // ---------------------------------------------------------------------------
+// Escritura atomica
+// ---------------------------------------------------------------------------
+
+/// Escribe `bytes` en `path` de forma atomica: primero los vuelca a un archivo
+/// temporal en el MISMO directorio, fuerza el flush a disco (`sync_all`) y solo
+/// entonces lo renombra sobre el destino. Un `rename` dentro del mismo sistema
+/// de archivos es atomico, de modo que un corte de energia o un crash a mitad
+/// de la operacion nunca deja el archivo destino truncado: o sobrevive el
+/// contenido viejo intacto, o queda el nuevo completo. Es la garantia que exige
+/// la regla de oro del proyecto (los archivos son la fuente de verdad y no hay
+/// respaldo en servidor). El temporal lleva un nombre unico (UUID) para que dos
+/// escrituras concurrentes (p.ej. GUI + MCP) no se pisen, y empieza con `.`
+/// para que el listado de proyectos/hallazgos lo ignore si quedara huerfano.
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+
+    let dir = path.parent().ok_or_else(|| {
+        WorkspaceError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "ruta de escritura sin directorio padre",
+        ))
+    })?;
+    let tmp = dir.join(format!(".{}.tmp", uuid::Uuid::new_v4()));
+
+    let write_tmp = || -> std::io::Result<()> {
+        let mut f = fs::File::create(&tmp)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+        Ok(())
+    };
+    if let Err(e) = write_tmp() {
+        let _ = fs::remove_file(&tmp);
+        return Err(WorkspaceError::Io(e));
+    }
+    if let Err(e) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(WorkspaceError::Io(e));
+    }
+    Ok(())
+}
+
+/// Determina si `bytes` son una imagen rasterizada soportada (PNG, JPEG, GIF o
+/// WebP) mirando su firma (magic bytes). Se usa como guardarrail al recibir
+/// imagenes del MCP: confiar en la extension no basta, porque un archivo con
+/// nombre `.png` podria contener HTML/script. Aca no se confia en el nombre,
+/// solo en el contenido real.
+pub fn is_raster_image(bytes: &[u8]) -> bool {
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    let png = bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    // JPEG: FF D8 FF
+    let jpeg = bytes.starts_with(&[0xFF, 0xD8, 0xFF]);
+    // GIF: "GIF87a" o "GIF89a"
+    let gif = bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a");
+    // WebP: "RIFF" .... "WEBP"
+    let webp = bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP";
+    png || jpeg || gif || webp
+}
+
+// ---------------------------------------------------------------------------
 // Slugs
 // ---------------------------------------------------------------------------
 
@@ -154,14 +213,14 @@ pub fn read_workspace_meta(root: &Path) -> Result<WorkspaceMeta> {
 
 pub fn write_workspace_meta(root: &Path, meta: &WorkspaceMeta) -> Result<()> {
     let yaml = serde_yaml::to_string(meta)?;
-    fs::write(workspace_yaml_path(root), yaml)?;
+    write_atomic(&workspace_yaml_path(root), yaml.as_bytes())?;
     Ok(())
 }
 
 /// Genera el .gitignore del workspace (ignora build/, incluye findings/+assets/).
 fn write_gitignore(root: &Path) -> Result<()> {
     let content = "# Generado por PuduReport\nbuild/\n*.pdf\n.DS_Store\n";
-    fs::write(root.join(".gitignore"), content)?;
+    write_atomic(&root.join(".gitignore"), content.as_bytes())?;
     Ok(())
 }
 
@@ -626,7 +685,7 @@ pub fn read_project_meta(root: &Path, id: &str) -> Result<ProjectMeta> {
 pub fn write_project_meta(root: &Path, id: &str, meta: &ProjectMeta) -> Result<()> {
     validate_id(id)?;
     let yaml = serde_yaml::to_string(meta)?;
-    fs::write(project_yaml_path(root, id), yaml)?;
+    write_atomic(&project_yaml_path(root, id), yaml.as_bytes())?;
     Ok(())
 }
 
@@ -644,7 +703,11 @@ pub fn now_utc_iso() -> String {
         .unwrap_or(0);
     let days = (secs / 86_400) as i64;
     let time_of_day = secs % 86_400;
-    let (h, m, s) = (time_of_day / 3600, (time_of_day % 3600) / 60, time_of_day % 60);
+    let (h, m, s) = (
+        time_of_day / 3600,
+        (time_of_day % 3600) / 60,
+        time_of_day % 60,
+    );
 
     // civil_from_days: dias desde 1970-01-01 -> (anio, mes, dia).
     let z = days + 719_468;
@@ -790,7 +853,10 @@ pub fn write_finding(root: &Path, project_id: &str, finding: &Finding) -> Result
     validate_id(project_id)?;
     validate_id(&finding.id)?;
     let content = join_front_matter(&finding.meta, &finding.body)?;
-    fs::write(finding_path(root, project_id, &finding.id), content)?;
+    write_atomic(
+        &finding_path(root, project_id, &finding.id),
+        content.as_bytes(),
+    )?;
     Ok(())
 }
 
@@ -878,7 +944,7 @@ pub fn save_asset(root: &Path, project_id: &str, ext: &str, bytes: &[u8]) -> Res
     };
 
     let name = format!("{}.{}", uuid::Uuid::new_v4(), ext);
-    fs::write(dir.join(&name), bytes)?;
+    write_atomic(&dir.join(&name), bytes)?;
     Ok(format!("assets/{name}"))
 }
 
@@ -902,7 +968,7 @@ pub fn save_branding_asset(root: &Path, ext: &str, bytes: &[u8]) -> Result<Strin
     };
 
     let name = format!("{}.{}", uuid::Uuid::new_v4(), ext);
-    fs::write(dir.join(&name), bytes)?;
+    write_atomic(&dir.join(&name), bytes)?;
     Ok(format!("/branding/{name}"))
 }
 
@@ -974,7 +1040,7 @@ pub fn save_finding_template(root: &Path, template: &FindingTemplate) -> Result<
     };
     validate_id(&id)?;
     let body = join_front_matter(&template.meta, &template.body)?;
-    fs::write(dir.join(format!("{id}.md")), body)?;
+    write_atomic(&dir.join(format!("{id}.md")), body.as_bytes())?;
     Ok(())
 }
 
@@ -1081,7 +1147,7 @@ pub fn save_snippet(root: &Path, snippet: &Snippet) -> Result<()> {
     };
     validate_id(&id)?;
     let content = format!("# {}\n\n{}\n", snippet.title, snippet.body.trim_end());
-    fs::write(dir.join(format!("{id}.md")), content)?;
+    write_atomic(&dir.join(format!("{id}.md")), content.as_bytes())?;
     Ok(())
 }
 
@@ -1123,7 +1189,7 @@ pub fn save_template_source(root: &Path, name: &str, content: &str) -> Result<()
     validate_id(name)?;
     let dir = user_templates_dir(root);
     fs::create_dir_all(&dir)?;
-    fs::write(dir.join(format!("{name}.typ")), content)?;
+    write_atomic(&dir.join(format!("{name}.typ")), content.as_bytes())?;
     Ok(())
 }
 
@@ -1134,7 +1200,7 @@ pub fn save_template_meta(root: &Path, name: &str, meta: &TemplateMeta) -> Resul
     let dir = user_templates_dir(root);
     fs::create_dir_all(&dir)?;
     let yaml = serde_yaml::to_string(meta)?;
-    fs::write(dir.join(format!("{name}.meta.yaml")), yaml)?;
+    write_atomic(&dir.join(format!("{name}.meta.yaml")), yaml.as_bytes())?;
     Ok(())
 }
 
@@ -1166,6 +1232,51 @@ mod tests {
         assert_eq!(slugify("SQL Injection en login"), "sql-injection-en-login");
         assert_eq!(slugify("IDOR /api/users"), "idor-api-users");
         assert_eq!(slugify("   "), "hallazgo");
+    }
+
+    #[test]
+    fn write_atomic_roundtrip_and_overwrite() {
+        let tmp = std::env::temp_dir().join(format!("pudu-atomic-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&tmp).unwrap();
+        let path = tmp.join("dato.txt");
+
+        write_atomic(&path, b"primero").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "primero");
+
+        // Sobreescribir un archivo existente reemplaza el contenido completo.
+        write_atomic(&path, b"segundo mas largo").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "segundo mas largo");
+
+        // No debe quedar ningun temporal huerfano en el directorio.
+        let leftovers = fs::read_dir(&tmp)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
+            .count();
+        assert_eq!(leftovers, 0);
+
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn is_raster_image_detects_and_rejects() {
+        // Firmas validas.
+        assert!(is_raster_image(&[
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+        ]));
+        assert!(is_raster_image(&[0xFF, 0xD8, 0xFF, 0xE0]));
+        assert!(is_raster_image(b"GIF89a...."));
+        let mut webp = Vec::from(*b"RIFF");
+        webp.extend_from_slice(&[0, 0, 0, 0]);
+        webp.extend_from_slice(b"WEBP");
+        assert!(is_raster_image(&webp));
+
+        // Rechazos: vacio, texto/HTML, SVG.
+        assert!(!is_raster_image(b""));
+        assert!(!is_raster_image(b"<html><script>alert(1)</script>"));
+        assert!(!is_raster_image(
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\">"
+        ));
     }
 
     #[test]

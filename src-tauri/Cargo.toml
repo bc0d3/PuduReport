@@ -1,6 +1,6 @@
 [package]
 name = "pudureport"
-version = "0.0.20"
+version = "0.0.21"
 description = "Editor local-first de reportes de pentest con generacion de PDF via Typst"
 authors = ["bc0d3"]
 license = "GPL-3.0-only"
@@ -38,6 +38,18 @@ pulldown-cmark = { version = "0.12", default-features = false }
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 opener = { version = "0.7", features = ["reveal"] }
+# Exportacion opt-in a una API externa (unica salida de red ademas del updater).
+# rustls en vez de OpenSSL: sin dependencia nativa de sistema, cross-plataforma.
+reqwest = { version = "0.12", default-features = false, features = [
+  "rustls-tls",
+  "json",
+] }
+# Token de la API en el keychain del SO (nunca en workspace.yaml, que es git-friendly).
+keyring = { version = "3", features = [
+  "apple-native",
+  "windows-native",
+  "sync-secret-service",
+] }
 
 [features]
 # Feature por defecto requerida por Tauri en build de produccion.

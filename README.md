@@ -14,7 +14,7 @@
 
 <p align="center"><sub>Rama <code>main</code>: version estable (produccion). El desarrollo ocurre en <code>dev</code>.</sub></p>
 
-Aplicacion de escritorio local-first para redactar reportes de vulnerabilidades y generar PDF profesionales. Pensada para pentesters y bug hunters. Funciona offline, sin servidor y sin que los datos salgan de tu equipo.
+Aplicacion de escritorio local-first para redactar reportes de vulnerabilidades y generar PDF profesionales. Pensada para pentesters y bug hunters. Funciona offline y sin servidor: tus datos no salen del equipo, salvo una exportacion opt-in a una API que vos configures y confirmes.
 
 <p align="center">
   <img src="images/Dashboard.png" alt="Panel de inicio de PuduReport" width="820" />
@@ -98,7 +98,7 @@ apta para versionar con git.
 
 ## Privacidad
 
-Sin telemetria. Sin llamadas de red salvo la verificacion de actualizaciones. Los reportes nunca salen de tu equipo.
+Sin telemetria. La unica salida de red automatica es la verificacion de actualizaciones. De forma opcional podes configurar una exportacion a una API propia (apagada por default): solo envia la metadata que elijas, nunca el cuerpo ni la PoC, y siempre te muestra que sale antes de enviar. Fuera de eso, los reportes no salen de tu equipo.
 
 ## Seguridad
 

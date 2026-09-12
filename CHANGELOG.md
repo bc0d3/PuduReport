@@ -2,6 +2,17 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.21] - 2026-09-11
+
+### Added
+- Exportacion opt-in a una API externa desde Vista previa: se configura un destino (URL, token y campos a enviar), se previsualiza el JSON exacto y se envia por POST. El token se guarda en el keychain del sistema operativo, nunca en el workspace. Solo viaja la metadata elegida, con un esquema estable pensado para KPIs; el cuerpo y la prueba de concepto de los hallazgos nunca salen por este canal, y los hallazgos ocultos se excluyen. Exige https y muestra un aviso claro de que los datos dejan el equipo antes de enviar. Esta apagada por default: sin destinos configurados, la app no hace llamadas de red salvo la verificacion de actualizaciones.
+
+### Changed
+- Todas las escrituras de archivos del workspace (hallazgos, project.yaml, workspace.yaml, snippets, plantillas y evidencias) ahora son atomicas: se escribe primero a un archivo temporal y se renombra sobre el destino, de modo que un corte de energia o un cierre inesperado a mitad de guardado nunca deja un archivo truncado o corrupto.
+
+### Security
+- El servidor MCP valida el contenido real de las imagenes subidas por su firma (magic bytes) y no solo por la extension: un archivo con nombre .png que en realidad lleve otro contenido (por ejemplo HTML) se rechaza.
+
 ## [0.0.20] - 2026-07-24
 
 ### Added

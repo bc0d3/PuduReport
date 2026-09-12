@@ -5,8 +5,10 @@
 // Regla de README.dev.md: ningun componente llama a invoke() directamente.
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ApiSendResult,
   CvssResult,
   CvssVersion,
+  ExportTarget,
   Finding,
   FindingTemplate,
   GitBranch,
@@ -236,6 +238,43 @@ export function generatePdf(projectId: string, alsoExecutive = false): Promise<s
 /** Exporta un resumen de hallazgos a CSV con las columnas elegidas. Devuelve la ruta. */
 export function exportCsv(projectId: string, columns: string[]): Promise<string> {
   return invoke("export_csv", { projectId, columns });
+}
+
+// --- Exportacion a API externa (opt-in) ---
+
+/** Lista los destinos de exportacion configurados en el workspace. */
+export function listExportTargets(): Promise<ExportTarget[]> {
+  return invoke("list_export_targets");
+}
+
+/** Crea o actualiza (por nombre) un destino de exportacion. */
+export function saveExportTarget(target: ExportTarget): Promise<void> {
+  return invoke("save_export_target", { target });
+}
+
+/** Borra un destino y su token del keychain. */
+export function deleteExportTarget(name: string): Promise<void> {
+  return invoke("delete_export_target", { name });
+}
+
+/** Guarda (o borra, si es vacio) el token del destino en el keychain del SO. */
+export function setExportToken(name: string, token: string): Promise<void> {
+  return invoke("set_export_token", { name, token });
+}
+
+/** Indica si el destino ya tiene un token guardado (sin exponerlo). */
+export function hasExportToken(name: string): Promise<boolean> {
+  return invoke("has_export_token", { name });
+}
+
+/** Devuelve el JSON exacto que se enviaria (para la vista previa/consentimiento). */
+export function previewExportPayload(projectId: string, targetName: string): Promise<unknown> {
+  return invoke("preview_export_payload", { projectId, targetName });
+}
+
+/** Envia el proyecto al destino (POST JSON con Bearer). Requiere token guardado. */
+export function sendExportToApi(projectId: string, targetName: string): Promise<ApiSendResult> {
+  return invoke("send_export_to_api", { projectId, targetName });
 }
 
 /** Renderiza el PDF a imagenes PNG (data URLs) para la vista previa embebida. */

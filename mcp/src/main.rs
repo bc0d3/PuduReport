@@ -637,6 +637,15 @@ impl PuduReportServer {
                 None,
             ));
         }
+        // No confiar solo en la extension: verificar que el CONTENIDO real sea
+        // una imagen rasterizada por su firma (magic bytes). Cierra el hueco de
+        // un archivo con nombre .png que en realidad lleva HTML/script.
+        if !workspace::is_raster_image(&bytes) {
+            return Err(McpError::invalid_params(
+                "el contenido no es una imagen rasterizada valida (png/jpg/gif/webp)".to_string(),
+                None,
+            ));
+        }
         // El nombre lo genera el servidor (UUID + extension saneada): la IA NO
         // controla el nombre del archivo, asi que no hay traversal ni sobrescritura
         // posible. Devuelve la ruta para referenciarla en el cuerpo.
