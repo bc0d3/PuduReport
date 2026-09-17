@@ -1,0 +1,78 @@
+/* Tokens semanticos compartidos. Ver DESIGN.md. */
+:root {
+  /* Modo claro (tokens fuente) */
+  --bg-app: #faf9f5;
+  --bg-panel: #f0eee6;
+  --bg-elevated: #ffffff;
+  --bg-subtle: #e9e6dc;
+  --text-primary: #1a1a17;
+  --text-secondary: #55534c;
+  --text-muted: #716e65;
+  --border: #e2dfd4;
+  --border-strong: #cfcbbe;
+  --accent: #1f6fb2;
+  --accent-bg: #e7f0f8;
+
+  /* Severidad (igual en ambos modos) */
+  --sev-critical: #a32d2d;
+  --sev-high: #c2410c;
+  --sev-medium: #ba7517;
+  --sev-low: #639922;
+  --sev-info: #78716c;
+
+  /* Estados */
+  --danger: #a32d2d;
+  --ok: #639922;
+
+  --accent-solid: #1f6fb2;
+  --accent-solid-hover: #195a91;
+  --on-accent: #ffffff;
+  --bg-rail: #e9e7e0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --rail-width: 72px;
+  --context-width: 212px;
+  --header-height: 48px;
+  --motion-fast: 120ms;
+  --motion-panel: 180ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Forma y tipografia */
+  --radius-control: 6px;
+  --radius-card: 8px;
+  --radius-panel: 8px;
+  --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Alias de compatibilidad con estilos inline existentes */
+  --bg: var(--bg-app);
+  --bg-elev: var(--bg-panel);
+  --bg-elev-2: var(--bg-subtle);
+  --text: var(--text-primary);
+  --text-dim: var(--text-secondary);
+  --text-faint: var(--text-muted);
+  --accent-hover: #195a91;
+  --radius: var(--radius-control);
+}
+
+.dark {
+  color-scheme: dark;
+  --bg-rail: #15171b;
+  --accent-solid: #286fae;
+  --accent-solid-hover: #327fc1;
+  --bg-app: #191b1f;
+  --bg-panel: #202328;
+  --bg-elevated: #272b31;
+  --bg-subtle: #30353d;
+  --text-primary: #edf0f4;
+  --text-secondary: #b4bbc5;
+  --text-muted: #929ba8;
+  --border: #343941;
+  --border-strong: #4b5461;
+  --accent: #78b7ed;
+  --accent-bg: #24384d;
+  --accent-hover: #96c9f3;
+}

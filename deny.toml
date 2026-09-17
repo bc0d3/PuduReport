@@ -30,6 +30,8 @@ allow = [
 # Los crates propios del workspace son GPL-3.0-only (la licencia publica actual).
 # Se permiten explicitamente solo aqui; un tercero GPL seguiria rompiendo el build.
 exceptions = [
+    # Certificados raiz de Mozilla; conservar el texto de licencia en el bundle.
+    { name = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
     { name = "pudureport", allow = ["GPL-3.0-only"] },
     { name = "pudureport-core", allow = ["GPL-3.0-only"] },
     { name = "pudureport-mcp", allow = ["GPL-3.0-only"] },

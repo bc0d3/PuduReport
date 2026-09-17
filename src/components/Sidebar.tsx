@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import type { Finding, FindingStatus } from "../lib/types";
-import { SEVERITY_ORDER } from "../lib/severity";
+import { SEVERITY_ORDER, SEVERITY_LABEL } from "../lib/severity";
 import { SeverityDot } from "./Severity";
 
 // Orden de estados para retest: el riesgo vivo primero (abierto, luego lo que no
@@ -42,6 +42,12 @@ export function Sidebar({
   const [newTitle, setNewTitle] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const filtered = findings.filter((finding) =>
+    `${finding.meta.title} ${finding.id}`
+      .toLocaleLowerCase()
+      .includes(query.trim().toLocaleLowerCase()),
+  );
 
   function submitNew() {
     const title = newTitle.trim();
@@ -94,8 +100,27 @@ export function Sidebar({
   return (
     <div className="sidebar">
       <div className="sidebar-header">
+        <div className="list-heading">
+          <strong>Hallazgos</strong>
+          <span>{findings.length}</span>
+        </div>
+        <div className="list-search">
+          <i className="ti ti-search" aria-hidden="true" />
+          <input
+            aria-label="Buscar hallazgos"
+            placeholder="Buscar hallazgos..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {query && (
+            <button className="icon-btn" aria-label="Limpiar busqueda" onClick={() => setQuery("")}>
+              <i className="ti ti-x" aria-hidden="true" />
+            </button>
+          )}
+        </div>
         <div className="inline-form">
           <input
+            aria-label="Titulo del nuevo hallazgo"
             className="input"
             placeholder="Nuevo hallazgo..."
             value={newTitle}
@@ -138,7 +163,12 @@ export function Sidebar({
       </div>
       <div className="finding-list">
         {findings.length === 0 && <div className="empty">Sin hallazgos todavia.</div>}
-        {findings.map((f) => (
+        {findings.length > 0 && filtered.length === 0 && (
+          <div className="empty" role="status">
+            No hay coincidencias.
+          </div>
+        )}
+        {filtered.map((f) => (
           <div
             key={f.id}
             className={`finding-item ${f.id === activeId ? "active" : ""} ${
@@ -146,14 +176,36 @@ export function Sidebar({
             }`}
             style={f.meta.hidden ? { opacity: 0.45 } : undefined}
             onClick={() => onSelect(f.id)}
-            draggable
+            draggable={!query.trim()}
             onDragStart={() => setDragId(f.id)}
+            onDragEnd={() => setDragId(null)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => handleDrop(f.id)}
           >
             <i className="ti ti-grip-vertical grip" />
             <SeverityDot severity={f.meta.severity} />
-            <span className="title">{f.meta.title || "(sin titulo)"}</span>
+            <button
+              className="finding-select title"
+              aria-current={f.id === activeId ? "true" : undefined}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect(f.id);
+              }}
+              title={f.meta.title || "(sin titulo)"}
+            >
+              <span className="finding-name">{f.meta.title || "(sin titulo)"}</span>
+              <span className="finding-detail">
+                {SEVERITY_LABEL[f.meta.severity]}
+                <span aria-hidden="true"> · </span>
+                {f.meta.status === "fixed"
+                  ? "Corregido"
+                  : f.meta.status === "accepted"
+                    ? "Aceptado"
+                    : f.meta.status === "wontfix"
+                      ? "No se corregira"
+                      : "Abierto"}
+              </span>
+            </button>
             {family === "retest" && f.meta.new_in_retest && (
               <span className="cvss-chip" title="Nuevo detectado en el retest">
                 nuevo
@@ -214,6 +266,11 @@ export function Sidebar({
             </div>
           </div>
         ))}
+      </div>
+      <div className="list-footer">
+        {query.trim()
+          ? `${filtered.length} de ${findings.length} hallazgos · limpia la busqueda para reordenar`
+          : "Arrastra para ordenar el reporte"}
       </div>
     </div>
   );

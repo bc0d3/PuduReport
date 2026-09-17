@@ -1,3 +1,5 @@
+> Documento historico del sistema visual inicial. La especificacion vigente y el plan de migracion estan en [DESIGN.md](DESIGN.md). Se conserva este archivo para mantener enlaces y decisiones originales.
+
 # DESIGN.md — PuduReport
 
 Sistema de diseno de la aplicacion. Define la identidad visual para que toda la UI salga coherente. Implementar como CSS custom properties (o mapear a Tailwind theme).

@@ -3,8 +3,7 @@
 
 //! Secciones del cuerpo de un hallazgo (Descripcion/Impacto/PoC/Remediacion).
 //! Espeja `src/lib/sections.ts` (`FINDING_SECTIONS`): mismas claves, mismo
-//! orden. Solo se usa para filtrar secciones ocultas antes de exportar el
-//! PDF; el parseo/edicion por secciones para la UI vive en el frontend.
+//! orden y aliases. Edicion MCP y filtrado de secciones ocultas para PDF.
 
 /// (clave, titulo canonico), mismo orden que `FINDING_SECTIONS` en TS.
 const SECTIONS: [(&str, &str); 4] = [
@@ -30,12 +29,130 @@ fn heading_title(line: &str) -> Option<&str> {
     }
 }
 
-/// Clave de seccion para un titulo de encabezado, case-insensitive (ASCII).
+/// Titulos aceptados tambien por el editor TS; los archivos existentes no se migran.
 fn key_for_title(title: &str) -> Option<&'static str> {
-    SECTIONS
+    let normalized: String = title
+        .to_lowercase()
+        .chars()
+        .filter_map(|c| match c {
+            '\u{0300}'..='\u{036f}' => None,
+            'á' => Some('a'),
+            'é' => Some('e'),
+            'í' => Some('i'),
+            'ó' => Some('o'),
+            'ú' | 'ü' => Some('u'),
+            other => Some(other),
+        })
+        .collect();
+    match normalized.trim() {
+        "descripcion" | "description" => Some("descripcion"),
+        "impacto" | "impact" => Some("impacto"),
+        "prueba de concepto" | "poc" | "proof of concept" => Some("poc"),
+        "remediacion" | "remediation" => Some("remediacion"),
+        _ => None,
+    }
+}
+
+#[derive(Default)]
+struct Fence(Option<(char, usize)>);
+
+impl Fence {
+    // Devuelve true para todas las lineas del bloque, incluida apertura/cierre.
+    fn contains(&mut self, line: &str) -> bool {
+        let trimmed = line.trim_start_matches(' ');
+        let marker = if line.len() - trimmed.len() <= 3 {
+            trimmed.chars().next().filter(|c| *c == '`' || *c == '~')
+        } else {
+            None
+        };
+        let count = marker.map_or(0, |m| trimmed.chars().take_while(|c| *c == m).count());
+        if let Some((m, n)) = self.0 {
+            if marker == Some(m) && count >= n && trimmed[count..].trim().is_empty() {
+                self.0 = None;
+            }
+            return true;
+        }
+        if count >= 3 && !(marker == Some('`') && trimmed[count..].contains('`')) {
+            self.0 = marker.map(|m| (m, count));
+            return true;
+        }
+        false
+    }
+}
+
+fn headings(body: &str) -> Vec<(usize, &'static str)> {
+    let mut fence = Fence::default();
+    let mut offset = 0;
+    let mut out = Vec::new();
+    for line in body.split_inclusive('\n') {
+        if !fence.contains(line) {
+            if let Some(key) = heading_title(line).and_then(key_for_title) {
+                out.push((offset, key));
+            }
+        }
+        offset += line.len();
+    }
+    out
+}
+
+/// Reemplaza una sola seccion conservando literalmente el resto del cuerpo.
+/// Rechaza encabezados ambiguos para no eliminar contenido por accidente.
+pub fn update_section(body: &str, key: &str, content: &str) -> Result<String, String> {
+    let title = SECTIONS
         .iter()
-        .find(|(_, t)| t.eq_ignore_ascii_case(title))
-        .map(|(k, _)| *k)
+        .find(|(k, _)| *k == key)
+        .map(|(_, title)| *title)
+        .ok_or("seccion invalida: use descripcion, impacto, poc o remediacion")?;
+    if !headings(content).is_empty() {
+        return Err("envie solo el contenido de la seccion; use ### para subtitulos".into());
+    }
+    let mut content_fence = Fence::default();
+    for line in content.lines() {
+        content_fence.contains(line);
+    }
+    if content_fence.0.is_some() {
+        return Err("cierre el bloque de codigo del contenido antes de guardar".into());
+    }
+    let mut spans = headings(body);
+    if spans.first().map_or(true, |(offset, _)| *offset > 0) && !body.trim().is_empty() {
+        // El preambulo pertenece a Descripcion, igual que en la UI.
+        if spans
+            .first()
+            .map_or(true, |(offset, _)| !body[..*offset].trim().is_empty())
+        {
+            spans.insert(0, (0, "descripcion"));
+        }
+    }
+    let matches: Vec<_> = spans
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, k))| *k == key)
+        .collect();
+    if matches.len() > 1 {
+        return Err("seccion repetida: revise el cuerpo con get_finding antes de editar".into());
+    }
+    let replacement = format!("## {title}\n\n{}\n\n", content.trim());
+    if let Some((index, (start, _))) = matches.first() {
+        let end = spans
+            .get(index + 1)
+            .map_or(body.len(), |(offset, _)| *offset);
+        Ok(format!(
+            "{}{}{}",
+            &body[..*start],
+            replacement,
+            &body[end..]
+        ))
+    } else {
+        // No anexar dentro de un bloque de codigo sin cerrar.
+        let mut fence = Fence::default();
+        for line in body.lines() {
+            fence.contains(line);
+        }
+        if fence.0.is_some() {
+            return Err("cierre el bloque de codigo antes de agregar una seccion".into());
+        }
+        Ok(format!("{body}\n\n{replacement}"))
+    }
 }
 
 /// Quita el contenido de las secciones del `body` cuya clave este en
@@ -44,11 +161,6 @@ fn key_for_title(title: &str) -> Option<&'static str> {
 /// `parseSections` en el TS. Si `hidden` esta vacio devuelve el body sin
 /// tocar.
 ///
-/// El matching de titulos es case-insensitive pero, a diferencia del TS, no
-/// normaliza acentos: el editor de la app siempre escribe los titulos
-/// canonicos sin tildes (`joinSections`), asi que un body editado a mano con
-/// tildes en el titulo simplemente no oculta esa seccion (modo de falla
-/// seguro: no se pierde texto, solo no se oculta).
 pub fn strip_hidden_sections(body: &str, hidden: &[String]) -> String {
     if hidden.is_empty() {
         return body.to_string();
@@ -56,15 +168,14 @@ pub fn strip_hidden_sections(body: &str, hidden: &[String]) -> String {
 
     let mut out = String::new();
     let mut current_hidden = hidden.iter().any(|h| h == SECTIONS[0].0);
+    let mut fence = Fence::default();
     for line in body.lines() {
-        if let Some(title) = heading_title(line) {
+        if let Some(title) = (!fence.contains(line))
+            .then(|| heading_title(line))
+            .flatten()
+        {
             if let Some(key) = key_for_title(title) {
                 current_hidden = hidden.iter().any(|h| h == key);
-                if !current_hidden {
-                    out.push_str(line);
-                    out.push('\n');
-                }
-                continue;
             }
         }
         if !current_hidden {
@@ -80,6 +191,43 @@ mod tests {
     use super::*;
 
     const BODY: &str = "## Descripcion\n\nTexto A\n\n## Impacto\n\nTexto B\n\n## Prueba de concepto\n\nTexto C\n\n## Remediacion\n\nTexto D\n";
+
+    #[test]
+    fn aliases_accents_and_fenced_headings() {
+        let body = "## Descripción\nVisible\n## Proof of concept\nSecreto\n```md\n## Remediacion\nSigue secreto\n```\n## Remédiation\nVisible final\n";
+        let out = strip_hidden_sections(body, &["poc".into()]);
+        assert!(out.contains("Visible final"));
+        assert!(!out.contains("Secreto"));
+        assert!(!out.contains("Sigue secreto"));
+        assert!(!strip_hidden_sections(body, &["descripcion".into()]).contains("Visible\n"));
+    }
+
+    #[test]
+    fn updates_only_target_and_preserves_fenced_examples() {
+        let body = "## Descripcion\nA\n## PoC\nold\n## Remediación\nD\n";
+        let content = "~~~md\n## Impacto\n~~~\n\n### Evidencia\nReal";
+        let out = update_section(body, "poc", content).unwrap();
+        assert_eq!(
+            out,
+            format!("## Descripcion\nA\n## Prueba de concepto\n\n{content}\n\n## Remediación\nD\n")
+        );
+        assert!(update_section(body, "poc", "## Impacto\nwrong").is_err());
+        assert!(update_section(body, "poc", "```\nunclosed").is_err());
+    }
+
+    #[test]
+    fn missing_preamble_and_ambiguous_sections() {
+        assert!(update_section("## Descripcion\nA", "poc", "steps")
+            .unwrap()
+            .contains("## Prueba de concepto\n\nsteps"));
+        assert_eq!(
+            update_section("A\n## Impacto\nB", "descripcion", "new").unwrap(),
+            "## Descripcion\n\nnew\n\n## Impacto\nB"
+        );
+        assert!(update_section("## PoC\nA\n## Prueba de concepto\nB", "poc", "new").is_err());
+        assert!(update_section("```\nunclosed", "poc", "new").is_err());
+        assert!(update_section(BODY, "unknown", "new").is_err());
+    }
 
     #[test]
     fn no_hidden_returns_body_unchanged() {

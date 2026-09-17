@@ -120,17 +120,22 @@ function readBase64(file: File): Promise<string> {
  * Si recibe assetBase + projectId, permite pegar o soltar evidencias: las
  * imagenes se guardan en assets/ con nombre UUID y quedan como ![](assets/...).
  */
-export function MarkdownEditor({
-  value,
-  onChange,
-  placeholder,
-  assetBase,
-  projectId,
-}: Props) {
+// TipTap actual no tiene nodos de tabla. Mantener la fuente evita perder celdas.
+function hasMarkdownTable(value: string): boolean {
+  return value
+    .split("\n")
+    .some(
+      (line) => line.includes("|") && /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/.test(line),
+    );
+}
+
+export function MarkdownEditor({ value, onChange, placeholder, assetBase, projectId }: Props) {
   const editorRef = useRef<Editor | null>(null);
   // Vista activa: "source" muestra el markdown crudo en un textarea; "rich" el
   // editor WYSIWYG renderizado. Se alterna desde la barra.
-  const [mode, setMode] = useState<"source" | "rich">("rich");
+  const [mode, setMode] = useState<"source" | "rich">(() =>
+    hasMarkdownTable(value) ? "source" : "rich",
+  );
   const [source, setSource] = useState(value);
   // Ruta relativa (assets/...) de la imagen que se esta anotando, o null si
   // el dialogo de anotacion esta cerrado.
@@ -240,7 +245,7 @@ export function MarkdownEditor({
 
   // Alterna vista sincronizando el contenido entre el textarea y el editor.
   function applyMode(next: "source" | "rich") {
-    if (next === mode || !editor) return;
+    if (next === mode || !editor || (next === "rich" && hasMarkdownTable(source))) return;
     if (next === "source") {
       setSource(normalizeImages(editor.storage.markdown.getMarkdown()));
     } else {
@@ -255,6 +260,7 @@ export function MarkdownEditor({
         editor={editor}
         mode={mode}
         onSetMode={applyMode}
+        sourceOnly={mode === "source" && hasMarkdownTable(source)}
         uploadEnabled={uploadEnabled}
         onPickFile={insertFile}
         onAnnotate={annotateSelectedImage}
@@ -287,6 +293,7 @@ function Toolbar({
   editor,
   mode,
   onSetMode,
+  sourceOnly,
   uploadEnabled,
   onPickFile,
   onAnnotate,
@@ -294,6 +301,7 @@ function Toolbar({
   editor: Editor;
   mode: "source" | "rich";
   onSetMode: (mode: "source" | "rich") => void;
+  sourceOnly: boolean;
   uploadEnabled: boolean;
   onPickFile: (file: File) => void;
   onAnnotate: () => void;
@@ -315,6 +323,15 @@ function Toolbar({
   );
 
   // En modo fuente solo se muestra el boton para volver a la vista renderizada.
+  if (mode === "source" && sourceOnly) {
+    return (
+      <div className="md-toolbar">
+        <span className="faint" role="status">
+          Tabla en modo Markdown para conservar sus celdas. Consulta el resultado en Vista previa.
+        </span>
+      </div>
+    );
+  }
   if (mode === "source") {
     return (
       <div className="md-toolbar">
@@ -332,168 +349,168 @@ function Toolbar({
 
   return (
     <>
-    <div className="md-toolbar">
-      {btn(
-        <>
-          <i className="ti ti-code" /> Markdown
-        </>,
-        false,
-        () => onSetMode("source"),
-        "Ver y editar el markdown",
-      )}
-      <span className="md-sep" />
-      {btn(
-        "B",
-        editor.isActive("bold"),
-        () => editor.chain().focus().toggleBold().run(),
-        "Negrita",
-      )}
-      {btn(
-        "I",
-        editor.isActive("italic"),
-        () => editor.chain().focus().toggleItalic().run(),
-        "Cursiva",
-      )}
-      {btn(
-        "H2",
-        editor.isActive("heading", { level: 2 }),
-        () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
-        "Encabezado",
-      )}
-      {btn(
-        "H3",
-        editor.isActive("heading", { level: 3 }),
-        () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
-        "Subencabezado",
-      )}
-      {btn(
-        "•",
-        editor.isActive("bulletList"),
-        () => editor.chain().focus().toggleBulletList().run(),
-        "Lista",
-      )}
-      {btn(
-        "1.",
-        editor.isActive("orderedList"),
-        () => editor.chain().focus().toggleOrderedList().run(),
-        "Lista numerada",
-      )}
-      {btn(
-        "</>",
-        editor.isActive("codeBlock"),
-        () => editor.chain().focus().toggleCodeBlock().run(),
-        "Bloque de codigo",
-      )}
-      {btn(
-        "`",
-        editor.isActive("code"),
-        () => editor.chain().focus().toggleCode().run(),
-        "Codigo en linea",
-      )}
-      {btn(
-        <i className="ti ti-quote" />,
-        editor.isActive("blockquote"),
-        () => editor.chain().focus().toggleBlockquote().run(),
-        "Cita",
-      )}
-      {btn(
-        <i className="ti ti-separator-horizontal" />,
-        false,
-        () => editor.chain().focus().setHorizontalRule().run(),
-        "Linea divisoria",
-      )}
-      {btn(
-        <i className="ti ti-link" />,
-        editor.isActive("link"),
-        () => {
-          if (editor.isActive("link")) {
-            editor.chain().focus().unsetLink().run();
-            return;
-          }
-          setLinkOpen(true);
-        },
-        "Enlace",
-      )}
-      {editor.isActive("codeBlock") && (
-        <>
-          <span className="md-sep" />
-          <select
-            className="md-lang"
-            title="Lenguaje del bloque de codigo"
-            value={String(editor.getAttributes("codeBlock").language ?? "")}
-            onChange={(e) =>
-              editor
-                .chain()
-                .focus()
-                .updateAttributes("codeBlock", { language: e.target.value })
-                .run()
+      <div className="md-toolbar">
+        {btn(
+          <>
+            <i className="ti ti-code" /> Markdown
+          </>,
+          false,
+          () => onSetMode("source"),
+          "Ver y editar el markdown",
+        )}
+        <span className="md-sep" />
+        {btn(
+          "B",
+          editor.isActive("bold"),
+          () => editor.chain().focus().toggleBold().run(),
+          "Negrita",
+        )}
+        {btn(
+          "I",
+          editor.isActive("italic"),
+          () => editor.chain().focus().toggleItalic().run(),
+          "Cursiva",
+        )}
+        {btn(
+          "H2",
+          editor.isActive("heading", { level: 2 }),
+          () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+          "Encabezado",
+        )}
+        {btn(
+          "H3",
+          editor.isActive("heading", { level: 3 }),
+          () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+          "Subencabezado",
+        )}
+        {btn(
+          "•",
+          editor.isActive("bulletList"),
+          () => editor.chain().focus().toggleBulletList().run(),
+          "Lista",
+        )}
+        {btn(
+          "1.",
+          editor.isActive("orderedList"),
+          () => editor.chain().focus().toggleOrderedList().run(),
+          "Lista numerada",
+        )}
+        {btn(
+          "</>",
+          editor.isActive("codeBlock"),
+          () => editor.chain().focus().toggleCodeBlock().run(),
+          "Bloque de codigo",
+        )}
+        {btn(
+          "`",
+          editor.isActive("code"),
+          () => editor.chain().focus().toggleCode().run(),
+          "Codigo en linea",
+        )}
+        {btn(
+          <i className="ti ti-quote" />,
+          editor.isActive("blockquote"),
+          () => editor.chain().focus().toggleBlockquote().run(),
+          "Cita",
+        )}
+        {btn(
+          <i className="ti ti-separator-horizontal" />,
+          false,
+          () => editor.chain().focus().setHorizontalRule().run(),
+          "Linea divisoria",
+        )}
+        {btn(
+          <i className="ti ti-link" />,
+          editor.isActive("link"),
+          () => {
+            if (editor.isActive("link")) {
+              editor.chain().focus().unsetLink().run();
+              return;
             }
-          >
-            {CODE_LANGS.map((l) => (
-              <option key={l.value} value={l.value}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-        </>
-      )}
-      {editor.isActive("image") && (
-        <>
-          <span className="md-sep" />
-          {(["35%", "60%", "100%"] as const).map((w) =>
-            btn(
-              w === "100%" ? "L" : w === "60%" ? "M" : "S",
-              editor.getAttributes("image").alt === w,
-              () => editor.chain().focus().updateAttributes("image", { alt: w }).run(),
-              `Imagen ${w}`,
-            ),
-          )}
-          {btn(
-            "auto",
-            false,
-            () => editor.chain().focus().updateAttributes("image", { alt: "" }).run(),
-            "Tamano original",
-          )}
-          {uploadEnabled && (
-            <>
-              <span className="md-sep" />
-              {btn(
-                <>
-                  <i className="ti ti-pencil" /> Anotar
-                </>,
-                false,
-                onAnnotate,
-                "Dibujar flecha o rectangulo sobre la imagen",
-              )}
-            </>
-          )}
-        </>
-      )}
-      {uploadEnabled && (
-        <>
-          <button
-            title="Adjuntar evidencia (imagen o archivo)"
-            onClick={(e) => {
-              e.preventDefault();
-              fileRef.current?.click();
-            }}
-          >
-            <i className="ti ti-photo-plus" />
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onPickFile(file);
-              e.target.value = "";
-            }}
-          />
-        </>
-      )}
-    </div>
+            setLinkOpen(true);
+          },
+          "Enlace",
+        )}
+        {editor.isActive("codeBlock") && (
+          <>
+            <span className="md-sep" />
+            <select
+              className="md-lang"
+              title="Lenguaje del bloque de codigo"
+              value={String(editor.getAttributes("codeBlock").language ?? "")}
+              onChange={(e) =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("codeBlock", { language: e.target.value })
+                  .run()
+              }
+            >
+              {CODE_LANGS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+        {editor.isActive("image") && (
+          <>
+            <span className="md-sep" />
+            {(["35%", "60%", "100%"] as const).map((w) =>
+              btn(
+                w === "100%" ? "L" : w === "60%" ? "M" : "S",
+                editor.getAttributes("image").alt === w,
+                () => editor.chain().focus().updateAttributes("image", { alt: w }).run(),
+                `Imagen ${w}`,
+              ),
+            )}
+            {btn(
+              "auto",
+              false,
+              () => editor.chain().focus().updateAttributes("image", { alt: "" }).run(),
+              "Tamano original",
+            )}
+            {uploadEnabled && (
+              <>
+                <span className="md-sep" />
+                {btn(
+                  <>
+                    <i className="ti ti-pencil" /> Anotar
+                  </>,
+                  false,
+                  onAnnotate,
+                  "Dibujar flecha o rectangulo sobre la imagen",
+                )}
+              </>
+            )}
+          </>
+        )}
+        {uploadEnabled && (
+          <>
+            <button
+              title="Adjuntar evidencia (imagen o archivo)"
+              onClick={(e) => {
+                e.preventDefault();
+                fileRef.current?.click();
+              }}
+            >
+              <i className="ti ti-photo-plus" />
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onPickFile(file);
+                e.target.value = "";
+              }}
+            />
+          </>
+        )}
+      </div>
       {linkOpen && (
         <PromptDialog
           title="Insertar enlace"

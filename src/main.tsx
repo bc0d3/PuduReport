@@ -13,6 +13,7 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@tabler/icons-webfont/dist/tabler-icons.min.css";
 
 import "./styles.css";
+import "./styles/workbench.css";
 
 const root = document.getElementById("root");
 if (!root) {

@@ -13,15 +13,6 @@ interface Props {
   onToggleTheme: () => void;
 }
 
-// Paleta para el avatar del workspace (estable por nombre, no aleatoria).
-const AVATAR_COLORS = ["#1f6fb2", "#0f6e56", "#993c1d", "#7c3aed", "#b3261e", "#0e7490", "#9a6700"];
-
-function avatarColor(name: string): string {
-  let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
-}
-
 function initial(name: string): string {
   const c = name.trim()[0];
   return c ? c.toUpperCase() : "?";
@@ -101,6 +92,11 @@ export function Welcome({ onOpened, dark, onToggleTheme }: Props) {
       </aside>
 
       <main className="welcome-main">
+        <header className="welcome-intro">
+          <span className="eyebrow">PuduReport / Workspaces</span>
+          <h1>Tu espacio de trabajo</h1>
+          <p>Retoma un proyecto o abre un workspace local.</p>
+        </header>
         <div className="welcome-top">
           <div className="welcome-search">
             <i className="ti ti-search" />
@@ -139,9 +135,7 @@ export function Welcome({ onOpened, dark, onToggleTheme }: Props) {
                 onClick={() => r.exists && openPath(r.path)}
                 title={r.exists ? r.path : "La carpeta ya no existe"}
               >
-                <div className="welcome-avatar" style={{ background: avatarColor(r.name) }}>
-                  {initial(r.name)}
-                </div>
+                <div className="welcome-avatar">{initial(r.name)}</div>
                 <div className="welcome-item-text">
                   <div className="welcome-item-name">
                     {r.name}

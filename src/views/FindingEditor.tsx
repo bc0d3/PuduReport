@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
+import { scheduleWrite } from "../lib/pendingWrites";
 import type {
   CvssResult,
   CvssVersion,
@@ -70,9 +71,9 @@ export function FindingEditor({
   const [affectedInput, setAffectedInput] = useState("");
   const [delTarget, setDelTarget] = useState<string | null>(null);
 
-  const saveTimer = useRef<number | undefined>(undefined);
   const metaRef = useRef<FindingMeta | null>(null);
   const sectionsRef = useRef<Record<string, string>>({});
+  const saveRevisions = useRef(new Map<string, number>());
 
   const loadFindings = useCallback(async () => {
     if (!projectId) return;
@@ -103,14 +104,23 @@ export function FindingEditor({
   const scheduleSave = useCallback(
     (id: string) => {
       if (!projectId) return;
-      if (saveTimer.current) window.clearTimeout(saveTimer.current);
-      saveTimer.current = window.setTimeout(async () => {
-        const meta = metaRef.current;
-        if (!meta) return;
-        const finding: Finding = { id, meta, body: joinSections(sectionsRef.current) };
-        const saved = await guard(api.saveFinding(projectId, finding));
-        if (saved) setFindings((list) => list.map((f) => (f.id === saved.id ? saved : f)));
-      }, 600);
+      const meta = metaRef.current;
+      if (!meta) return;
+      const finding: Finding = { id, meta, body: joinSections(sectionsRef.current) };
+      const revision = (saveRevisions.current.get(id) ?? 0) + 1;
+      saveRevisions.current.set(id, revision);
+      scheduleWrite(
+        `finding:${projectId}:${id}`,
+        async () => {
+          const saved = await api.saveFinding(projectId, finding);
+          if (saved && saveRevisions.current.get(id) === revision)
+            setFindings((list) => list.map((f) => (f.id === saved.id ? saved : f)));
+        },
+        600,
+        (error) => {
+          void guard(Promise.reject(error));
+        },
+      );
     },
     [guard, projectId],
   );
@@ -137,9 +147,7 @@ export function FindingEditor({
       const hidden = m.hidden_fields ?? [];
       return {
         ...m,
-        hidden_fields: hidden.includes(key)
-          ? hidden.filter((h) => h !== key)
-          : [...hidden, key],
+        hidden_fields: hidden.includes(key) ? hidden.filter((h) => h !== key) : [...hidden, key],
       };
     });
   }
@@ -285,7 +293,11 @@ export function FindingEditor({
         onDelete={(id) => setDelTarget(id)}
       />
       {current ? (
-        <div className="editor">
+        <div className="editor finding-editor">
+          <div className="editor-eyebrow">
+            <i className="ti ti-file-description" aria-hidden="true" />
+            Hallazgo<span>{current.id}</span>
+          </div>
           {!typeInfo(projectType).usesFindings && (
             <div
               className="row"
@@ -304,12 +316,10 @@ export function FindingEditor({
               en el PDF. El contenido va en la pestaña Reporte.
             </div>
           )}
-          <div
-            className="row"
-            style={{ justifyContent: "space-between", marginBottom: 14, alignItems: "flex-start" }}
-          >
+          <div className="finding-heading">
             <input
               className="title-input"
+              aria-label="Titulo del hallazgo"
               value={current.meta.title}
               placeholder="Titulo del hallazgo"
               onChange={(e) => patchMeta((m) => ({ ...m, title: e.target.value }))}
@@ -351,10 +361,14 @@ export function FindingEditor({
             {!examMode && (
               <div>
                 <label className="field-label-top">CVSS {current.meta.cvss_version}</label>
-                <div className="field cvss-field" onClick={() => setCalcOpen(true)}>
+                <button
+                  className="field cvss-field"
+                  aria-label={`Calcular CVSS ${current.meta.cvss_version}`}
+                  onClick={() => setCalcOpen(true)}
+                >
                   {current.meta.cvss || "—"}
                   <i className="ti ti-calculator" style={{ color: "var(--accent)" }} />
-                </div>
+                </button>
               </div>
             )}
             <div>
@@ -384,9 +398,7 @@ export function FindingEditor({
               <input
                 type="checkbox"
                 checked={current.meta.new_in_retest ?? false}
-                onChange={(e) =>
-                  patchMeta((m) => ({ ...m, new_in_retest: e.target.checked }))
-                }
+                onChange={(e) => patchMeta((m) => ({ ...m, new_in_retest: e.target.checked }))}
               />
               <span>Hallazgo nuevo detectado en el retest (va en seccion aparte del PDF)</span>
             </label>
@@ -481,7 +493,7 @@ export function FindingEditor({
           <div className="section-grid">
             {FINDING_SECTIONS.map((s) => (
               <div
-                className={`field ${s.full ? "full" : ""} ${s.key === "poc" ? "poc-field" : ""}`}
+                className={`field finding-section ${s.full ? "full" : ""} ${s.key === "poc" ? "poc-field" : ""}`}
                 key={s.key}
               >
                 <div className="row" style={{ justifyContent: "space-between" }}>

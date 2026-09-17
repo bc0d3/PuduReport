@@ -12,3 +12,6 @@ pub mod markdown;
 pub mod models;
 pub mod sections;
 pub mod workspace;
+
+pub mod naming;
+pub mod pdf;

@@ -2,6 +2,7 @@
 // Copyright (c) 2026 bc0d3
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import * as api from "../lib/api";
 import type {
   ProjectAssignment,
@@ -10,6 +11,7 @@ import type {
   SeverityCounts,
   WorkspaceMeta,
 } from "../lib/types";
+import { PROJECT_STATUS_LABEL, projectSchedule, todayDay } from "../lib/projectSchedule";
 import { PROJECT_TYPES, typeInfo } from "../lib/projectTypes";
 import { SEVERITY_COLOR, SEVERITY_LABEL, SEVERITY_LETTER, SEVERITY_ORDER } from "../lib/severity";
 import { Modal } from "../components/Modal";
@@ -24,6 +26,7 @@ interface Props {
   onReload: () => Promise<void> | void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onOpenBoard: () => void;
 }
 
 type SortKey =
@@ -38,10 +41,10 @@ type SortKey =
 /** Columnas del tablero Kanban, en orden. Tambien se reusa para el badge de
  * estado en la vista de tabla. */
 const COLUMNS: { key: ProjectStatus; label: string; icon: string }[] = [
-  { key: "todo", label: "To Do", icon: "ti-list-check" },
-  { key: "inprogress", label: "In Progress", icon: "ti-progress" },
-  { key: "done", label: "Done", icon: "ti-circle-check" },
-  { key: "assigned", label: "Asignado / En cierre", icon: "ti-user-check" },
+  { key: "todo", label: PROJECT_STATUS_LABEL.todo, icon: "ti-list-check" },
+  { key: "inprogress", label: PROJECT_STATUS_LABEL.inprogress, icon: "ti-progress" },
+  { key: "assigned", label: PROJECT_STATUS_LABEL.assigned, icon: "ti-user-check" },
+  { key: "done", label: PROJECT_STATUS_LABEL.done, icon: "ti-circle-check" },
 ];
 
 function statusLabel(status: ProjectStatus): string {
@@ -61,7 +64,15 @@ function effectiveOrder(projects: ProjectSummary[], order: string[]): string[] {
   return [...known, ...missing];
 }
 
-export function Projects({ workspace, projects, welcome, onReload, onSelect, onDelete }: Props) {
+export function Projects({
+  workspace,
+  projects,
+  welcome,
+  onReload,
+  onSelect,
+  onDelete,
+  onOpenBoard,
+}: Props) {
   const { guard } = useToast();
   // El tablero es la vista principal; cada usuario puede cambiar a tabla y su
   // eleccion se recuerda (igual que el tema).
@@ -87,6 +98,7 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
     () => new Map(),
   );
   useEffect(() => {
+    if (welcome) return;
     let cancelled = false;
     void guard(api.workspaceStats()).then((s) => {
       if (!cancelled && s) {
@@ -96,7 +108,7 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
     return () => {
       cancelled = true;
     };
-  }, [guard, projects]);
+  }, [guard, projects, welcome]);
 
   async function handleExample() {
     const summary = await guard(api.createExampleProject(), "Proyecto de ejemplo creado");
@@ -140,9 +152,11 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
     <>
       <div className="screen-head">
         <div>
-          <h1>{welcome ? `Bienvenido a ${workspace.name}` : "Proyectos"}</h1>
+          <h1>{welcome ? "Inicio" : "Proyectos"}</h1>
           <p className="sub">
-            {projects.length} proyecto{projects.length === 1 ? "" : "s"} · local y offline
+            {welcome
+              ? "Resumen del workspace: actividad y proximos cierres"
+              : `${projects.length} proyectos · Organiza el trabajo por estado`}
           </p>
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -161,7 +175,14 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
         {projects.length === 0 ? (
           <div className="empty">No hay proyectos todavia. Crea uno o carga el de ejemplo.</div>
         ) : welcome ? (
-          <Dashboard onSelect={onSelect} refreshDep={projects.length} />
+          <Dashboard
+            onSelect={onSelect}
+            refreshDep={projects.length}
+            onOpenBoard={() => {
+              changeView("board");
+              onOpenBoard();
+            }}
+          />
         ) : (
           <>
             <div className="row" style={{ gap: 10, marginBottom: 10, alignItems: "center" }}>
@@ -169,6 +190,7 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
                 <input
                   className="input"
                   placeholder="Buscar por nombre o cliente..."
+                  aria-label="Buscar proyectos"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
@@ -177,15 +199,19 @@ export function Projects({ workspace, projects, welcome, onReload, onSelect, onD
                 <button
                   className={`btn small ${view === "board" ? "primary" : ""}`}
                   onClick={() => changeView("board")}
-                  title="Vista de tablero"
+                  title="Vista Kanban"
+                  aria-label="Kanban"
+                  aria-pressed={view === "board"}
                 >
                   <i className="ti ti-layout-kanban" />
-                  Tablero
+                  Kanban
                 </button>
                 <button
                   className={`btn small ${view === "table" ? "primary" : ""}`}
                   onClick={() => changeView("table")}
                   title="Vista de tabla"
+                  aria-label="Tabla"
+                  aria-pressed={view === "table"}
                 >
                   <i className="ti ti-table" />
                   Tabla
@@ -371,6 +397,13 @@ function Board({
   const overCardRef = useRef<string | null>(null);
   const candidateRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const draggedRef = useRef(false);
+  const [dragPoint, setDragPoint] = useState<{ x: number; y: number; width: number } | null>(null);
+  const [overCard, setOverCard] = useState<string | null>(null);
+  const dragOffset = useRef({ x: 0, y: 0, width: 240 });
+  const applyDropRef = useRef(applyDrop);
+  useEffect(() => {
+    applyDropRef.current = applyDrop;
+  });
 
   function setDrag(id: string | null) {
     dragIdRef.current = id;
@@ -389,6 +422,11 @@ function Board({
         }
       }
       if (dragIdRef.current) {
+        setDragPoint({
+          x: e.clientX - dragOffset.current.x,
+          y: e.clientY - dragOffset.current.y,
+          width: dragOffset.current.width,
+        });
         const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
         const cardEl = el?.closest<HTMLElement>("[data-kanban-card]") ?? null;
         const cardId =
@@ -400,10 +438,13 @@ function Board({
         overCardRef.current = cardId;
         overColRef.current = colKey;
         setOverCol(colKey);
+        setOverCard(cardId);
       }
     }
     function onUp() {
       candidateRef.current = null;
+      setDragPoint(null);
+      setOverCard(null);
       const id = dragIdRef.current;
       if (id) {
         const col = overColRef.current;
@@ -412,16 +453,31 @@ function Board({
         setOverCol(null);
         overColRef.current = null;
         overCardRef.current = null;
-        if (col) void applyDrop(id, col, card);
+        if (col) void applyDropRef.current(id, col, card);
       }
     }
+    function cancel() {
+      candidateRef.current = null;
+      setDrag(null);
+      setDragPoint(null);
+      setOverCol(null);
+      setOverCard(null);
+      overColRef.current = null;
+      overCardRef.current = null;
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") cancel();
+    }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("blur", cancel);
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("blur", cancel);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fullOrder = useMemo(() => effectiveOrder(projects, order), [projects, order]);
@@ -503,7 +559,9 @@ function Board({
               {col.label}
               <span className="kanban-count">{byStatus[col.key].length}</span>
             </h4>
-            <div className="kanban-cards">
+            <div
+              className={`kanban-cards ${dragId && overCol === col.key && !overCard ? "drop-at-end" : ""}`}
+            >
               {byStatus[col.key].map((p) => {
                 const info = typeInfo(p.project_type);
                 const sev = severityByProject.get(p.id);
@@ -512,9 +570,19 @@ function Board({
                   <div
                     key={p.id}
                     data-kanban-card={p.id}
-                    className={`kanban-card ${p.id === dragId ? "dragging" : ""}`}
+                    className={`kanban-card ${p.id === dragId ? "dragging" : ""} ${overCard === p.id ? "drop-before" : ""}`}
                     onMouseDown={(e) => {
-                      if (e.button !== 0) return;
+                      if (
+                        e.button !== 0 ||
+                        (e.target as HTMLElement).closest("button, .assignment-badge")
+                      )
+                        return;
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      dragOffset.current = {
+                        x: e.clientX - rect.left,
+                        y: e.clientY - rect.top,
+                        width: rect.width,
+                      };
                       // Evita que el navegador inicie una seleccion de texto al
                       // arrastrar la tarjeta.
                       e.preventDefault();
@@ -552,6 +620,10 @@ function Board({
                     </div>
                     <div className="kanban-card-title">{p.name}</div>
                     {p.client && <div className="kanban-card-sub">{p.client}</div>}
+                    <div className="kanban-card-sub">
+                      <i className="ti ti-calendar-event" aria-hidden="true" />{" "}
+                      {projectSchedule(p, todayDay()).label}
+                    </div>
                     {presentSev.length > 0 && (
                       <div className="kanban-sev">
                         {presentSev.map((s) => (
@@ -592,6 +664,26 @@ function Board({
         ))}
       </div>
 
+      {dragId &&
+        dragPoint &&
+        createPortal(
+          <div
+            className="kanban-drag-preview"
+            aria-hidden="true"
+            style={{ left: dragPoint.x, top: dragPoint.y, width: dragPoint.width }}
+          >
+            <i className="ti ti-grip-vertical" />
+            <div>
+              <strong>{projects.find((p) => p.id === dragId)?.name}</strong>
+              <span>
+                {overCol
+                  ? `Mover a ${COLUMNS.find((c) => c.key === overCol)?.label}`
+                  : "Suelta sobre una columna"}
+              </span>
+            </div>
+          </div>,
+          document.body,
+        )}
       {pendingAssign && (
         <AssignClosureModal
           project={pendingAssign.project}

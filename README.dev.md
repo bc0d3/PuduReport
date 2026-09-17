@@ -96,7 +96,7 @@ npm run tauri build    # genera .dmg / .msi / .exe / .AppImage / .deb
 
 - **Rust**: modulos chicos y enfocados; `thiserror` por modulo, comandos devuelven `Result<T, String>`; prohibido `unwrap()`/`expect()` en produccion; `clippy -D warnings` y `rustfmt` obligatorios; doc comments en funciones publicas.
 - **TS/React**: modo strict, prohibido `any`; todo el IPC encapsulado en `lib/api.ts` (nunca `invoke` suelto); componentes funcionales + hooks; Context solo para lo compartido.
-- **Diseno**: tokens en [DESING.md](DESING.md) (paleta calida, claro/oscuro, Inter + JetBrains Mono, iconos Tabler). Sin emojis en codigo/UI/docs.
+- **Diseno**: tokens en [DESIGN.md](DESIGN.md) (shell de escritorio, graphite oscuro y claro, Inter + JetBrains Mono, iconos Tabler). Sin emojis en codigo/UI/docs.
 - **Commits**: Conventional Commits (`feat:`, `fix:`, `docs:`...). Alimentan el CHANGELOG.
 - **Ramas**: `dev` (desarrollo) + `feature/*`; PR a `main` (estable). Los releases se taguean `v*` desde `main`.
 
@@ -118,3 +118,9 @@ Tag `v*` en `main` -> `.github/workflows/release.yml` compila la matriz (macOS A
 ## Seguridad
 
 Reportes de vulnerabilidad: ver [SECURITY.md](SECURITY.md). No abrir issues publicos para temas de seguridad.
+
+Markdown soportado, tablas y regeneracion por MCP: [guia de render](docs/markdown-and-render.md).
+
+Guia integrada para clientes de IA: [autoria via MCP](docs/mcp-authoring.md),
+tambien disponible offline mediante `get_authoring_guide`. La PoC puede editarse
+sin reemplazar el resto del hallazgo usando `update_finding_section`.

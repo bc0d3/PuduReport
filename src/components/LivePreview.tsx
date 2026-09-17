@@ -60,13 +60,32 @@ export function LivePreview({ projectId, refreshKey, emptyHint, onLoadingChange 
   }
 
   if (loading && pages.length === 0) {
-    return <div className="empty">Compilando el PDF con Typst...</div>;
+    return (
+      <div className="preview-loading" role="status">
+        <div className="preview-paper" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+        <span className="preview-loading-label">
+          <i className="ti ti-loader-2 activity-spinner" aria-hidden="true" />
+          Compilando el PDF con Typst...
+        </span>
+      </div>
+    );
   }
   if (pages.length === 0) {
     return <div className="empty">Sin vista previa todavia.</div>;
   }
   return (
-    <div className="pdf-pages">
+    <div className="pdf-pages" aria-busy={loading}>
+      {loading && (
+        <div className="preview-refresh" role="status">
+          <i className="ti ti-loader-2 activity-spinner" aria-hidden="true" />
+          Actualizando vista previa...
+        </div>
+      )}
       {pages.map((src, i) => (
         <img key={i} className="pdf-page" src={src} alt={`Pagina ${i + 1}`} />
       ))}
