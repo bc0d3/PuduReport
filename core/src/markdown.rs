@@ -11,11 +11,11 @@
 //! La salida es markup de Typst que el template renderiza con
 //! `eval(body, mode: "markup")`.
 
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Parser, Tag, TagEnd};
+use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 /// Convierte markdown a una cadena de markup de Typst.
 pub fn to_typst(markdown: &str) -> String {
-    let parser = Parser::new(markdown);
+    let parser = Parser::new_ext(markdown, Options::ENABLE_TABLES);
     let mut out = String::new();
     let mut list_stack: Vec<Option<u64>> = Vec::new();
     // Buffer del bloque de codigo: (lenguaje, contenido). El fence se calcula al
@@ -87,6 +87,23 @@ fn start_tag(out: &mut String, list_stack: &mut Vec<Option<u64>>, tag: Tag) {
             out.push_str(&"=".repeat(depth));
             out.push(' ');
         }
+        Tag::Table(alignments) => {
+            let align = alignments
+                .iter()
+                .map(|a| match a {
+                    pulldown_cmark::Alignment::Center => "center",
+                    pulldown_cmark::Alignment::Right => "right",
+                    _ => "left",
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!(
+                "\n#table(columns: {}, align: ({align},), inset: 6pt, stroke: 0.5pt + luma(180),\n",
+                alignments.len()
+            ));
+        }
+        Tag::TableHead => out.push_str("table.header("),
+        Tag::TableCell => out.push('['),
         Tag::Paragraph => {}
         // Se usa la funcion explicita en vez del shorthand `*.../_...`: el
         // shorthand tiene reglas de flanking propias de Typst que no siempre
@@ -119,6 +136,9 @@ fn start_tag(out: &mut String, list_stack: &mut Vec<Option<u64>>, tag: Tag) {
 
 fn end_tag(out: &mut String, list_stack: &mut Vec<Option<u64>>, tag: TagEnd) {
     match tag {
+        TagEnd::TableCell => out.push_str("],\n"),
+        TagEnd::TableHead => out.push_str("),\n"),
+        TagEnd::Table => out.push_str(")\n\n"),
         TagEnd::Heading(_) => out.push_str("\n\n"),
         TagEnd::Paragraph => out.push_str("\n\n"),
         TagEnd::Strong => out.push(']'),
@@ -267,6 +287,20 @@ fn parse_width(alt: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gfm_table_preserves_cells_alignment_and_escaped_content() {
+        let out = to_typst("| IP | Host | Nota |\n|:---|:---:|---:|\n| `192.0.2.1` | **router** | #literal [x] |\n| 192.0.2.2 | | fin |");
+        assert!(
+            out.contains("#table(columns: 3, align: (left, center, right,)"),
+            "{out}"
+        );
+        assert!(out.contains("table.header([IP]"), "{out}");
+        assert!(out.contains("[#strong[router]]"), "{out}");
+        assert!(out.contains("[\\#literal \\[x\\]]"), "{out}");
+        assert!(out.contains("[],"), "{out}");
+        assert!(!out.contains("|---"));
+    }
 
     #[test]
     fn heading_and_paragraph() {

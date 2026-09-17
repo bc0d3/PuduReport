@@ -21,9 +21,8 @@
 //!
 //! Puede crear/modificar plantillas PDF (.typ) via `save_pdf_template`, pero
 //! SOLO en la biblioteca PROPIA del usuario (`library/templates` dentro del
-//! workspace): este binario no conoce la ruta de las plantillas incluidas (esa
-//! resolucion requiere el resource resolver de Tauri, que solo tiene la app),
-//! asi que no puede tocarlas ni por accidente. Tampoco puede sobreescribir una
+//! workspace). Las plantillas base de build_project estan embebidas en el
+//! binario y se extraen a un directorio temporal; no se modifican las de la app. Tampoco puede sobreescribir una
 //! plantilla de la biblioteca que no haya creado el mismo (nunca pisa el
 //! trabajo de un humano) ni aplicar una plantilla a un proyecto: eso lo sigue
 //! haciendo un humano desde la app, que ve el preview (o el error de
@@ -32,9 +31,9 @@
 use std::path::PathBuf;
 
 use base64::Engine;
-use pudureport_core::cvss;
 use pudureport_core::models::{CvssVersion, FindingMeta, FindingStatus, Severity};
 use pudureport_core::workspace;
+use pudureport_core::{cvss, pdf};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{ServerCapabilities, ServerInfo};
 use rmcp::transport::stdio;
@@ -140,15 +139,18 @@ struct CreateFindingArgs {
     project_id: String,
     /// Titulo del hallazgo.
     title: String,
-    /// Cuerpo markdown (Descripcion/Impacto/PoC/Remediacion). Si se omite, se
-    /// usa el scaffold de secciones vacias.
+    /// Cuerpo Markdown completo con encabezados ## Descripcion, ## Impacto,
+    /// ## Prueba de concepto y ## Remediacion. Consulte get_authoring_guide.
+    /// Si se omite, usa el scaffold de secciones vacias.
     body: Option<String>,
-    /// Vector CVSS; la severidad y el puntaje se derivan de el. Ignorado en
-    /// tipos de examen (oscp/htb).
+    /// Para puntuar proyectos normales envie un vector completo, por ejemplo
+    /// CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N. Puntaje y severidad se
+    /// derivan del vector. Opcional al crear un borrador. Ignorado en oscp/htb.
     cvss_vector: Option<String>,
     /// Version del vector ("3.1" | "4.0"). Por defecto la del hallazgo.
     cvss_version: Option<String>,
-    /// Severidad cualitativa, SOLO para tipos de examen (oscp/htb).
+    /// SOLO oscp/htb: info|low|medium|high|critical. En otros tipos NO envie
+    /// severity: use cvss_vector. Enviar severity sin vector produce error.
     severity: Option<String>,
     /// Identificadores CWE, por ejemplo ["CWE-89", "CWE-200"].
     cwe: Option<Vec<String>>,
@@ -168,7 +170,8 @@ struct UpdateFindingArgs {
     finding_id: String,
     /// Nuevo titulo.
     title: Option<String>,
-    /// Nuevo cuerpo markdown completo.
+    /// Reemplaza TODO el cuerpo Markdown. Conserve las cuatro secciones H2
+    /// (ver get_authoring_guide). Para cambiar solo PoC use update_finding_section.
     body: Option<String>,
     /// Nuevo vector CVSS; la severidad y el puntaje se derivan de el. Ignorado
     /// en tipos de examen (oscp/htb).
@@ -185,6 +188,40 @@ struct UpdateFindingArgs {
     affected: Option<Vec<String>>,
 }
 
+/// Seccion canonica del cuerpo de un hallazgo.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+enum FindingSectionKey {
+    Descripcion,
+    Impacto,
+    Poc,
+    Remediacion,
+}
+
+impl FindingSectionKey {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Descripcion => "descripcion",
+            Self::Impacto => "impacto",
+            Self::Poc => "poc",
+            Self::Remediacion => "remediacion",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct UpdateFindingSectionArgs {
+    /// Id del proyecto.
+    project_id: String,
+    /// Id del hallazgo (ver get_finding).
+    finding_id: String,
+    /// Seccion a reemplazar; poc corresponde a Prueba de concepto.
+    section_key: FindingSectionKey,
+    /// Solo contenido Markdown, sin encabezado de seccion. Use ### para subtitulos.
+    /// Una cadena vacia vacia esta seccion. No modifica visibilidad ni metadata.
+    body: String,
+}
+
 /// Actualiza titulo, cuerpo o estado de una seccion de prosa existente
 /// (resumen, alcance, metodologia, conclusiones, etc.). NO crea secciones
 /// nuevas ni toca portada/branding/tipo de proyecto/layout.
@@ -196,7 +233,8 @@ struct UpdateSectionArgs {
     section_key: String,
     /// Nuevo titulo visible.
     title: Option<String>,
-    /// Nuevo cuerpo markdown completo.
+    /// Reemplaza TODO el cuerpo Markdown. Conserve las cuatro secciones H2
+    /// (ver get_authoring_guide). Para cambiar solo PoC use update_finding_section.
     body: Option<String>,
     /// Si la seccion se incluye en el PDF.
     enabled: Option<bool>,
@@ -376,6 +414,14 @@ impl PuduReportServer {
         }
     }
 
+    /// Guia offline incorporada al servidor para autores y clientes de IA.
+    #[tool(
+        description = "Lea primero esta guia: flujo de reporte, Prueba de concepto, Markdown, CVSS, evidencias, contrato data.json y ejemplo de plantilla Typst. Disponible offline sin abrir un workspace."
+    )]
+    async fn get_authoring_guide(&self) -> String {
+        include_str!("../../docs/mcp-authoring.md").to_string()
+    }
+
     // --- Lectura ---
 
     /// Devuelve nombre, ruta y cantidad de proyectos del workspace expuesto.
@@ -472,11 +518,32 @@ impl PuduReportServer {
         to_json(&Value::Array(hits))
     }
 
+    /// Compila localmente sin exponer bytes de evidencias al cliente MCP.
+    #[tool(
+        description = "Regenera build/data.json y compila el PDF desde los archivos actuales. Use despues de create_finding, update_finding o update_section. Devuelve rutas locales y resultado de compilacion; NO devuelve bytes de PDF/PNG ni evidencias. Requiere Typst instalado o PUDU_TYPST_BIN. No modifica los originales."
+    )]
+    async fn build_project(
+        &self,
+        Parameters(args): Parameters<ProjectIdArgs>,
+    ) -> Result<String, McpError> {
+        let root = self.current_root()?;
+        let paths = tokio::task::spawn_blocking(move || {
+            let typst = pdf::resolve_typst()?;
+            pdf::generate_pdf_bundled(&root, &args.project_id, &typst)
+        })
+        .await
+        .map_err(internal)?
+        .map_err(internal)?;
+        to_json(
+            &serde_json::json!({"status": "built", "pdf_paths": paths, "note": "PDF local; abrir en PuduReport o en un visor local. No se transfieren evidencias."}),
+        )
+    }
+
     // --- Escritura (solo texto de hallazgos) ---
 
     /// Crea un hallazgo (vulnerabilidad) nuevo en un proyecto.
     #[tool(
-        description = "Crea un hallazgo (vulnerabilidad) nuevo. La severidad se deriva del cvss_vector; en tipos de examen (oscp/htb) se usa severity manual."
+        description = "Crea un hallazgo. Requeridos: project_id y title. body es markdown opcional (incluye tablas GFM); sin body se usa un scaffold. Para puntuar envie cvss_vector y opcional cvss_version (3.1 por defecto), NO severity. Solo oscp/htb admiten severity manual. Despues de editar use build_project para regenerar data.json y PDF locales."
     )]
     async fn create_finding(
         &self,
@@ -484,6 +551,17 @@ impl PuduReportServer {
     ) -> Result<String, McpError> {
         let root = self.current_root()?;
         let project = workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
+        let mut validated_meta = FindingMeta::default();
+        apply_severity(
+            &mut validated_meta,
+            &project.project_type,
+            args.cvss_version.as_deref(),
+            args.cvss_vector.as_deref(),
+            args.severity.as_deref(),
+        )?;
+        if let Some(status) = args.status.as_deref() {
+            parse_status(status)?;
+        }
         let mut finding =
             workspace::create_finding(&root, &args.project_id, &args.title).map_err(internal)?;
         if let Some(body) = args.body {
@@ -511,7 +589,7 @@ impl PuduReportServer {
 
     /// Actualiza el texto y los campos de un hallazgo existente.
     #[tool(
-        description = "Actualiza titulo, cuerpo y campos de un hallazgo. Solo cambia lo que se envia. La severidad se deriva del cvss_vector (salvo tipos de examen)."
+        description = "Actualiza titulo, cuerpo y campos de un hallazgo. Solo cambia lo que se envia. No recompila: llame build_project despues para actualizar data.json y PDF. La severidad se deriva del cvss_vector (salvo tipos de examen)."
     )]
     async fn update_finding(
         &self,
@@ -547,13 +625,34 @@ impl PuduReportServer {
         to_json(&finding)
     }
 
+    /// Edita una seccion sin reemplazar las demas ni la metadata.
+    #[tool(
+        description = "Reemplaza solo una seccion de un hallazgo: descripcion, impacto, poc (Prueba de concepto) o remediacion. Crea el encabezado si falta. Envie contenido sin H2 de seccion. Conserva metadata, otras secciones y visibilidad; una seccion oculta sigue oculta. Use get_finding antes y build_project despues. No confundir con update_section (prosa del proyecto)."
+    )]
+    async fn update_finding_section(
+        &self,
+        Parameters(args): Parameters<UpdateFindingSectionArgs>,
+    ) -> Result<String, McpError> {
+        let root = self.current_root()?;
+        let mut finding =
+            workspace::load_finding(&root, &args.project_id, &args.finding_id).map_err(internal)?;
+        finding.body = pudureport_core::sections::update_section(
+            &finding.body,
+            args.section_key.as_str(),
+            &args.body,
+        )
+        .map_err(|message| McpError::invalid_params(message, None))?;
+        workspace::write_finding(&root, &args.project_id, &finding).map_err(internal)?;
+        to_json(&finding)
+    }
+
     // --- Escritura (solo texto de secciones de prosa existentes) ---
 
     /// Actualiza el texto de una seccion de prosa existente (resumen, alcance,
     /// metodologia, conclusiones, etc.). No crea secciones nuevas ni toca
     /// portada, branding, tipo de proyecto ni el orden del cuerpo (layout).
     #[tool(
-        description = "Actualiza titulo, cuerpo markdown o si esta habilitada una seccion de prosa EXISTENTE del reporte (ej. resumen, alcance, metodologia, conclusiones). Solo cambia lo que se envia. Use `get_project` para ver las keys de seccion disponibles en el proyecto. NO crea secciones nuevas y NUNCA toca portada, branding, tipo de proyecto ni el layout del reporte."
+        description = "Actualiza titulo, cuerpo markdown o si esta habilitada una seccion de prosa EXISTENTE del reporte (ej. resumen, alcance, metodologia, conclusiones). Solo cambia lo que se envia. Despues use build_project para actualizar data.json y PDF. Use `get_project` para ver las keys de seccion disponibles en el proyecto. NO crea secciones nuevas y NUNCA toca portada, branding, tipo de proyecto ni el layout del reporte."
     )]
     async fn update_section(
         &self,
@@ -678,7 +777,7 @@ impl PuduReportServer {
     /// Crea o modifica una plantilla PDF en la biblioteca del usuario. Nunca
     /// toca las incluidas ni pisa una que haya editado un humano.
     #[tool(
-        description = "Crea o modifica una plantilla PDF (.typ) en TU biblioteca de plantillas (library/templates del workspace). NUNCA puede tocar las plantillas incluidas (pentest, oscp, etc.): este servidor no conoce su ruta. Si `name` ya existe en la biblioteca y no lo creaste vos con esta misma herramienta, la llamada falla (no se pisa el trabajo de un humano); en ese caso usa otro nombre. La plantilla queda marcada como generada por IA y NO se aplica sola a ningun proyecto: un humano tiene que abrirla en PuduReport (pestaña Plantillas), ver el preview (o el error de compilacion) y aplicarla explicitamente antes de usarla en un reporte real."
+        description = "Crea o modifica una plantilla PDF (.typ) en TU biblioteca de plantillas (library/templates del workspace). NUNCA puede tocar las plantillas incluidas (pentest, oscp, etc.): build_project usa copias embebidas de solo lectura. Si `name` ya existe en la biblioteca y no lo creaste vos con esta misma herramienta, la llamada falla (no se pisa el trabajo de un humano); en ese caso usa otro nombre. La plantilla queda marcada como generada por IA y NO se aplica sola a ningun proyecto: un humano tiene que abrirla en PuduReport (pestaña Plantillas), ver el preview (o el error de compilacion) y aplicarla explicitamente antes de usarla en un reporte real."
     )]
     async fn save_pdf_template(
         &self,
@@ -734,11 +833,11 @@ impl PuduReportServer {
 impl ServerHandler for PuduReportServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "Servidor MCP de PuduReport. Lee proyectos e hallazgos del workspace expuesto y \
+            "Servidor MCP de PuduReport. Primero consulte get_authoring_guide para redactar reportes y crear plantillas. Para editar solo Prueba de concepto use update_finding_section con section_key=poc. Lee proyectos e hallazgos del workspace expuesto y \
              mejora el texto de los hallazgos (crear vulnerabilidades, redaccion, campos). \
              Tambien puede editar el texto (titulo/cuerpo/habilitada) de secciones de prosa YA \
              EXISTENTES del reporte (resumen, alcance, metodologia, conclusiones) via \
-             update_section, sin crear secciones nuevas. Puede SUBIR imagenes nuevas al proyecto \
+             update_section, sin crear secciones nuevas. Despues de editar use build_project para regenerar data.json y PDF locales; nunca devuelve bytes de evidencias. Puede SUBIR imagenes nuevas al proyecto \
              (upload_asset) para ilustrar el reporte, pero NUNCA lee evidencias existentes: no \
              expone bytes de assets. Puede crear o modificar plantillas PDF (save_pdf_template) \
              SOLO en tu propia biblioteca (nunca las incluidas, nunca pisa una que edito un \
@@ -815,6 +914,157 @@ mod tests {
     /// Parsea la salida JSON (texto) de una herramienta.
     fn parse(out: String) -> Value {
         serde_json::from_str(&out).unwrap()
+    }
+
+    #[tokio::test]
+    async fn poc_edit_preserves_metadata_and_compiles_documented_template() {
+        let (root, pid) = temp_workspace("poc-authoring", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        let guide = srv.get_authoring_guide().await;
+        assert!(guide.contains("update_finding_section"));
+        let mut finding = workspace::create_finding(&root, &pid, "PoC regression").unwrap();
+        finding.body = "## Descripcion\nPreservar descripcion\n## PoC\nAnterior\n## Remediacion\nPreservar fix\n".into();
+        finding.meta.hidden_fields = vec!["poc".into()];
+        workspace::write_finding(&root, &pid, &finding).unwrap();
+        let before_meta = serde_json::to_value(&finding.meta).unwrap();
+        srv.update_finding_section(Parameters(UpdateFindingSectionArgs {
+            project_id: pid.clone(),
+            finding_id: finding.id.clone(),
+            section_key: FindingSectionKey::Poc,
+            body: "POCVERIFY2026\n\n| Host | Resultado |\n|---|---|\n| 192.0.2.1 | Observado |"
+                .into(),
+        }))
+        .await
+        .unwrap();
+        let updated = workspace::load_finding(&root, &pid, &finding.id).unwrap();
+        assert_eq!(serde_json::to_value(&updated.meta).unwrap(), before_meta);
+        assert!(updated
+            .body
+            .starts_with("## Descripcion\nPreservar descripcion\n"));
+        assert!(updated.body.ends_with("## Remediacion\nPreservar fix\n"));
+        assert!(updated.body.contains("## Prueba de concepto"));
+        assert!(srv
+            .update_finding_section(Parameters(UpdateFindingSectionArgs {
+                project_id: pid.clone(),
+                finding_id: finding.id.clone(),
+                section_key: FindingSectionKey::Poc,
+                body: "## Impacto\nIncorrecto".into(),
+            }))
+            .await
+            .is_err());
+        assert_eq!(
+            workspace::load_finding(&root, &pid, &finding.id)
+                .unwrap()
+                .body,
+            updated.body
+        );
+        if let Some(bin) = std::env::var_os("PUDU_TYPST_BIN") {
+            let source = guide
+                .split("```typst\n")
+                .nth(1)
+                .unwrap()
+                .split("```")
+                .next()
+                .unwrap();
+            srv.save_pdf_template(Parameters(template_args("guide-example", source)))
+                .await
+                .unwrap();
+            // Solo el test simula la seleccion humana, nunca la herramienta MCP.
+            let mut project = workspace::read_project_meta(&root, &pid).unwrap();
+            project.template_override = "guide-example".into();
+            workspace::write_project_meta(&root, &pid, &project).unwrap();
+            pdf::generate_pdf_bundled(&root, &pid, &PathBuf::from(&bin)).unwrap();
+            let path = root.join(&pid).join("build/data.json");
+            assert!(!std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("POCVERIFY2026"));
+            let mut visible = updated;
+            visible.meta.hidden_fields.clear();
+            workspace::write_finding(&root, &pid, &visible).unwrap();
+            pdf::generate_pdf_bundled(&root, &pid, &PathBuf::from(bin)).unwrap();
+            let data = std::fs::read_to_string(path).unwrap();
+            assert!(data.contains("POCVERIFY2026"));
+            assert!(data.contains("#table("));
+        } else {
+            eprintln!("Configure PUDU_TYPST_BIN para compilar el ejemplo documentado");
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn build_project_refreshes_data_after_section_edit() {
+        let Some(bin) = std::env::var_os("PUDU_TYPST_BIN") else {
+            eprintln!("Configure PUDU_TYPST_BIN para la integracion MCP/Typst");
+            return;
+        };
+        assert!(PathBuf::from(bin).is_file());
+        let (root, pid) = temp_workspace("build-refresh", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        let key = workspace::read_project_meta(&root, &pid).unwrap().sections[0]
+            .key
+            .clone();
+        srv.build_project(Parameters(ProjectIdArgs {
+            project_id: pid.clone(),
+        }))
+        .await
+        .unwrap();
+        srv.update_section(Parameters(UpdateSectionArgs {
+            project_id: pid.clone(),
+            section_key: key,
+            title: None,
+            body: Some("| IP | Servicio |\n|---|---|\n| 192.0.2.99 | **https** |".into()),
+            enabled: Some(true),
+        }))
+        .await
+        .unwrap();
+        let stale = std::fs::read_to_string(root.join(&pid).join("build/data.json")).unwrap();
+        assert!(!stale.contains("192.0.2.99"));
+        let result = parse(
+            srv.build_project(Parameters(ProjectIdArgs {
+                project_id: pid.clone(),
+            }))
+            .await
+            .unwrap(),
+        );
+        assert_eq!(result["status"], "built");
+        let data = std::fs::read_to_string(root.join(&pid).join("build/data.json")).unwrap();
+        assert!(data.contains("192.0.2.99"));
+        assert!(data.contains("#table("));
+        assert!(PathBuf::from(result["pdf_paths"][0].as_str().unwrap()).is_file());
+        assert!(result.get("data_base64").is_none());
+        assert!(srv
+            .build_project(Parameters(ProjectIdArgs {
+                project_id: "../escape".into()
+            }))
+            .await
+            .is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn invalid_create_does_not_leave_an_orphan() {
+        let (root, pid) = temp_workspace("invalid-create", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        let result = srv
+            .create_finding(Parameters(CreateFindingArgs {
+                project_id: pid.clone(),
+                title: "Rejected".into(),
+                body: None,
+                cvss_vector: None,
+                cvss_version: None,
+                severity: Some("high".into()),
+                cwe: None,
+                status: None,
+                affected: None,
+            }))
+            .await;
+        assert!(result.is_err());
+        assert!(workspace::list_findings(&root, &pid).unwrap().is_empty());
+        assert!(workspace::read_project_meta(&root, &pid)
+            .unwrap()
+            .finding_order
+            .is_empty());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[tokio::test]

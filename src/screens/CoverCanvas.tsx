@@ -88,6 +88,9 @@ export function CoverCanvas({
 }: Props) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [sel, setSel] = useState<number | null>(null);
+  const [zoom, setZoom] = useState(100);
+  const [guides, setGuides] = useState(true);
+  const scale = zoom / 100;
   const drag = useRef<{ i: number; offX: number; offY: number } | null>(null);
   const resize = useRef<{ i: number; startX: number; startW: number } | null>(null);
   // Estado vivo para los listeners globales: evita closures obsoletos (sin esto,
@@ -109,7 +112,7 @@ export function CoverCanvas({
       if (drag.current) {
         const d = drag.current;
         const { x, y } = norm(e.clientX, e.clientY);
-        const nx = clamp01(x - d.offX);
+        const nx = Math.max(0, Math.min(1 - elements[d.i].w, x - d.offX));
         const ny = clamp01(y - d.offY);
         onChange(
           elements.map((el, i) => (i === d.i ? { ...el, x: nx, y: ny } : el)),
@@ -117,7 +120,8 @@ export function CoverCanvas({
         );
       } else if (resize.current) {
         const r = resize.current;
-        const w = clampW(r.startW + (e.clientX - r.startX) / CANVAS_W);
+        const width = canvasRef.current?.getBoundingClientRect().width ?? CANVAS_W;
+        const w = clampW(Math.min(1 - elements[r.i].x, r.startW + (e.clientX - r.startX) / width));
         onChange(
           elements.map((el, i) => (i === r.i ? { ...el, w } : el)),
           true,
@@ -147,14 +151,19 @@ export function CoverCanvas({
     );
   }
 
-  function startDrag(e: ReactMouseEvent, i: number) {
+  function startDrag(e: ReactMouseEvent<HTMLElement>, i: number) {
+    if (e.button !== 0) return;
+    e.preventDefault();
     e.stopPropagation();
+    e.currentTarget.focus();
     setSel(i);
     const { x, y } = norm(e.clientX, e.clientY);
     drag.current = { i, offX: x - elements[i].x, offY: y - elements[i].y };
   }
 
-  function startResize(e: ReactMouseEvent, i: number) {
+  function startResize(e: ReactMouseEvent<HTMLElement>, i: number) {
+    if (e.button !== 0) return;
+    e.preventDefault();
     e.stopPropagation();
     setSel(i);
     resize.current = { i, startX: e.clientX, startW: elements[i].w };
@@ -213,39 +222,124 @@ export function CoverCanvas({
   const selected = sel !== null ? (elements[sel] ?? null) : null;
 
   return (
-    <div style={{ display: "flex", gap: 18, alignItems: "flex-start" }}>
-      <div>
-        <div className="row" style={{ gap: 6, marginBottom: 8 }}>
-          <button className="btn small" onClick={addText}>
-            <i className="ti ti-text-plus" />
-            Texto
-          </button>
-          <button className="btn small" onClick={() => void addImage()}>
-            <i className="ti ti-photo-plus" />
-            Imagen
-          </button>
+    <div className="canvas-workbench">
+      <div className="canvas-toolbar" aria-label="Herramientas del lienzo">
+        <span className="canvas-toolbar-title">
+          <i className="ti ti-artboard" aria-hidden="true" />
+          Lienzo de portada
+        </span>
+        <button className="btn small" onClick={addText}>
+          <i className="ti ti-text-plus" aria-hidden="true" />
+          Texto
+        </button>
+        <button className="btn small" onClick={() => void addImage()}>
+          <i className="ti ti-photo-plus" aria-hidden="true" />
+          Imagen
+        </button>
+        <button
+          className={`btn small ${guides ? "selected" : ""}`}
+          aria-pressed={guides}
+          title="Mostrar guias de alineacion"
+          onClick={() => setGuides((value) => !value)}
+        >
+          <i className="ti ti-ruler" aria-hidden="true" />
+          Guias
+        </button>
+        <select
+          className="select canvas-zoom"
+          aria-label="Zoom del lienzo"
+          value={zoom}
+          onChange={(event) => setZoom(Number(event.target.value))}
+        >
+          {[75, 100, 125, 150].map((value) => (
+            <option key={value} value={value}>
+              {value}%
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="canvas-stage">
+        <div className="canvas-sheet-label">
+          A4 <span>210 × 297 mm</span>
         </div>
         <div
+          className="canvas-sheet"
           ref={canvasRef}
           onMouseDown={() => setSel(null)}
           style={{
             position: "relative",
-            width: CANVAS_W,
-            height: CANVAS_H,
+            width: CANVAS_W * scale,
+            height: CANVAS_H * scale,
             background: "#ffffff",
             border: "1px solid var(--border-strong)",
             borderRadius: 4,
             overflow: "hidden",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
             userSelect: "none",
           }}
         >
+          {guides && (
+            <div className="canvas-guides" aria-hidden="true">
+              <span />
+            </div>
+          )}
           {elements.map((el, i) => {
-            const src = el.kind === "logo" ? logoSrc : el.kind === "image" ? resolveSrc(el.src ?? "") : "";
+            const src =
+              el.kind === "logo" ? logoSrc : el.kind === "image" ? resolveSrc(el.src ?? "") : "";
             const isImg = el.kind === "logo" || el.kind === "image";
             return (
               <div
                 key={i}
+                className={`canvas-element ${sel === i ? "is-selected" : ""}`}
+                role="button"
+                tabIndex={0}
+                aria-label={`${KIND_LABEL[el.kind]} ${i + 1}`}
+                aria-pressed={sel === i}
+                onFocus={() => setSel(i)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === "Escape") {
+                    setSel(null);
+                    return;
+                  }
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSel(i);
+                    return;
+                  }
+                  if (event.key === "Delete" || event.key === "Backspace") {
+                    event.preventDefault();
+                    remove(i);
+                    return;
+                  }
+                  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key))
+                    return;
+                  event.preventDefault();
+                  const step = event.shiftKey ? 10 : 1;
+                  patch(
+                    i,
+                    {
+                      x: Math.max(
+                        0,
+                        Math.min(
+                          1 - el.w,
+                          el.x +
+                            (event.key === "ArrowRight"
+                              ? step
+                              : event.key === "ArrowLeft"
+                                ? -step
+                                : 0) /
+                              CANVAS_W,
+                        ),
+                      ),
+                      y: clamp01(
+                        el.y +
+                          (event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0) /
+                            CANVAS_H,
+                      ),
+                    },
+                    false,
+                  );
+                }}
                 onMouseDown={(e) => startDrag(e, i)}
                 style={{
                   position: "absolute",
@@ -253,13 +347,17 @@ export function CoverCanvas({
                   top: `${el.y * 100}%`,
                   width: `${el.w * 100}%`,
                   cursor: "move",
-                  outline: sel === i ? `1.5px solid ${brand}` : "1px dashed transparent",
                   outlineOffset: 2,
                 }}
               >
                 {isImg ? (
                   src ? (
-                    <img src={src} alt="" style={{ width: "100%", display: "block" }} />
+                    <img
+                      src={src}
+                      alt=""
+                      draggable={false}
+                      style={{ width: "100%", display: "block" }}
+                    />
                   ) : (
                     <div
                       style={{
@@ -279,7 +377,7 @@ export function CoverCanvas({
                 ) : (
                   <div
                     style={{
-                      fontSize: ptToPx(el.font_size ?? 0),
+                      fontSize: ptToPx(el.font_size ?? 0) * scale,
                       fontWeight: el.weight === "bold" ? 700 : 400,
                       textAlign: el.align ?? "left",
                       color: el.color || "#1a1a1a",
@@ -300,7 +398,7 @@ export function CoverCanvas({
                       bottom: -5,
                       width: 10,
                       height: 10,
-                      background: brand,
+                      background: "var(--accent-solid)",
                       borderRadius: 2,
                       cursor: "nwse-resize",
                     }}
@@ -310,20 +408,40 @@ export function CoverCanvas({
             );
           })}
         </div>
-        <p className="faint" style={{ fontSize: 11, marginTop: 8, maxWidth: CANVAS_W }}>
-          <strong>Beta:</strong> el lienzo libre es una funcion nueva y puede tener fallas.
-          Arrastra los elementos; el tirador de la esquina redimensiona. Titulo, cliente y periodo
-          muestran un texto de ejemplo; en el PDF salen los datos reales del proyecto.
-        </p>
       </div>
 
       {/* Panel de propiedades del elemento seleccionado */}
-      <div style={{ minWidth: 210 }}>
+      <aside className="canvas-inspector" aria-label="Capas y propiedades">
+        <div className="list-heading">
+          <strong>Capas</strong>
+          <span>{elements.length}</span>
+        </div>
+        <div className="canvas-layers">
+          {elements.map((element, index) => (
+            <button
+              className={`context-link ${sel === index ? "active" : ""}`}
+              key={index}
+              aria-pressed={sel === index}
+              onClick={() => setSel(index)}
+            >
+              <i
+                className={`ti ${element.kind === "image" || element.kind === "logo" ? "ti-photo" : "ti-typography"}`}
+                aria-hidden="true"
+              />
+              <span>
+                {element.kind === "text" ? element.content || "Texto" : KIND_LABEL[element.kind]}
+              </span>
+            </button>
+          ))}
+          {!elements.length && (
+            <p className="context-hint">Agrega texto o una imagen para empezar.</p>
+          )}
+        </div>
         {selected && sel !== null ? (
           <ElementProps
             el={selected}
-            onPatch={(p) => patch(sel, p, true)}
-            onCommit={() => onChange(elements, false)}
+            onPatch={(p, debounced = true) => patch(sel, p, debounced)}
+            onCommit={() => live.current.onChange(live.current.elements, false)}
             onRemove={() => remove(sel)}
             onReplaceImage={async () => {
               const src = await onUploadImage();
@@ -331,12 +449,21 @@ export function CoverCanvas({
             }}
           />
         ) : (
-          <p className="faint" style={{ fontSize: 12 }}>
-            Selecciona un elemento del lienzo para editar sus propiedades, o agrega uno con los
-            botones de arriba.
-          </p>
+          <div className="canvas-inspector-empty">
+            <i className="ti ti-pointer" aria-hidden="true" />
+            <strong>Selecciona un elemento</strong>
+            <p>Edita su tipografia, color y alineacion desde aqui.</p>
+          </div>
         )}
-      </div>
+      </aside>
+      <footer className="canvas-status">
+        <span>Flechas: mover · Shift: paso de 10 · Supr: quitar</span>
+        <span>Vista de ejemplo · Beta</span>
+      </footer>
+      <p className="canvas-note">
+        Titulo, cliente y periodo usan texto de ejemplo; el PDF incluye los datos reales del
+        proyecto. Las guias y el zoom solo se muestran en el editor.
+      </p>
     </div>
   );
 }
@@ -349,14 +476,14 @@ function ElementProps({
   onReplaceImage,
 }: {
   el: CoverElement;
-  onPatch: (p: Partial<CoverElement>) => void;
+  onPatch: (p: Partial<CoverElement>, debounced?: boolean) => void;
   onCommit: () => void;
   onRemove: () => void;
   onReplaceImage: () => Promise<void>;
 }) {
   const isText = el.kind !== "logo" && el.kind !== "image";
   return (
-    <div className="card" style={{ padding: 14 }}>
+    <div className="canvas-properties">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
         <strong style={{ fontSize: 13 }}>{KIND_LABEL[el.kind]}</strong>
         <button className="btn small" onClick={onRemove} title="Quitar">
@@ -398,6 +525,8 @@ function ElementProps({
               value={Math.round(el.w * 100)}
               onChange={(e) => onPatch({ w: Number(e.target.value) / 100 })}
               onMouseUp={onCommit}
+              onKeyUp={onCommit}
+              onBlur={onCommit}
             />
           </div>
         </>
@@ -414,6 +543,8 @@ function ElementProps({
               value={Math.round(el.font_size || 12)}
               onChange={(e) => onPatch({ font_size: Number(e.target.value) })}
               onMouseUp={onCommit}
+              onKeyUp={onCommit}
+              onBlur={onCommit}
             />
           </div>
           <div className="row" style={{ gap: 6, marginBottom: 8 }}>
@@ -421,19 +552,29 @@ function ElementProps({
               <button
                 key={a}
                 className={`btn small ${(el.align ?? "left") === a ? "primary" : ""}`}
+                aria-label={
+                  a === "left"
+                    ? "Alinear a la izquierda"
+                    : a === "right"
+                      ? "Alinear a la derecha"
+                      : "Centrar texto"
+                }
+                aria-pressed={(el.align ?? "left") === a}
                 onClick={() => {
-                  onPatch({ align: a });
-                  onCommit();
+                  onPatch({ align: a }, false);
                 }}
               >
-                <i className={`ti ti-align-${a === "left" ? "left" : a === "right" ? "right" : "center"}`} />
+                <i
+                  className={`ti ti-align-${a === "left" ? "left" : a === "right" ? "right" : "center"}`}
+                />
               </button>
             ))}
             <button
               className={`btn small ${el.weight === "bold" ? "primary" : ""}`}
+              aria-label="Negrita"
+              aria-pressed={el.weight === "bold"}
               onClick={() => {
-                onPatch({ weight: el.weight === "bold" ? "normal" : "bold" });
-                onCommit();
+                onPatch({ weight: el.weight === "bold" ? "normal" : "bold" }, false);
               }}
             >
               <i className="ti ti-bold" />

@@ -25,14 +25,17 @@ export const FINDING_SECTIONS: SectionDef[] = [
 
 /** Normaliza un titulo para comparar (minusculas, sin acentos). */
 function normalize(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .trim();
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 }
 
-const TITLE_TO_KEY = new Map(FINDING_SECTIONS.map((s) => [normalize(s.title), s.key]));
+const TITLE_TO_KEY = new Map([
+  ...FINDING_SECTIONS.map((s) => [normalize(s.title), s.key] as const),
+  ["poc", "poc"],
+  ["proof of concept", "poc"],
+  ["description", "descripcion"],
+  ["impact", "impacto"],
+  ["remediation", "remediacion"],
+]);
 
 /** Parsea un cuerpo markdown a un mapa key -> contenido por seccion. */
 export function parseSections(body: string): Record<string, string> {
@@ -43,7 +46,25 @@ export function parseSections(body: string): Record<string, string> {
   const buffers: Record<string, string[]> = {};
   for (const s of FINDING_SECTIONS) buffers[s.key] = [];
 
+  let fence: { marker: string; length: number } | null = null;
   for (const line of body.split("\n")) {
+    const marker = line.replace(/\r$/, "").match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (fence) {
+      if (
+        marker &&
+        marker[1][0] === fence.marker &&
+        marker[1].length >= fence.length &&
+        !marker[2].trim()
+      )
+        fence = null;
+      buffers[current].push(line);
+      continue;
+    }
+    if (marker && !(marker[1][0] === "`" && marker[2].includes("`"))) {
+      fence = { marker: marker[1][0], length: marker[1].length };
+      buffers[current].push(line);
+      continue;
+    }
     const heading = line.match(/^##\s+(.+?)\s*$/);
     if (heading) {
       const key = TITLE_TO_KEY.get(normalize(heading[1]));

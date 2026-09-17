@@ -118,19 +118,20 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
       </div>
 
       <div className="view" style={{ paddingTop: 16 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "290px minmax(0,1fr)", gap: 22 }}>
+        <div className="cover-layout">
           <div>
             <span className="field-label-top">disposicion</span>
             <div className="cardsel-grid" style={{ marginBottom: 18 }}>
               {LAYOUTS.map((l) => (
-                <div
+                <button
                   key={l.value}
                   className={`cardsel ${workspace.branding.cover_layout === l.value ? "sel" : ""}`}
+                  aria-pressed={workspace.branding.cover_layout === l.value}
                   onClick={() => selectLayout(l.value)}
                 >
                   <i className={`ti ${l.icon}`} />
                   {l.label}
-                </div>
+                </button>
               ))}
             </div>
 
@@ -321,7 +322,10 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
                 value={workspace.branding.body_font}
                 onChange={(e) =>
                   save(
-                    { ...workspace, branding: { ...workspace.branding, body_font: e.target.value } },
+                    {
+                      ...workspace,
+                      branding: { ...workspace.branding, body_font: e.target.value },
+                    },
                     true,
                   )
                 }
@@ -341,7 +345,10 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
                 value={workspace.branding.mono_font}
                 onChange={(e) =>
                   save(
-                    { ...workspace, branding: { ...workspace.branding, mono_font: e.target.value } },
+                    {
+                      ...workspace,
+                      branding: { ...workspace.branding, mono_font: e.target.value },
+                    },
                     true,
                   )
                 }
@@ -414,10 +421,7 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
               />
               Mostrar gerencia/area
             </label>
-            <label
-              className="row"
-              style={{ gap: 8, cursor: "pointer", marginBottom: 16 }}
-            >
+            <label className="row" style={{ gap: 8, cursor: "pointer", marginBottom: 16 }}>
               <input
                 type="checkbox"
                 checked={workspace.branding.cover_show_accent}
@@ -519,7 +523,7 @@ export function CoverEditor({ workspace, workspacePath, onWorkspaceSaved }: Prop
           </div>
 
           {/* Vista de la portada: lienzo editable o miniatura aproximada */}
-          <div style={{ display: "flex", justifyContent: "center" }}>
+          <div className="cover-preview-area">
             {workspace.branding.cover_layout === "canvas" ? (
               <CoverCanvas
                 elements={workspace.branding.cover_elements ?? []}
@@ -655,12 +659,22 @@ function CoverPreview({
         <div style={{ fontSize: 18, fontWeight: 600, color: b.cover_color || "inherit" }}>
           Pentest Aplicacion Web
         </div>
-        <div style={{ fontSize: 13, color: full && !b.cover_color ? "#e6edf3" : coverBrand, marginTop: 6 }}>
+        <div
+          style={{
+            fontSize: 13,
+            color: full && !b.cover_color ? "#e6edf3" : coverBrand,
+            marginTop: 6,
+          }}
+        >
           Cliente Demo S.A.
         </div>
         {b.cover_subtitle && (
           <div
-            style={{ fontSize: 12, color: full && !b.cover_color ? "#e6edf3" : coverBrand, marginTop: 4 }}
+            style={{
+              fontSize: 12,
+              color: full && !b.cover_color ? "#e6edf3" : coverBrand,
+              marginTop: 4,
+            }}
           >
             {b.cover_subtitle}
           </div>

@@ -16,6 +16,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: node --test scripts/pending-writes.test.mjs scripts/project-schedule.test.mjs scripts/sections.test.mjs
       - run: npm run build
 
   backend:

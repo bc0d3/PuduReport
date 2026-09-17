@@ -2,6 +2,30 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.22] - 2026-09-17
+
+### Added
+- Workspace desktop con navegacion global, sidebar contextual, pestanas de proyectos y paleta de comandos (Cmd/Ctrl+K).
+- Inicio con seguimiento de plazos y acceso al Kanban; proyectos con busqueda, tabla alternativa y feedback de arrastre cancelable.
+- Portada con zoom, guias y movimiento por teclado; vista previa del reporte adaptable al espacio disponible.
+- Herramientas MCP `build_project`, `update_finding_section` y `get_authoring_guide`: recompilacion local de PDF, edicion de una seccion del hallazgo y guia offline para reportes y plantillas Typst.
+- Soporte de tablas GFM en el PDF, con encabezados repetibles y paginacion.
+
+### Changed
+- Sistema visual con tokens compartidos, superficies graphite, foco visible, tooltips y respeto por movimiento reducido; se conserva el tema claro.
+- Inicio concentra el resumen y Proyectos el Kanban operativo. Cerrar pestanas no elimina proyectos.
+- Pipeline de PDF compartido entre la app y MCP; las escrituras MCP requieren `build_project` para actualizar el PDF y data.json.
+- Tablas editadas en modo Markdown para conservar sus celdas; nuevos slugs de hallazgos mas cortos sin renombrar archivos existentes.
+
+### Fixed
+- Guardados pendientes se completan antes de navegar; errores conservan el borrador y bloquean el cambio de vista.
+- PoC reconoce encabezados en espanol e ingles; los encabezados dentro de bloques de codigo no separan secciones del hallazgo.
+- Edicion MCP de una seccion conserva el resto del cuerpo, metadata y visibilidad; creaciones invalidas no dejan hallazgos huerfanos.
+
+### Compatibility
+- Se conservan los formatos Markdown/YAML y los proyectos existentes. SQLite sigue siendo solo un indice.
+- Reconecte el cliente MCP despues de actualizar para descubrir las nuevas herramientas. Las plantillas generadas por IA siguen requiriendo revision y aplicacion manual.
+
 ## [0.0.21] - 2026-09-11
 
 ### Added

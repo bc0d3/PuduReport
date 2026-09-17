@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import * as api from "../lib/api";
+import { scheduleWrite } from "../lib/pendingWrites";
 import type {
   BlockKind,
   Finding,
@@ -107,7 +108,7 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
   const [overIdx, setOverIdx] = useState<number | null>(null);
   const [scopeInput, setScopeInput] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
-  const saveTimer = useRef<number | undefined>(undefined);
+  const [previewOpen, setPreviewOpen] = useState(true);
 
   useEffect(() => {
     if (!projectId) return;
@@ -120,11 +121,17 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
   const persist = useCallback(
     (meta: ProjectMeta) => {
       if (!projectId) return;
-      if (saveTimer.current) window.clearTimeout(saveTimer.current);
-      saveTimer.current = window.setTimeout(async () => {
-        await guard(api.saveProject(projectId, meta));
-        setRefreshKey((k) => k + 1);
-      }, 500);
+      scheduleWrite(
+        `project:${projectId}`,
+        async () => {
+          await api.saveProject(projectId, meta);
+          setRefreshKey((k) => k + 1);
+        },
+        500,
+        (error) => {
+          void guard(Promise.reject(error));
+        },
+      );
     },
     [guard, projectId],
   );
@@ -294,22 +301,27 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
             {project.name} · {project.client}
           </p>
         </div>
-        <button className="btn primary" onClick={handleExport}>
-          <i className="ti ti-download" />
-          Exportar PDF
-        </button>
+        <div className="row" style={{ gap: 8 }}>
+          {blockMode && (
+            <button
+              className="btn"
+              aria-expanded={previewOpen}
+              aria-controls="report-inspector"
+              onClick={() => setPreviewOpen((open) => !open)}
+            >
+              <i className="ti ti-layout-sidebar-right" aria-hidden="true" />
+              Vista previa
+            </button>
+          )}
+          <button className="btn primary" onClick={handleExport}>
+            <i className="ti ti-download" />
+            Exportar PDF
+          </button>
+        </div>
       </div>
 
       <div className="view" style={{ paddingTop: 16 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: blockMode
-              ? "260px minmax(0,1fr) minmax(360px,0.9fr)"
-              : "240px minmax(0,1fr)",
-            gap: 18,
-          }}
-        >
+        <div className={`report-layout ${blockMode && previewOpen ? "with-preview" : ""}`}>
           {/* Estructura del reporte */}
           <div className="section-list">
             <span className="field-label-top">estructura del PDF</span>
@@ -461,9 +473,14 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
 
           {/* Vista previa en vivo (render real de Typst) */}
           {blockMode && (
-            <div className="report-preview">
+            <aside
+              className="report-preview"
+              hidden={!previewOpen}
+              id="report-inspector"
+              aria-label="Vista previa del reporte"
+            >
               <LivePreview projectId={projectId} refreshKey={refreshKey} />
-            </div>
+            </aside>
           )}
         </div>
       </div>

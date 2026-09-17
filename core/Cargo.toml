@@ -1,6 +1,6 @@
 [package]
 name = "pudureport-core"
-version = "0.0.21"
+version = "0.0.22"
 description = "Logica compartida de PuduReport: modelo de datos, CVSS, workspace y markdown"
 license = "GPL-3.0-only"
 edition = "2021"
@@ -13,3 +13,4 @@ serde_yaml = "0.9"
 pulldown-cmark = { version = "0.12", default-features = false }
 thiserror = "2"
 uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"

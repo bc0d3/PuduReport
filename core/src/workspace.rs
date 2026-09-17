@@ -801,6 +801,17 @@ pub fn load_finding(root: &Path, project_id: &str, finding_id: &str) -> Result<F
     parse_finding_file(&path)
 }
 
+/// Limita solo slugs de hallazgos nuevos; los IDs existentes nunca cambian.
+fn finding_slug(title: &str) -> String {
+    let slug = slugify(title);
+    if slug.len() <= 64 {
+        return slug;
+    }
+    let prefix = &slug[..64]; // slugify solo emite ASCII.
+    let end = prefix.rfind('-').filter(|end| *end >= 32).unwrap_or(64);
+    prefix[..end].trim_end_matches('-').to_string()
+}
+
 /// Crea un hallazgo vacio con prefijo numerico incremental.
 pub fn create_finding(root: &Path, project_id: &str, title: &str) -> Result<Finding> {
     validate_id(project_id)?;
@@ -808,7 +819,7 @@ pub fn create_finding(root: &Path, project_id: &str, title: &str) -> Result<Find
     fs::create_dir_all(&dir)?;
 
     let next = next_finding_number(&dir)?;
-    let id = format!("{:03}-{}", next, slugify(title));
+    let id = format!("{:03}-{}", next, finding_slug(title));
     let finding = Finding {
         id: id.clone(),
         meta: FindingMeta {
@@ -1078,7 +1089,7 @@ pub fn instantiate_template(
     let dir = findings_dir(root, project_id);
     fs::create_dir_all(&dir)?;
     let next = next_finding_number(&dir)?;
-    let id = format!("{:03}-{}", next, slugify(&title));
+    let id = format!("{:03}-{}", next, finding_slug(&title));
 
     let mut meta = template.meta.clone();
     meta.title = title;
@@ -1226,6 +1237,23 @@ fn unique_dir(root: &Path, base: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_finding_slugs_are_bounded_and_unique() {
+        let root = std::env::temp_dir().join(format!("pudu-slug-{}", uuid::Uuid::new_v4()));
+        create_workspace(&root, "Test").unwrap();
+        let (pid, _) = create_project(&root, "Project", "Client", "pentest").unwrap();
+        let title = "superficie de servicios expuestos en la red interna inventario detallado host puerto protocolo servicio ".repeat(4);
+        let first = create_finding(&root, &pid, &title).unwrap();
+        let second = create_finding(&root, &pid, &title).unwrap();
+        assert!(first.id.len() <= 68);
+        assert_ne!(first.id, second.id);
+        assert_eq!(
+            load_finding(&root, &pid, &first.id).unwrap().meta.title,
+            title
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn slugify_basic() {

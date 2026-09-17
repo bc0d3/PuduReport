@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
+import { scheduleWrite } from "../lib/pendingWrites";
 import type { ProjectMeta } from "../lib/types";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { useToast } from "../components/Toast";
@@ -27,7 +28,6 @@ export function ContentEditor({ projectId, assetBase, onGoToPreview, onPickProje
   const { guard } = useToast();
   const [content, setContent] = useState<string | null>(null);
   const projectRef = useRef<ProjectMeta | null>(null);
-  const saveTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!projectId) return;
@@ -43,16 +43,22 @@ export function ContentEditor({ projectId, assetBase, onGoToPreview, onPickProje
     (md: string) => {
       const base = projectRef.current;
       if (!projectId || !base) return;
-      if (saveTimer.current) window.clearTimeout(saveTimer.current);
-      saveTimer.current = window.setTimeout(async () => {
-        const has = base.sections.some((s) => s.key === CONTENT_KEY);
-        const sections = has
-          ? base.sections.map((s) => (s.key === CONTENT_KEY ? { ...s, body: md } : s))
-          : [...base.sections, { key: CONTENT_KEY, title: "", body: md, enabled: true }];
-        const next: ProjectMeta = { ...base, sections };
-        projectRef.current = next;
-        await guard(api.saveProject(projectId, next));
-      }, 600);
+      scheduleWrite(
+        `project:${projectId}`,
+        async () => {
+          const has = base.sections.some((s) => s.key === CONTENT_KEY);
+          const sections = has
+            ? base.sections.map((s) => (s.key === CONTENT_KEY ? { ...s, body: md } : s))
+            : [...base.sections, { key: CONTENT_KEY, title: "", body: md, enabled: true }];
+          const next: ProjectMeta = { ...base, sections };
+          projectRef.current = next;
+          await api.saveProject(projectId, next);
+        },
+        600,
+        (error) => {
+          void guard(Promise.reject(error));
+        },
+      );
     },
     [guard, projectId],
   );
