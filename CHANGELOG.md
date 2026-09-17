@@ -22,6 +22,9 @@ Todo cambio notable se documenta en este archivo. El formato sigue Keep a Change
 - PoC reconoce encabezados en espanol e ingles; los encabezados dentro de bloques de codigo no separan secciones del hallazgo.
 - Edicion MCP de una seccion conserva el resto del cuerpo, metadata y visibilidad; creaciones invalidas no dejan hallazgos huerfanos.
 
+### Security
+- Actualizacion de rustls a 0.23.45 para corregir RUSTSEC-2026-0285. Se incluye el aviso de licencia de los certificados raiz de webpki-roots en los instaladores.
+
 ### Compatibility
 - Se conservan los formatos Markdown/YAML y los proyectos existentes. SQLite sigue siendo solo un indice.
 - Reconecte el cliente MCP despues de actualizar para descubrir las nuevas herramientas. Las plantillas generadas por IA siguen requiriendo revision y aplicacion manual.
