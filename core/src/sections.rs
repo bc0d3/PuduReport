@@ -151,7 +151,18 @@ pub fn update_section(body: &str, key: &str, content: &str) -> Result<String, St
         if fence.0.is_some() {
             return Err("cierre el bloque de codigo antes de agregar una seccion".into());
         }
-        Ok(format!("{body}\n\n{replacement}"))
+        // Insertar antes de la siguiente seccion canonica, igual que la UI.
+        // No reordenar ni reescribir las secciones que ya existen.
+        let rank = |candidate: &str| SECTIONS.iter().position(|(k, _)| *k == candidate);
+        let insert_at = spans
+            .iter()
+            .find(|(_, candidate)| rank(candidate) > rank(key))
+            .map_or(body.len(), |(offset, _)| *offset);
+        Ok(format!(
+            "{}\n\n{replacement}{}",
+            &body[..insert_at],
+            &body[insert_at..]
+        ))
     }
 }
 
@@ -227,6 +238,18 @@ mod tests {
         assert!(update_section("## PoC\nA\n## Prueba de concepto\nB", "poc", "new").is_err());
         assert!(update_section("```\nunclosed", "poc", "new").is_err());
         assert!(update_section(BODY, "unknown", "new").is_err());
+    }
+
+    #[test]
+    fn missing_poc_is_inserted_before_remediation_without_rewriting_other_sections() {
+        let body = "## Descripcion\nA\n## Remediation\nKeep **exactly**.\n";
+        let out = update_section(body, "poc", "1. Paso\n2. Resultado").unwrap();
+        assert!(out.starts_with("## Descripcion\nA\n"));
+        assert!(out.ends_with("## Remediation\nKeep **exactly**.\n"));
+        assert!(out.find("## Prueba de concepto").unwrap() < out.find("## Remediation").unwrap());
+        let out = update_section(&out, "impacto", "Impacto confirmado").unwrap();
+        assert!(out.find("## Impacto").unwrap() < out.find("## Prueba de concepto").unwrap());
+        assert!(out.contains("1. Paso\n2. Resultado"));
     }
 
     #[test]

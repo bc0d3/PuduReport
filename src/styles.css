@@ -1566,9 +1566,17 @@ i.ti {
 .section-grid .full {
   grid-column: 1 / -1;
 }
+.impact-field .ProseMirror,
+.impact-field .md-source {
+  min-height: 320px;
+}
 .poc-field .ProseMirror,
 .poc-field .md-source {
-  max-height: 50vh;
+  min-height: 420px;
+}
+.impact-field .ProseMirror,
+.poc-field .ProseMirror {
+  max-height: max(420px, 70vh);
   overflow-y: auto;
 }
 

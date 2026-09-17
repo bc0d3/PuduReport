@@ -43,9 +43,7 @@
     #ws.watermark.text #h(1fr) #project.client #h(1fr) #counter(page).display("1 / 1", both: true)
   ],
 )
-#set text(font: body-font, size: 10.5pt, lang: "es")
-#show raw: set text(font: mono-font)
-#set par(justify: true, leading: 0.65em)
+#show: report-style.with(body-font, mono-font)
 #set heading(numbering: none)
 
 #show heading.where(level: 1): it => [
@@ -58,8 +56,7 @@
 ]
 
 // Bloques de codigo: fondo oscuro con resaltado + etiqueta de lenguaje.
-#set raw(theme: "code-dark.tmTheme")
-#show raw.where(block: true): it => render-code-block(it)
+// El estilo de codigo se aplica desde report-style (theme.typ).
 
 // Linea opcional con gerencia y area del cliente, para la portada.
 #let org-line = {
@@ -90,7 +87,7 @@
       project.client
     } else if kind == "subtitle" {
       ws.branding.at("cover_subtitle", default: "")
-    } else if kind == "period" [#project.start_date — #project.end_date] else if kind == "text" {
+    } else if kind == "period" [#report-period(project)] else if kind == "text" {
       el.at("content", default: "")
     } else { "" }
     box(width: ew * 21cm)[
@@ -134,7 +131,7 @@
   let cover_bg = ws.branding.cover_background
   let subtitle = ws.branding.at("cover_subtitle", default: "")
   let show_logo = ws.branding.at("cover_show_logo", default: true)
-  let show_period = ws.branding.at("cover_show_period", default: true)
+  let show_period = ws.branding.at("cover_show_period", default: true) and report-period(project) != ""
   let show_org = ws.branding.at("cover_show_org", default: true)
   let show_accent = ws.branding.at("cover_show_accent", default: true)
 
@@ -161,7 +158,7 @@
         #text(size: 16pt, fill: ct(black), project.client)
         #if subtitle != "" [#v(0.2cm)#text(size: 13pt, fill: ct(brand), subtitle)]
         #if org-line != none and show_org [#v(0.3cm)#text(size: 11pt, fill: ct(gray), org-line)]
-        #if show_period [#v(2cm)#text(size: 11pt, fill: ct(gray))[#project.start_date — #project.end_date]]
+        #if show_period [#v(2cm)#text(size: 11pt, fill: ct(gray))[#report-period(project)]]
       ]),
     )
   } else if layout == "minimal" {
@@ -188,7 +185,7 @@
         #text(size: 18pt, fill: ct(white.lighten(10%)), project.client)
         #if subtitle != "" [#v(0.3cm)#text(size: 13pt, fill: ct(white.lighten(20%)), subtitle)]
         #if org-line != none and show_org [#v(0.3cm)#text(size: 12pt, fill: ct(white.lighten(20%)), org-line)]
-        #if show_period [#v(2cm)#text(size: 12pt, fill: ct(white.lighten(20%)))[#project.start_date — #project.end_date]]
+        #if show_period [#v(2cm)#text(size: 12pt, fill: ct(white.lighten(20%)))[#report-period(project)]]
       ]
     ]
   } else {
@@ -200,7 +197,7 @@
       #text(size: 18pt, fill: ct(black), project.client)
       #if subtitle != "" [#v(0.3cm)#text(size: 13pt, fill: ct(brand), subtitle)]
       #if org-line != none and show_org [#v(0.3cm)#text(size: 11pt, fill: ct(gray), org-line)]
-      #if show_period [#v(2.5cm)#text(size: 11pt, fill: gray)[Periodo: #project.start_date — #project.end_date]]
+      #if show_period [#v(2.5cm)#text(size: 11pt, fill: gray)[Periodo: #report-period(project)]]
     ]
   }
   pagebreak()
@@ -217,17 +214,7 @@
 
 #let block-info() = {
   heading(numbering: none)[Informacion del documento]
-  grid(
-    columns: (auto, 1fr),
-    row-gutter: 6pt,
-    column-gutter: 12pt,
-    [*Cliente:*], project.client,
-    [*Periodo:*], [#project.start_date — #project.end_date],
-    [*Equipo:*],
-    if project.team.len() > 0 {
-      project.team.map(m => m.name + " (" + m.role + ")").join(", ")
-    } else [—],
-  )
+  project-info(project)
   if project.scope.len() > 0 {
     v(0.4cm)
     [*Alcance:*]
