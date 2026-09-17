@@ -2,6 +2,22 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.23] - 2026-09-17
+
+### Changed
+- Markdown sin interpretar como vista inicial de los editores, con vista visual opcional. Casillas de Impacto y Prueba de concepto mas altas; la fuente sigue permitiendo ajustar la altura manualmente.
+- MCP acepta `sections` en creacion y edicion de hallazgos para enviar Descripcion, Impacto, PoC y Remediacion por separado, conservando las casillas omitidas al editar. La UI y la guia offline explican que contenido corresponde a cada casilla.
+- Las ocho plantillas PDF comparten una base editorial ajustable: cuerpo de 11 pt sin justificacion, tablas y codigo con tamanos consistentes, y activos afectados como listas legibles. Se conservan las particularidades de cada tipo de reporte.
+
+### Fixed
+- MCP inserta secciones faltantes en su posicion canonica (PoC antes de Remediacion), sin reescribir el contenido existente. Rechaza mezclar body y sections y valida las casillas antes de escribir.
+- Bloques de codigo extensos pueden continuar entre paginas sin recorte; las fechas vacias no generan un guion aislado y los roles vacios no generan parentesis sueltos.
+- Validacion de las ocho bases con tablas de 100 filas, codigo de 90 lineas, fuentes ausentes y layouts personalizados, incluyendo CTI e incidentes.
+
+### Compatibility
+- Se conservan Markdown/YAML, metadata, visibilidad y plantillas personalizadas. Las copias antiguas no se reemplazan automaticamente por las bases actualizadas.
+- Reinicie/reconecte el cliente MCP tras actualizar para cargar las casillas estructuradas y la guia ampliada de imagenes: subir un asset no lo inserta automaticamente en la PoC.
+
 ## [0.0.22] - 2026-09-17
 
 ### Added

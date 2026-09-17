@@ -493,7 +493,7 @@ export function FindingEditor({
           <div className="section-grid">
             {FINDING_SECTIONS.map((s) => (
               <div
-                className={`field finding-section ${s.full ? "full" : ""} ${s.key === "poc" ? "poc-field" : ""}`}
+                className={`field finding-section ${s.full ? "full" : ""} ${s.key === "poc" ? "poc-field" : ""} ${s.key === "impacto" ? "impact-field" : ""}`}
                 key={s.key}
               >
                 <div className="row" style={{ justifyContent: "space-between" }}>
@@ -506,6 +506,7 @@ export function FindingEditor({
                     <i className={`ti ${isFieldHidden(s.key) ? "ti-eye-off" : "ti-eye"}`} />
                   </button>
                 </div>
+                <p className="muted">{s.guidance}</p>
                 <MarkdownEditor
                   key={`${current.id}-${s.key}`}
                   value={sections[s.key] ?? ""}

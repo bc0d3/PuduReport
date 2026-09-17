@@ -30,6 +30,35 @@ la vez desde ambos. No hay fusion automatica de ediciones concurrentes.
 
 ## Hallazgos y Prueba de concepto
 
+Para crear o editar varias casillas, prefiera `sections` en `create_finding`
+y `update_finding`. El servidor escribe los encabezados correctos: la IA no
+necesita inventarlos ni concatenar todo en Descripcion.
+
+```json
+{
+  "project_id": "ID_REAL_PROYECTO",
+  "title": "Titulo concreto de la condicion observada",
+  "sections": {
+    "descripcion": "Que se encontro, donde y bajo que condiciones.",
+    "impacto": "Impacto demostrado, escenarios potenciales y limitaciones.",
+    "poc": "### Precondiciones\nAcceso y entorno de la prueba.\n\n### Procedimiento\n1. Paso documentado.\n2. Resultado observado.\n\n### Resultado esperado\nComportamiento seguro esperado.\n\n### Evidencia\nReferencias a evidencia real proporcionada por el usuario.",
+    "remediacion": "Acciones concretas y pasos para verificar la correccion."
+  }
+}
+```
+
+Este ejemplo muestra estructura, no evidencia real: reemplace el texto por
+hechos aportados por el usuario. No combine `sections` y `body`. Al actualizar,
+agregue `finding_id`: las casillas omitidas se conservan y un string vacio
+vacia solo la casilla indicada. Al crear, las omitidas quedan vacias. Se valida
+todo antes de escribir; los errores no guardan cambios parciales. Las secciones
+faltantes se insertan en orden Descripcion, Impacto, PoC, Remediacion, sin
+reordenar las existentes. La visibilidad no cambia.
+
+No coloque todo el hallazgo dentro de `sections.descripcion`. No use un titulo
+como `## Activo critico expuesto (PoC de impacto)` para identificar la casilla:
+envie ese detalle como subtitulo `###` dentro de `sections.poc`.
+
 El cuerpo es un unico Markdown con estos encabezados H2 canonicos:
 
 ```markdown
@@ -89,6 +118,24 @@ de identificadores, `affected` un array de recursos y `status` uno de `open`,
 
 ## Markdown y evidencias
 
+### Orden editorial del reporte
+
+- Resumen ejecutivo: alcance resumido, riesgos confirmados y decisiones prioritarias.
+- Alcance y metodologia: fechas, restricciones y definicion de cada cifra de cobertura.
+- Hallazgos: una condicion comprobable por hallazgo; pasos y evidencias en PoC,
+  consecuencias en Impacto y acciones de correccion en Remediacion.
+- Inventarios extensos: sintesis en el cuerpo y detalle en una seccion de anexo
+  configurada por el usuario en Reporte. Evite repetir el mismo inventario por
+  host, por riesgo y por captura. El MCP no crea secciones nuevas del proyecto.
+- No afirme acceso sin autenticacion o control de un servicio solo por un puerto
+  abierto. Separe lo observado de las hipotesis y justifique el CVSS con evidencia.
+- Una captura debe respaldar un paso con una referencia Markdown y explicacion.
+  Una lista de nombres de archivos no inserta las imagenes en el PDF.
+
+En reportes antiguos, lea el cuerpo completo antes de reorganizar. Conserve los
+comandos, resultados, tablas, enlaces e imagenes; no elimine texto por no reconocer
+su encabezado. No invente pruebas o conclusiones para rellenar una casilla vacia.
+
 Soportados: headings, parrafos, negrita, cursiva, codigo inline y cercado,
 listas, citas, enlaces, imagenes referenciadas y tablas GFM con fila separadora.
 Las tablas se convierten a tablas Typst y pueden paginarse. En la app se editan
@@ -100,6 +147,24 @@ use en Markdown la ruta relativa devuelta por la herramienta. Nunca invente
 rutas. No existe lectura de bytes de evidencias: el MCP solo expone texto y
 referencias. Para trabajo local, configure un modelo local en SU cliente MCP;
 PuduReport no selecciona el modelo ni evita que un cliente cloud envie el texto.
+
+Subir y adjuntar son pasos distintos:
+
+1. El cliente obtiene los bytes de la imagen proporcionada por el usuario y los
+   codifica en base64. No invente el base64 ni envie una ruta local como contenido.
+2. Llame `upload_asset` con `project_id`, `filename` (por ejemplo `captura.png`)
+   y `data_base64` (base64 puro, sin prefijo `data:image/...;base64,`). Se aceptan
+   PNG, JPG/JPEG, GIF y WebP, hasta 20 MiB. El servidor guarda en el disco local.
+3. Tome la ruta devuelta `assets/<uuid>.png` e insertela en el contenido de PoC
+   como `![](assets/<uuid>.png)`, junto al paso y su explicacion. Use
+   `update_finding_section` o `update_finding` con `sections.poc`, conservando
+   los pasos y referencias existentes: estas operaciones reemplazan la casilla.
+4. Llame `build_project` y revise el PDF. Subir una imagen no modifica el hallazgo
+   ni la incluye automaticamente. Mencionar su nombre tampoco la adjunta.
+
+Si el cliente no permite obtener/codificar la imagen, indique esa limitacion;
+el usuario puede insertarla desde el editor visual de PuduReport. No afirme
+que quedo adjunta solo porque `upload_asset` devolvio una ruta.
 
 ## Plantillas PDF
 
@@ -162,3 +227,32 @@ layout y estilos de severidad a proposito; no usar como reporte final bajo NDA.
   eval(finding.body, mode: "markup")
 }
 ```
+
+### Base editorial compartida
+
+Las ocho bases importan `theme.typ`: cuerpo de 11 pt alineado a la izquierda,
+tablas de 9.5 pt, codigo de 9 pt con respaldo monoespaciado, listas espaciadas
+y bloques de codigo que pueden continuar en otra pagina. Las fechas vacias
+se omiten; los activos afectados se presentan como lista de texto legible.
+Cada tipo conserva sus portadas, colores, bloques y reglas particulares
+(incluido el flujo fijo y los encabezados numerados de OSCP).
+
+Para personalizar, duplique la base en Plantillas y ajuste su llamada existente:
+
+```typst
+#show: report-style.with(body-font, mono-font,
+  body-size: 11pt, code-size: 9pt, leading: 0.7em, justify: false)
+```
+
+El backend coloca `theme.typ` junto a la plantilla al compilar. No edite la
+copia de `build/`: se regenera. Los cambios de fuente y colores del workspace
+siguen aplicandose a traves de `body-font`, `mono-font` y branding.
+Las copias antiguas con estilos propios no se migran automaticamente: cree
+una copia de la base actual y traslade sus personalizaciones, conservando
+la anterior hasta revisar el PDF. Seleccione la nueva copia en el proyecto.
+Una actualizacion de las bases no reemplaza un `template_override` existente.
+
+Valide con contenido real: titulos largos, tablas de varias paginas, codigo,
+imagenes y fechas incompletas. Tablas muy anchas y lineas de codigo extensas
+pueden necesitar dividirse editorialmente; el estilo no reorganiza evidencias
+ni convierte nombres de capturas en imagenes adjuntas.

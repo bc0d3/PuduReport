@@ -24,9 +24,7 @@
 #let report-title = "Offensive Security Certified Professional Exam Report"
 
 // --- Tipografia y headings numerados (estilo examen) ---
-#set text(font: body-font, size: 10.5pt, lang: "es")
-#show raw: set text(font: mono-font)
-#set par(justify: true, leading: 0.65em)
+#show: report-style.with(body-font, mono-font)
 #set heading(numbering: "1.1")
 // Encabezados intencionalmente monocromos (sin color de marca): convencion de
 // reporte de examen anonimizado, no un default sin migrar a theme.typ. Un
@@ -43,8 +41,7 @@
 
 // Bloques de codigo: fondo oscuro con resaltado de sintaxis. La etiqueta de
 // lenguaje (```http, ```sql...) se muestra como cabecera del bloque.
-#set raw(theme: "code-dark.tmTheme")
-#show raw.where(block: true): it => render-code-block(it)
+// El estilo de codigo se aplica desde report-style (theme.typ).
 
 // Tablas minimalistas (solo lineas horizontales, estilo booktabs).
 #set table(stroke: (_, y) => if y == 0 {
@@ -98,7 +95,9 @@
   ]
 }
 #v(1fr)
-#text(size: 11pt)[#project.start_date #sym.dash.em #project.end_date]
+#if ws.branding.at("cover_show_period", default: true) and report-period(project) != "" [
+  #text(size: 11pt, report-period(project))
+]
 #pagebreak()
 
 // --- Paginas de contenido: fondo blanco, header/footer con regla y watermark ---
@@ -171,6 +170,7 @@
   if i > 0 and ws.branding.findings_page_break { pagebreak() }
   block(
     breakable: false,
+    sticky: true,
     width: 100%,
     inset: (left: 10pt),
     stroke: (left: 3pt + color),
@@ -191,7 +191,7 @@
     block(above: 6pt, vector-chip(f.cvss_vector, mono-font))
   }
   if f.affected.len() > 0 {
-    block(above: 6pt)[*Objetivo / activos:* #f.affected.map(a => raw(a)).join(", ")]
+    affected-assets(f.affected, label: "Objetivo / activos")
   }
   v(4pt)
   {

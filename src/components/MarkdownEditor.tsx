@@ -116,7 +116,7 @@ function readBase64(file: File): Promise<string> {
 }
 
 /**
- * Editor markdown WYSIWYG (TipTap). El usuario nunca teclea sintaxis markdown.
+ * Editor Markdown con fuente por defecto y vista visual opcional (TipTap).
  * Si recibe assetBase + projectId, permite pegar o soltar evidencias: las
  * imagenes se guardan en assets/ con nombre UUID y quedan como ![](assets/...).
  */
@@ -133,9 +133,7 @@ export function MarkdownEditor({ value, onChange, placeholder, assetBase, projec
   const editorRef = useRef<Editor | null>(null);
   // Vista activa: "source" muestra el markdown crudo en un textarea; "rich" el
   // editor WYSIWYG renderizado. Se alterna desde la barra.
-  const [mode, setMode] = useState<"source" | "rich">(() =>
-    hasMarkdownTable(value) ? "source" : "rich",
-  );
+  const [mode, setMode] = useState<"source" | "rich">("source");
   const [source, setSource] = useState(value);
   // Ruta relativa (assets/...) de la imagen que se esta anotando, o null si
   // el dialogo de anotacion esta cerrado.

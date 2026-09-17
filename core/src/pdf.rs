@@ -677,21 +677,24 @@ mod tests {
                 .body
                 .push_str(&format!("| 192.0.2.{row} | **host-{row}** | `https` |\n"));
         }
+        finding.body.push_str("\n\n## Prueba de concepto\n\nEvidencia reproducible en `192.0.2.10` con resultados documentados.\n\n```text\n");
+        for row in 1..=90 {
+            finding.body.push_str(&format!(
+                "EVIDENCIA-{row:03} respuesta registrada sin cambios en el sistema\n"
+            ));
+        }
+        finding
+            .body
+            .push_str("```\n\n## Remediacion\n\nAplicar controles y verificar el resultado.\n");
+        finding.meta.affected = vec!["192.0.2.10:443".into(), "Servicio de ejemplo con descripcion extensa para verificar legibilidad sin convertir toda la frase en codigo".into()];
         workspace::write_finding(&tmp, &pid, &finding).unwrap();
-
-        // Fuentes custom en el branding: ejercita la rama de fuente elegida (no
-        // solo el fallback) en todas las plantillas. Si la fuente no existe,
-        // Typst cae al respaldo, pero la sintaxis del template se valida igual.
-        let mut wsm = workspace::read_workspace_meta(&tmp).unwrap();
-        wsm.branding.body_font = "Times New Roman".into();
-        wsm.branding.mono_font = "Courier New".into();
-        workspace::write_workspace_meta(&tmp, &wsm).unwrap();
 
         // Gerencia y area pobladas: ejercita la linea opcional de la portada
         // en todas las plantillas (la rama que las muestra).
         let mut p = workspace::read_project_meta(&tmp, &pid).unwrap();
         p.gerencia = "Gerencia de Tecnologia".into();
         p.area = "Seguridad de la Informacion".into();
+        p.sections[0].body = finding.body.clone();
         workspace::write_project_meta(&tmp, &pid, &p).unwrap();
 
         // Cada tipo de proyecto debe compilar con su plantilla derivada.
@@ -700,16 +703,25 @@ mod tests {
             "redteam",
             "ejecutivo",
             "documento",
+            "cti",
+            "incidente",
             "retest",
             "oscp",
             "htb",
         ] {
             let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();
             project.project_type = project_type.to_string();
+            project.layout = Vec::new();
             workspace::write_project_meta(&tmp, &pid, &project).unwrap();
 
             let pdfs = generate_pdf(&tmp, &pid, &templates, &typst_bin, false)
                 .unwrap_or_else(|e| panic!("fallo {project_type}: {e}"));
+            // Artefactos opcionales para revision visual local, nunca datos de clientes.
+            if let Some(dir) = std::env::var_os("PUDU_PDF_REVIEW_DIR") {
+                let dir = PathBuf::from(dir).join(project_type);
+                std::fs::create_dir_all(&dir).unwrap();
+                std::fs::copy(&pdfs[0], dir.join("report.pdf")).unwrap();
+            }
             let bytes = std::fs::metadata(&pdfs[0]).unwrap().len();
             assert!(
                 bytes > 1000,
@@ -717,14 +729,22 @@ mod tests {
             );
         }
 
+        // Fuentes configuradas pero ausentes deben caer al respaldo tambien.
+        let mut wsm = workspace::read_workspace_meta(&tmp).unwrap();
+        wsm.branding.body_font = "Pudu Missing Body Font".into();
+        wsm.branding.mono_font = "Pudu Missing Mono Font".into();
+        workspace::write_workspace_meta(&tmp, &wsm).unwrap();
+
         // Layout custom por tipo: un bloque de texto libre (ejercita la conversion
         // markdown -> typst), un bloque desactivado y un reordenamiento. Debe
-        // compilar en las 7 plantillas (oscp ignora el layout, pero igual compila).
+        // compilar en las 8 plantillas (oscp ignora el layout, pero igual compila).
         for project_type in [
             "pentest",
             "redteam",
             "ejecutivo",
             "documento",
+            "cti",
+            "incidente",
             "retest",
             "oscp",
             "htb",
@@ -799,7 +819,15 @@ mod tests {
             ce("text", 0.1, 0.88, "Confidencial"),
         ];
         workspace::write_workspace_meta(&tmp, &wsm).unwrap();
-        for project_type in ["pentest", "ejecutivo", "documento", "retest", "htb"] {
+        for project_type in [
+            "pentest",
+            "ejecutivo",
+            "documento",
+            "cti",
+            "incidente",
+            "retest",
+            "htb",
+        ] {
             let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();
             project.project_type = project_type.to_string();
             project.layout = Vec::new();

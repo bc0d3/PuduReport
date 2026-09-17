@@ -143,6 +143,9 @@ struct CreateFindingArgs {
     /// ## Prueba de concepto y ## Remediacion. Consulte get_authoring_guide.
     /// Si se omite, usa el scaffold de secciones vacias.
     body: Option<String>,
+    /// Recomendado: contenido separado por casillas. No combinar con body.
+    /// Las secciones omitidas quedan vacias, en orden Descripcion/Impacto/PoC/Remediacion.
+    sections: Option<FindingSectionsArgs>,
     /// Para puntuar proyectos normales envie un vector completo, por ejemplo
     /// CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N. Puntaje y severidad se
     /// derivan del vector. Opcional al crear un borrador. Ignorado en oscp/htb.
@@ -173,6 +176,9 @@ struct UpdateFindingArgs {
     /// Reemplaza TODO el cuerpo Markdown. Conserve las cuatro secciones H2
     /// (ver get_authoring_guide). Para cambiar solo PoC use update_finding_section.
     body: Option<String>,
+    /// Recomendado: modifica solo las casillas enviadas, conservando las demas.
+    /// No combinar con body. Un string vacio vacia esa casilla.
+    sections: Option<FindingSectionsArgs>,
     /// Nuevo vector CVSS; la severidad y el puntaje se derivan de el. Ignorado
     /// en tipos de examen (oscp/htb).
     cvss_vector: Option<String>,
@@ -186,6 +192,52 @@ struct UpdateFindingArgs {
     status: Option<String>,
     /// Recursos afectados (URLs, hosts, endpoints).
     affected: Option<Vec<String>>,
+}
+
+/// Contenido Markdown sin encabezados H2 de seccion; use ### para subtitulos.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct FindingSectionsArgs {
+    /// Condicion observada, contexto y alcance. No colocar aqui los pasos de PoC.
+    descripcion: Option<String>,
+    /// Consecuencia demostrada; separar escenarios potenciales y limitaciones.
+    impacto: Option<String>,
+    /// Prueba de concepto: precondiciones, pasos numerados, resultado esperado,
+    /// resultado observado y referencias Markdown a evidencias reales.
+    poc: Option<String>,
+    /// Acciones de correccion y procedimiento para verificar su efectividad.
+    remediacion: Option<String>,
+}
+
+impl FindingSectionsArgs {
+    fn apply(&self, body: &str) -> Result<String, McpError> {
+        let mut result = body.to_string();
+        for (key, content) in [
+            ("descripcion", &self.descripcion),
+            ("impacto", &self.impacto),
+            ("poc", &self.poc),
+            ("remediacion", &self.remediacion),
+        ] {
+            if let Some(content) = content {
+                result = pudureport_core::sections::update_section(&result, key, content)
+                    .map_err(|message| McpError::invalid_params(message, None))?;
+            }
+        }
+        Ok(result)
+    }
+}
+
+fn validate_body_sections(
+    body: &Option<String>,
+    sections: &Option<FindingSectionsArgs>,
+) -> Result<(), McpError> {
+    if body.is_some() && sections.is_some() {
+        return Err(McpError::invalid_params(
+            "envie sections o body, no ambos",
+            None,
+        ));
+    }
+    Ok(())
 }
 
 /// Seccion canonica del cuerpo de un hallazgo.
@@ -543,7 +595,7 @@ impl PuduReportServer {
 
     /// Crea un hallazgo (vulnerabilidad) nuevo en un proyecto.
     #[tool(
-        description = "Crea un hallazgo. Requeridos: project_id y title. body es markdown opcional (incluye tablas GFM); sin body se usa un scaffold. Para puntuar envie cvss_vector y opcional cvss_version (3.1 por defecto), NO severity. Solo oscp/htb admiten severity manual. Despues de editar use build_project para regenerar data.json y PDF locales."
+        description = "Crea un hallazgo. Requeridos: project_id y title. Prefiera sections con descripcion, impacto, poc y remediacion: se guardan en sus casillas y orden canonico. No combine sections con body. body es markdown opcional (incluye tablas GFM); sin body se usa un scaffold. Para puntuar envie cvss_vector y opcional cvss_version (3.1 por defecto), NO severity. Solo oscp/htb admiten severity manual. Despues de editar use build_project para regenerar data.json y PDF locales."
     )]
     async fn create_finding(
         &self,
@@ -562,9 +614,20 @@ impl PuduReportServer {
         if let Some(status) = args.status.as_deref() {
             parse_status(status)?;
         }
+        validate_body_sections(&args.body, &args.sections)?;
+        // Validar todas las casillas antes de crear archivos o modificar el orden.
+        let structured_body = args
+            .sections
+            .as_ref()
+            .map(|sections| {
+                sections.apply(
+                    "## Descripcion\n\n## Impacto\n\n## Prueba de concepto\n\n## Remediacion\n",
+                )
+            })
+            .transpose()?;
         let mut finding =
             workspace::create_finding(&root, &args.project_id, &args.title).map_err(internal)?;
-        if let Some(body) = args.body {
+        if let Some(body) = args.body.or(structured_body) {
             finding.body = body;
         }
         if let Some(cwe) = args.cwe {
@@ -589,7 +652,7 @@ impl PuduReportServer {
 
     /// Actualiza el texto y los campos de un hallazgo existente.
     #[tool(
-        description = "Actualiza titulo, cuerpo y campos de un hallazgo. Solo cambia lo que se envia. No recompila: llame build_project despues para actualizar data.json y PDF. La severidad se deriva del cvss_vector (salvo tipos de examen)."
+        description = "Actualiza titulo, cuerpo y campos de un hallazgo. Prefiera sections para editar varias casillas (descripcion, impacto, poc, remediacion), conservando las omitidas. No combine sections con body: body reemplaza todo el texto. Solo cambia lo que se envia. No recompila: llame build_project despues para actualizar data.json y PDF. La severidad se deriva del cvss_vector (salvo tipos de examen)."
     )]
     async fn update_finding(
         &self,
@@ -599,6 +662,10 @@ impl PuduReportServer {
         let project = workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
         let mut finding =
             workspace::load_finding(&root, &args.project_id, &args.finding_id).map_err(internal)?;
+        validate_body_sections(&args.body, &args.sections)?;
+        if let Some(sections) = args.sections {
+            finding.body = sections.apply(&finding.body)?;
+        }
         if let Some(title) = args.title {
             finding.meta.title = title;
         }
@@ -1047,6 +1114,7 @@ mod tests {
         let srv = PuduReportServer::new(root.clone());
         let result = srv
             .create_finding(Parameters(CreateFindingArgs {
+                sections: None,
                 project_id: pid.clone(),
                 title: "Rejected".into(),
                 body: None,
@@ -1064,6 +1132,87 @@ mod tests {
             .unwrap()
             .finding_order
             .is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn structured_sections_roundtrip_and_invalid_writes_are_atomic() {
+        let (root, pid) = temp_workspace("structured-sections", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        let args = serde_json::json!({
+            "project_id": pid, "title": "Contenido separado",
+            "sections": {"descripcion": "Condicion observada", "impacto": "Impacto confirmado",
+                "poc": "### Precondiciones\nAcceso autorizado\n\n1. Paso documentado\n2. Resultado observado",
+                "remediacion": "Corregir y volver a verificar"}
+        });
+        let result = srv
+            .create_finding(Parameters(serde_json::from_value(args.clone()).unwrap()))
+            .await
+            .unwrap();
+        let finding: pudureport_core::models::Finding = serde_json::from_str(&result).unwrap();
+        let mut last = 0;
+        for heading in [
+            "## Descripcion",
+            "## Impacto",
+            "## Prueba de concepto",
+            "## Remediacion",
+        ] {
+            let offset = finding.body.find(heading).unwrap();
+            assert!(offset >= last);
+            last = offset;
+        }
+        let update = serde_json::json!({"project_id": pid, "finding_id": finding.id,
+            "sections": {"poc": "1. Paso actualizado\n2. Evidencia documentada"}});
+        srv.update_finding(Parameters(serde_json::from_value(update.clone()).unwrap()))
+            .await
+            .unwrap();
+        let saved = workspace::load_finding(&root, &pid, &finding.id).unwrap();
+        assert!(saved.body.contains("Condicion observada"));
+        assert!(saved.body.contains("Impacto confirmado"));
+        assert!(saved.body.contains("Corregir y volver a verificar"));
+        assert!(saved.body.contains("1. Paso actualizado"));
+        assert!(!saved.body.contains("Acceso autorizado"));
+        assert_eq!(
+            serde_json::to_value(&saved.meta).unwrap(),
+            serde_json::to_value(&finding.meta).unwrap()
+        );
+
+        let mut bad_update = update;
+        bad_update["sections"] =
+            serde_json::json!({"descripcion": "NO guardar", "poc": "## Impacto\nMal ubicado"});
+        assert!(srv
+            .update_finding(Parameters(serde_json::from_value(bad_update).unwrap()))
+            .await
+            .is_err());
+        assert_eq!(
+            workspace::load_finding(&root, &pid, &finding.id)
+                .unwrap()
+                .body,
+            saved.body
+        );
+        let before = workspace::read_project_meta(&root, &pid)
+            .unwrap()
+            .finding_order;
+        for invalid in [
+            serde_json::json!({"project_id": pid, "title": "Invalid", "sections": {"poc": "```\nsin cierre"}}),
+            serde_json::json!({"project_id": pid, "title": "Invalid", "body": "legacy", "sections": {"poc": "pasos"}}),
+        ] {
+            assert!(srv
+                .create_finding(Parameters(serde_json::from_value(invalid).unwrap()))
+                .await
+                .is_err());
+        }
+        assert_eq!(
+            workspace::read_project_meta(&root, &pid)
+                .unwrap()
+                .finding_order,
+            before
+        );
+        assert_eq!(workspace::list_findings(&root, &pid).unwrap().len(), 1);
+        assert!(serde_json::from_value::<FindingSectionsArgs>(
+            serde_json::json!({"proof": "typo"})
+        )
+        .is_err());
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1099,6 +1248,7 @@ mod tests {
         let srv = PuduReportServer::new(root.clone());
         let value = parse(
             srv.create_finding(Parameters(CreateFindingArgs {
+                sections: None,
                 project_id: pid.clone(),
                 title: "SQLi en login".into(),
                 body: Some("## Descripcion\n\nInyeccion SQL.".into()),
@@ -1124,6 +1274,7 @@ mod tests {
         let srv = PuduReportServer::new(root.clone());
         let created = parse(
             srv.create_finding(Parameters(CreateFindingArgs {
+                sections: None,
                 project_id: pid.clone(),
                 title: "Hallazgo".into(),
                 body: None,
@@ -1140,6 +1291,7 @@ mod tests {
         let fid = created["id"].as_str().unwrap().to_string();
         let err = srv
             .update_finding(Parameters(UpdateFindingArgs {
+                sections: None,
                 project_id: pid,
                 finding_id: fid,
                 title: None,
@@ -1162,6 +1314,7 @@ mod tests {
         let srv = PuduReportServer::new(root.clone());
         let value = parse(
             srv.create_finding(Parameters(CreateFindingArgs {
+                sections: None,
                 project_id: pid,
                 title: "Acceso inicial".into(),
                 body: None,
@@ -1261,6 +1414,7 @@ mod tests {
         let srv = PuduReportServer::new(root.clone());
         let created = parse(
             srv.create_finding(Parameters(CreateFindingArgs {
+                sections: None,
                 project_id: pid.clone(),
                 title: "Titulo viejo".into(),
                 body: None,
@@ -1277,6 +1431,7 @@ mod tests {
         let fid = created["id"].as_str().unwrap().to_string();
         let updated = parse(
             srv.update_finding(Parameters(UpdateFindingArgs {
+                sections: None,
                 project_id: pid,
                 finding_id: fid.clone(),
                 title: Some("Titulo nuevo".into()),

@@ -11,16 +11,41 @@ export interface SectionDef {
   title: string;
   /** Ocupa todo el ancho de la grilla del editor. */
   full?: boolean;
+  /** Orientacion editorial; no se inserta en el reporte. */
+  guidance?: string;
 }
 
 // Orden convencional de pentest: Descripcion, Impacto, Prueba de concepto y
 // por ultimo Remediacion. El PoC es markdown como las demas (estilo HackerOne:
 // paso a paso con evidencia, capturas pegadas e includes de codigo).
 export const FINDING_SECTIONS: SectionDef[] = [
-  { key: "descripcion", title: "Descripcion", full: true },
-  { key: "impacto", title: "Impacto", full: true },
-  { key: "poc", title: "Prueba de concepto", full: true },
-  { key: "remediacion", title: "Remediacion", full: true },
+  {
+    key: "descripcion",
+    title: "Descripcion",
+    full: true,
+    guidance:
+      "Explica que encontraste, donde y bajo que condiciones. Documenta los pasos y capturas en Prueba de concepto.",
+  },
+  {
+    key: "impacto",
+    title: "Impacto",
+    full: true,
+    guidance:
+      "Distingue el impacto demostrado de los escenarios potenciales e indica las limitaciones de la prueba.",
+  },
+  {
+    key: "poc",
+    title: "Prueba de concepto",
+    full: true,
+    guidance:
+      "Orden: precondiciones, pasos numerados, resultado esperado, resultado observado y evidencias. Pega las capturas junto al paso que respaldan.",
+  },
+  {
+    key: "remediacion",
+    title: "Remediacion",
+    full: true,
+    guidance: "Indica acciones concretas y como verificar que la correccion resuelve el problema.",
+  },
 ];
 
 /** Normaliza un titulo para comparar (minusculas, sin acentos). */

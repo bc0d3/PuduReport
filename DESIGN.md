@@ -328,6 +328,12 @@ checks Rust; no equivale a validacion del gesto en todas las WebViews nativas.
 
 ### Tablas y conservacion de contenido
 
+Los editores abren por defecto en Markdown sin interpretar. El boton Vista
+permite pasar al editor visual cuando el contenido es compatible. Impacto
+tiene una altura minima de 320 px y Prueba de concepto de 420 px en ambas
+vistas; los textarea permiten ampliar manualmente su altura. Esta preferencia
+afecta la presentacion del editor, no la estructura del PDF ni los archivos.
+
 El PDF soporta tablas GFM. Mientras TipTap no incorpore nodos de tabla, el
 contenido con separadores GFM se abre en modo Markdown, con una indicacion
 visible y sin conversion a vista enriquecida que eliminaria celdas. Vista
