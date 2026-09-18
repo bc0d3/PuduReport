@@ -155,6 +155,21 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
       layout.splice(to, 0, moved);
       return { ...p, layout };
     });
+    setSelection((current) => {
+      if (current.kind !== "block") return current;
+      const index = current.index;
+      return {
+        kind: "block",
+        index:
+          index === from
+            ? to
+            : from < index && index <= to
+              ? index - 1
+              : to <= index && index < from
+                ? index + 1
+                : index,
+      };
+    });
   }
 
   // Arrastre por eventos de mouse en vez de drag-and-drop nativo HTML5: en el
@@ -323,15 +338,22 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
       <div className="view" style={{ paddingTop: 16 }}>
         <div className={`report-layout ${blockMode && previewOpen ? "with-preview" : ""}`}>
           {/* Estructura del reporte */}
-          <div className="section-list">
-            <span className="field-label-top">estructura del PDF</span>
-            <div
-              className={`row ${selection.kind === "data" ? "on" : ""}`}
-              style={{ cursor: "pointer" }}
+          <div className="section-list report-structure">
+            <span className="field-label-top">Configuracion</span>
+            <button
+              type="button"
+              className={`row report-data-button ${selection.kind === "data" ? "on" : ""}`}
+              aria-pressed={selection.kind === "data"}
               onClick={() => setSelection({ kind: "data" })}
             >
               <i className="ti ti-info-circle" style={{ color: "var(--accent)" }} />
               Datos del proyecto
+            </button>
+            <div className="report-structure-heading">
+              <span className="field-label-top">Orden del documento</span>
+              <p className="faint">
+                Selecciona un bloque para revisarlo. El ojo indica si aparece en el PDF.
+              </p>
             </div>
 
             {blockMode && usesCustomTemplate(project) && (
@@ -358,7 +380,6 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
                     dropTarget={dragIdx !== null && overIdx === i && dragIdx !== i}
                     onDragHandleDown={(e) => startBlockDrag(i, e)}
                     onSelect={() => {
-                      if (draggedRef.current) return;
                       setSelection({ kind: "block", index: i });
                     }}
                     onToggle={() => toggleBlock(i)}
@@ -415,6 +436,29 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
 
           {/* Panel de la seleccion */}
           <div>
+            {blockMode && selection.kind === "block" && selectedBlock && (
+              <div className="report-block-controls">
+                <span className="faint">
+                  Bloque {selection.index + 1} de {project.layout.length}
+                </span>
+                <div className="row">
+                  <button
+                    className="btn small"
+                    disabled={selection.index === 0}
+                    onClick={() => reorderBlocks(selection.index, selection.index - 1)}
+                  >
+                    <i className="ti ti-arrow-up" aria-hidden="true" /> Subir
+                  </button>
+                  <button
+                    className="btn small"
+                    disabled={selection.index === project.layout.length - 1}
+                    onClick={() => reorderBlocks(selection.index, selection.index + 1)}
+                  >
+                    <i className="ti ti-arrow-down" aria-hidden="true" /> Bajar
+                  </button>
+                </div>
+              </div>
+            )}
             {selection.kind === "data" ? (
               <ProjectDataForm
                 project={project}
@@ -537,12 +581,35 @@ function BlockRow({
         cursor: dragging ? "grabbing" : "grab",
         opacity: dragging ? 0.4 : enabled ? 1 : 0.5,
       }}
-      onMouseDown={onDragHandleDown}
-      onClick={onSelect}
     >
-      <i className="ti ti-grip-vertical grip" />
-      <i className={`ti ${meta.icon}`} style={{ color: "var(--text-muted)" }} />
-      {label}
+      <span
+        onMouseDown={onDragHandleDown}
+        title="Arrastrar para reordenar"
+        className="report-block-grip"
+      >
+        <i className="ti ti-grip-vertical grip" />
+      </span>
+      <button
+        type="button"
+        className="report-block-select"
+        aria-pressed={selected}
+        onClick={onSelect}
+      >
+        <span className="report-block-number">{String(index + 1).padStart(2, "0")}</span>
+        <i className={`ti ${meta.icon}`} aria-hidden="true" />
+        <span className="report-block-label">
+          {label}
+          <small>
+            {!enabled
+              ? "Oculto en el PDF"
+              : block.kind === "section" || block.kind === "text"
+                ? "Contenido editable"
+                : block.kind === "pagebreak"
+                  ? "Separador"
+                  : "Contenido automatico"}
+          </small>
+        </span>
+      </button>
       {block.kind === "findings" && (
         <span className="faint" style={{ marginLeft: 6, fontSize: 11 }}>
           {findingsCount}

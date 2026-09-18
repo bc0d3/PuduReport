@@ -35,12 +35,7 @@ function extractVars(...texts: string[]): string[] {
   return [...found];
 }
 
-export function TemplateLibrary({
-  projectId,
-  project,
-  onProjectSaved,
-  onTemplatesChanged,
-}: Props) {
+export function TemplateLibrary({ projectId, project, onProjectSaved, onTemplatesChanged }: Props) {
   const { guard, notify } = useToast();
   const [tab, setTab] = useState<Tab>("pdf");
   const [templates, setTemplates] = useState<FindingTemplate[]>([]);
@@ -536,16 +531,12 @@ function TemplateEditor({
           placeholder="web, infra, remediacion"
         />
         <span className="faint" style={{ fontSize: 12 }}>
-          Para buscar y filtrar. Dos cambian el reporte: <strong>retest</strong> (ordena por
-          estado y separa los nuevos) y <strong>narrative</strong> (sin tabla de hallazgos).
+          Para buscar y filtrar. Dos cambian el reporte: <strong>retest</strong> (ordena por estado
+          y separa los nuevos) y <strong>narrative</strong> (sin tabla de hallazgos).
         </span>
       </div>
 
-      <button
-        className="btn small"
-        style={{ marginTop: 4 }}
-        onClick={() => setShowCode((v) => !v)}
-      >
+      <button className="btn small" style={{ marginTop: 4 }} onClick={() => setShowCode((v) => !v)}>
         <i className={`ti ti-chevron-${showCode ? "down" : "right"}`} />
         Avanzado: codigo Typst
       </button>
@@ -704,11 +695,10 @@ function SnippetForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       </div>
       <div className="field">
         <label>Contenido</label>
-        <textarea
-          className="textarea"
+        <MarkdownEditor
           value={body}
-          onChange={(e) => setBody(e.target.value)}
-          rows={6}
+          onChange={setBody}
+          placeholder="Texto reutilizable, listas o comandos. Puedes usar variables como {{cliente}}."
         />
       </div>
     </Modal>

@@ -1993,18 +1993,18 @@ kbd {
 }
 .report-layout {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr);
   gap: var(--space-4);
 }
 .report-layout > * {
   min-width: 0;
 }
 .report-layout.with-preview {
-  grid-template-columns: 200px minmax(280px, 1fr) minmax(280px, 0.9fr);
+  grid-template-columns: 248px minmax(280px, 1fr) minmax(280px, 0.9fr);
 }
 @container (max-width: 1050px) {
   .report-layout.with-preview {
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: 248px minmax(0, 1fr);
   }
   .report-layout .report-preview {
     grid-column: 2;
