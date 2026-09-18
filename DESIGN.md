@@ -339,3 +339,20 @@ contenido con separadores GFM se abre en modo Markdown, con una indicacion
 visible y sin conversion a vista enriquecida que eliminaria celdas. Vista
 previa sigue usando Typst. No cambia el formato persistido. Detalles en
 [guia de render](docs/markdown-and-render.md).
+
+### Edicion asistida de Markdown y estructura de Reporte
+
+Todos los cuerpos de redaccion usan MarkdownEditor: hallazgos, secciones y texto
+libre del reporte, documentos, plantillas de hallazgos y snippets. El codigo de
+plantillas Typst y los textos posicionados en portada conservan sus controles
+especificos. Titulos, fechas, CVSS y metadata siguen siendo campos simples.
+
+La vista fuente ofrece formato sobre la seleccion sin convertir todo el documento
+con TipTap. Ctrl/Cmd+B, I y K actuan solo dentro del textarea; fuera se conservan
+los atajos globales. Las tablas mantienen sus celdas y la barra de formato.
+
+Reporte separa Configuracion (datos) de Orden del documento (bloques numerados).
+Las filas distinguen contenido editable, automatico y oculto; la seleccion es un
+boton accesible. El agarre permite arrastrar y Subir/Bajar ofrece una alternativa.
+El orden persistido no cambia hasta una accion del usuario; la seleccion sigue
+al bloque movido. Se conservan la vista previa, exportacion y flujo fijo de OSCP.

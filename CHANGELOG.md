@@ -2,6 +2,19 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [0.0.24] - 2026-09-18
+
+### Added
+- Snippets con el mismo editor Markdown y vista visual que el resto de los campos de redaccion; boton para insertar bloques de codigo conservando comandos, variables y fences internos.
+- Barra de formato sobre Markdown fuente: negrita, cursiva, codigo inline, subtitulos, listas, citas y enlaces. Atajos Ctrl/Cmd+B, I y K dentro del editor.
+
+### Changed
+- Reporte separa los datos del proyecto del orden del documento, numera bloques e identifica contenido editable, automatico y oculto. Controles Subir/Bajar conservan la seleccion al reordenar.
+
+### Compatibility
+- Se conservan Markdown/YAML, plantillas y formatos persistidos. El orden del PDF solo cambia al mover bloques explicitamente.
+- Los atajos de formato actuan dentro del editor; los campos de datos y el codigo Typst mantienen sus controles propios.
+
 ## [0.0.23] - 2026-09-17
 
 ### Changed

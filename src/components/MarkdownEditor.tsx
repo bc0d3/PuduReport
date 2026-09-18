@@ -26,6 +26,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import * as api from "../lib/api";
 import { PromptDialog } from "./PromptDialog";
 import { ImageAnnotator } from "./ImageAnnotator";
+import { formatMarkdown, type MarkdownAction } from "../lib/markdownFormatting";
 
 // Resaltado de sintaxis para los bloques de codigo (se empaqueta, sin red).
 const lowlight = createLowlight();
@@ -135,6 +136,24 @@ export function MarkdownEditor({ value, onChange, placeholder, assetBase, projec
   // editor WYSIWYG renderizado. Se alterna desde la barra.
   const [mode, setMode] = useState<"source" | "rich">("source");
   const [source, setSource] = useState(value);
+  const sourceRef = useRef<HTMLTextAreaElement | null>(null);
+
+  function applySourceFormat(action: MarkdownAction) {
+    const input = sourceRef.current;
+    if (!input) return;
+    const edit = formatMarkdown(input.value, input.selectionStart, input.selectionEnd, action);
+    input.focus();
+    input.setSelectionRange(edit.start, edit.end);
+    // insertText conserva el historial nativo de deshacer de la WebView.
+    if (!document.execCommand("insertText", false, edit.replacement)) {
+      input.setRangeText(edit.replacement, edit.start, edit.end, "end");
+    }
+    setSource(input.value);
+    onChange(input.value);
+    window.requestAnimationFrame(() =>
+      input.setSelectionRange(edit.selectionStart, edit.selectionEnd),
+    );
+  }
   // Ruta relativa (assets/...) de la imagen que se esta anotando, o null si
   // el dialogo de anotacion esta cerrado.
   const [annotateRel, setAnnotateRel] = useState<string | null>(null);
@@ -262,12 +281,25 @@ export function MarkdownEditor({ value, onChange, placeholder, assetBase, projec
         uploadEnabled={uploadEnabled}
         onPickFile={insertFile}
         onAnnotate={annotateSelectedImage}
+        onSourceFormat={applySourceFormat}
       />
       {mode === "source" ? (
         <textarea
+          ref={sourceRef}
           className="md-source"
           value={source}
           placeholder={placeholder ?? "Escribe aqui..."}
+          onKeyDown={(e) => {
+            if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.nativeEvent.isComposing)
+              return;
+            const action = ({ b: "bold", i: "italic", k: "link" } as const)[
+              e.key.toLowerCase() as "b" | "i" | "k"
+            ];
+            if (!action) return;
+            e.preventDefault();
+            e.stopPropagation();
+            applySourceFormat(action);
+          }}
           onChange={(e) => {
             setSource(e.target.value);
             onChange(e.target.value);
@@ -295,6 +327,7 @@ function Toolbar({
   uploadEnabled,
   onPickFile,
   onAnnotate,
+  onSourceFormat,
 }: {
   editor: Editor;
   mode: "source" | "rich";
@@ -303,14 +336,17 @@ function Toolbar({
   uploadEnabled: boolean;
   onPickFile: (file: File) => void;
   onAnnotate: () => void;
+  onSourceFormat: (action: MarkdownAction) => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
 
   const btn = (label: ReactNode, isActive: boolean, action: () => void, title: string) => (
     <button
+      type="button"
       className={isActive ? "active" : ""}
       title={title}
+      aria-label={title}
       onClick={(e) => {
         e.preventDefault();
         action();
@@ -320,26 +356,47 @@ function Toolbar({
     </button>
   );
 
-  // En modo fuente solo se muestra el boton para volver a la vista renderizada.
-  if (mode === "source" && sourceOnly) {
-    return (
-      <div className="md-toolbar">
-        <span className="faint" role="status">
-          Tabla en modo Markdown para conservar sus celdas. Consulta el resultado en Vista previa.
-        </span>
-      </div>
-    );
-  }
   if (mode === "source") {
+    const modifier = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+";
     return (
       <div className="md-toolbar">
-        {btn(
-          <>
-            <i className="ti ti-eye" /> Vista
-          </>,
-          false,
-          () => onSetMode("rich"),
-          "Ver renderizado",
+        {(
+          [
+            ["bold", "ti-bold", `Negrita (${modifier}B)`],
+            ["italic", "ti-italic", `Cursiva (${modifier}I)`],
+            ["code", "ti-code", "Codigo en linea"],
+            ["codeblock", "ti-terminal-2", "Insertar bloque de codigo"],
+            ["heading", "ti-heading", "Subtitulo"],
+            ["list", "ti-list", "Lista"],
+            ["ordered", "ti-list-numbers", "Lista numerada"],
+            ["quote", "ti-blockquote", "Cita"],
+            ["link", "ti-link", `Enlace (${modifier}K)`],
+          ] as const
+        ).map(([action, icon, label]) => (
+          <button
+            key={action}
+            type="button"
+            title={label}
+            aria-label={label}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onSourceFormat(action)}
+          >
+            <i className={`ti ${icon}`} aria-hidden="true" />
+          </button>
+        ))}
+        {!sourceOnly &&
+          btn(
+            <>
+              <i className="ti ti-eye" /> Vista
+            </>,
+            false,
+            () => onSetMode("rich"),
+            "Ver renderizado",
+          )}
+        {sourceOnly && (
+          <span className="faint" role="status">
+            Tabla: revisa el resultado en Vista previa.
+          </span>
         )}
       </div>
     );

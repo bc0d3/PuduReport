@@ -663,6 +663,63 @@
 .finding-section {
   border-radius: var(--radius-control);
 }
+
+.report-data-button {
+  width: 100%;
+  color: var(--text-primary);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+.report-structure-heading {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.report-structure-heading p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 8px 0 12px;
+}
+.report-block-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.report-block-number {
+  color: var(--text-muted);
+  font: 11px var(--mono);
+}
+.report-block-label {
+  overflow-wrap: anywhere;
+}
+.report-block-label small {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+.report-block-grip {
+  cursor: grab;
+}
+.report-block-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
 .finding-section :is(.md-toolbar, .ProseMirror, .md-source) {
   transition:
     border-color var(--motion-fast),
