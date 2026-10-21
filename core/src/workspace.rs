@@ -679,6 +679,9 @@ pub fn read_project_meta(root: &Path, id: &str) -> Result<ProjectMeta> {
     // default del tipo en project.yaml previos a los bloques). Asi load_project
     // devuelve el layout efectivo al frontend.
     meta.reconcile_layout();
+    // Clasificacion (ambiente/exposicion) solo con valores permitidos, aunque
+    // el project.yaml se haya editado a mano.
+    meta.normalize_classification();
     Ok(meta)
 }
 

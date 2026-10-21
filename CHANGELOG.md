@@ -2,6 +2,15 @@
 
 Todo cambio notable se documenta en este archivo. El formato sigue Keep a Changelog (https://keepachangelog.com) y el versionado sigue SemVer (https://semver.org).
 
+## [Unreleased]
+
+### Added
+- Datos del proyecto con dos clasificaciones opcionales de lista cerrada: Ambiente evaluado (`qa`, `produccion`) y Exposicion del activo (`internet`, `interno`). Son metadata para integraciones y no se muestran en el PDF.
+- Los destinos de exportacion a API pueden activar "Datos del proyecto (opcionales)" para enviar `project.environment` y `project.exposure`. Solo se incluyen si el destino los activa y el proyecto los tiene definidos.
+
+### Compatibility
+- Los destinos existentes y los nuevos arrancan con estos datos apagados: el payload es el mismo de siempre hasta que el usuario los active. Los `project.yaml` previos se leen sin cambios (ambos campos quedan sin especificar) y cualquier valor fuera de la lista se descarta.
+
 ## [0.0.25] - 2026-09-21
 
 ### Added

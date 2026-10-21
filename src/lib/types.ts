@@ -94,6 +94,12 @@ export interface ReportBlock {
   config: Record<string, unknown>;
 }
 
+/** Ambiente evaluado de un proyecto. Lista cerrada; "" = sin especificar. */
+export type Ambiente = "" | "qa" | "produccion";
+
+/** Exposicion del activo evaluado. Lista cerrada; "" = sin especificar. */
+export type Exposicion = "" | "internet" | "interno";
+
 /** project.yaml */
 export interface ProjectMeta {
   name: string;
@@ -102,6 +108,16 @@ export interface ProjectMeta {
   gerencia: string;
   /** Area del cliente (opcional). Se muestra en la portada si no esta vacia. */
   area: string;
+  /**
+   * Ambiente evaluado (opcional). Metadata para integraciones; no sale en el
+   * PDF. "" = sin especificar.
+   */
+  ambiente: Ambiente;
+  /**
+   * Exposicion del activo evaluado (opcional). Metadata para integraciones (ej.
+   * SLA segun exposicion); no sale en el PDF. "" = sin especificar.
+   */
+  exposicion: Exposicion;
   /** Tipo de proyecto: define formulario, scaffold y plantilla por defecto. */
   project_type: string;
   /** OSID del candidato (tipos de examen). Portada y nombre del PDF. */
@@ -207,6 +223,11 @@ export interface ExportTarget {
   fields: string[];
   /** Incluir el bloque de conteos por severidad. */
   include_summary: boolean;
+  /**
+   * Datos opcionales del proyecto a incluir en `project` ("environment",
+   * "exposure"). Vacio = el payload de siempre.
+   */
+  project_fields: string[];
 }
 
 /** Resultado de un envio a la API externa. */
