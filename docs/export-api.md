@@ -21,7 +21,7 @@ describe exactamente que recibe tu endpoint, para que puedas definir tu DTO.
 {
   "source": "pudureport",          // string constante, siempre presente
   "exported_at": "<ISO-8601 UTC>", // "YYYY-MM-DDTHH:MM:SSZ"
-  "project": { ... },              // siempre presente (ver abajo)
+  "project": { ... },              // siempre presente (ver abajo); algunos campos son opcionales
   "summary": { ... },              // presente solo si el destino activa "summary"
   "findings": [ { ... }, ... ]     // array; cada item solo trae los campos configurados
 }
@@ -48,6 +48,15 @@ Importante:
 | `type`       | string | `pentest` `redteam` `oscp` `htb` `ejecutivo` `documento` `retest` `cti` `incidente` `auditoria` `cumplimiento` `riesgos` `hunting` |
 | `start_date` | string | `YYYY-MM-DD` (puede venir vacio)             |
 | `end_date`   | string | `YYYY-MM-DD` (puede venir vacio)             |
+| `environment`| string (enum), opcional | `qa` `produccion`. Solo si el destino lo activa y el proyecto lo tiene definido |
+| `exposure`   | string (enum), opcional | `internet` `interno`. Solo si el destino lo activa y el proyecto lo tiene definido |
+
+`environment` y `exposure` son **opt-in por destino** ("Datos del proyecto
+(opcionales)" en la configuracion del destino) y vienen apagados por default,
+asi un receptor que rechaza claves desconocidas sigue recibiendo el mismo
+`project` de siempre. Si el destino los activa pero el proyecto no los tiene
+definidos, la clave se omite: nunca llega `null` ni `""`. Sirven para clasificar
+el reporte sin trabajo manual (ej. un SLA de remediacion segun la exposicion).
 
 ### `summary` (opcional, si el destino lo activa)
 
@@ -84,6 +93,9 @@ configurada) y usar `cvss` solo cuando sea `number`.
 
 ## Ejemplo real (todos los campos activados)
 
+Con `environment` y `exposure` activados en el destino y definidos en el
+proyecto. Si no se activan, esas dos claves no aparecen.
+
 ```json
 {
   "source": "pudureport",
@@ -94,7 +106,9 @@ configurada) y usar `cvss` solo cuando sea `number`.
     "client": "Cliente Demo S.A.",
     "type": "pentest",
     "start_date": "2026-01-13",
-    "end_date": "2026-01-24"
+    "end_date": "2026-01-24",
+    "environment": "produccion",
+    "exposure": "internet"
   },
   "summary": { "total": 3, "by_severity": { "critical": 1, "high": 1, "low": 1 } },
   "findings": [
@@ -134,6 +148,8 @@ usuario configura cuales manda (pero para un destino dado, el set es estable).
 ```ts
 type Severity = "critical" | "high" | "medium" | "low" | "info";
 type Status = "open" | "fixed" | "accepted" | "wontfix";
+type Environment = "qa" | "produccion";
+type Exposure = "internet" | "interno";
 
 interface PuduReportExport {
   source: "pudureport";
@@ -145,6 +161,9 @@ interface PuduReportExport {
     type: string;
     start_date: string;
     end_date: string;
+    // Solo si el destino los activa y el proyecto los tiene definidos.
+    environment?: Environment;
+    exposure?: Exposure;
   };
   summary?: {
     total: number;
@@ -210,6 +229,9 @@ interface PuduReportExport {
   project: {
     id: string; name: string; client: string; type: string;
     start_date: string; end_date: string; // "YYYY-MM-DD" o ""
+    // Opcionales: solo si el origen los activa y el proyecto los tiene definidos.
+    environment?: "qa" | "produccion";
+    exposure?: "internet" | "interno";
   };
   summary?: { total: number; by_severity: Partial<Record<Severity, number>> };
   findings: Array<{
@@ -240,6 +262,8 @@ KPIs a exponer (endpoints de lectura):
 
 Robustez:
 - No confies en que todos los campos vengan; usa defaults seguros.
+- `project.environment` y `project.exposure` pueden faltar: tratalos como "sin
+  especificar" (no como un valor por defecto) y acepta solo los valores listados.
 - `cvss` puede ser number, string o null: normaliza a number-o-null para agregaciones.
 - Registra los imports para auditoria (quien, cuando, cuantos hallazgos).
 

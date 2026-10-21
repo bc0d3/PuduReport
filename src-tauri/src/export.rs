@@ -8,7 +8,9 @@
 use std::path::Path;
 use std::time::Duration;
 
-use pudureport_core::models::{CvssVersion, ExportTarget, Finding, FindingStatus, Severity};
+use pudureport_core::models::{
+    CvssVersion, ExportTarget, Finding, FindingStatus, ProjectMeta, Severity,
+};
 use pudureport_core::workspace;
 use serde_json::{json, Map, Value};
 
@@ -173,10 +175,25 @@ fn json_value_for(col: &str, n: usize, f: &Finding) -> Value {
     }
 }
 
+/// Valor de un dato opcional del proyecto (`target.project_fields`) para el
+/// bloque `project` del payload. Devuelve None si la clave es desconocida o si
+/// el proyecto no lo tiene definido: en ese caso la clave se omite (nunca se
+/// envia null ni "").
+fn project_field_value<'a>(key: &str, project: &'a ProjectMeta) -> Option<&'a str> {
+    let value = match key {
+        "environment" => project.ambiente.as_str(),
+        "exposure" => project.exposicion.as_str(),
+        _ => return None,
+    };
+    (!value.is_empty()).then_some(value)
+}
+
 /// Arma el payload JSON de exportacion para un proyecto y un destino, con el
 /// esquema estable definido por `target.fields`. Puro (no hace red): la UI lo
 /// usa para mostrar la vista previa exacta de lo que se enviara. Excluye los
 /// hallazgos ocultos, igual que el PDF y el CSV, y nunca incluye el cuerpo.
+/// Los datos opcionales del proyecto (`target.project_fields`) solo se agregan
+/// si el destino los activa y el proyecto los tiene definidos.
 pub fn build_api_payload(
     root: &Path,
     project_id: &str,
@@ -214,6 +231,12 @@ pub fn build_api_payload(
         },
         "findings": items,
     });
+
+    for key in &target.project_fields {
+        if let Some(value) = project_field_value(key, &project) {
+            payload["project"][key.as_str()] = json!(value);
+        }
+    }
 
     if target.include_summary {
         let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
@@ -354,6 +377,7 @@ mod tests {
                 "afectados".to_string(),
             ],
             include_summary: true,
+            project_fields: Vec::new(),
         };
 
         let payload = build_api_payload(&root, &pid, &target).unwrap();
@@ -384,5 +408,99 @@ mod tests {
         // Summary con conteos por severidad.
         assert_eq!(payload["summary"]["total"], 1);
         assert_eq!(payload["summary"]["by_severity"]["critical"], 1);
+    }
+
+    /// Destino minimo con los datos opcionales del proyecto indicados.
+    fn target_with_project_fields(project_fields: &[&str]) -> ExportTarget {
+        ExportTarget {
+            name: "puduhub".to_string(),
+            url: "https://hub.example/api/import".to_string(),
+            fields: vec!["titulo".to_string()],
+            include_summary: false,
+            project_fields: project_fields.iter().map(|k| k.to_string()).collect(),
+        }
+    }
+
+    /// Workspace con un proyecto cuyo ambiente/exposicion son los indicados.
+    fn project_with_classification(
+        ambiente: &str,
+        exposicion: &str,
+    ) -> (std::path::PathBuf, String) {
+        let root = tmp_ws();
+        let (pid, mut meta) = workspace::create_project(&root, "Web", "ACME", "pentest").unwrap();
+        meta.ambiente = ambiente.to_string();
+        meta.exposicion = exposicion.to_string();
+        workspace::write_project_meta(&root, &pid, &meta).unwrap();
+        (root, pid)
+    }
+
+    /// Claves del bloque `project`, ordenadas.
+    fn project_keys(payload: &Value) -> Vec<String> {
+        let mut keys: Vec<String> = payload["project"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        keys.sort();
+        keys
+    }
+
+    const ORIGINAL_PROJECT_KEYS: [&str; 6] =
+        ["client", "end_date", "id", "name", "start_date", "type"];
+
+    #[test]
+    fn payload_project_sin_project_fields_no_cambia() {
+        // Aunque el proyecto tenga ambiente/exposicion, un destino que no los
+        // activa recibe exactamente el bloque `project` de siempre.
+        let (root, pid) = project_with_classification("produccion", "internet");
+        let payload = build_api_payload(&root, &pid, &target_with_project_fields(&[])).unwrap();
+        assert_eq!(project_keys(&payload), ORIGINAL_PROJECT_KEYS);
+    }
+
+    #[test]
+    fn payload_project_incluye_environment_y_exposure_si_se_activan() {
+        let (root, pid) = project_with_classification("qa", "interno");
+        let target = target_with_project_fields(&["environment", "exposure"]);
+        let payload = build_api_payload(&root, &pid, &target).unwrap();
+        assert_eq!(payload["project"]["environment"], "qa");
+        assert_eq!(payload["project"]["exposure"], "interno");
+        assert_eq!(
+            project_keys(&payload).len(),
+            ORIGINAL_PROJECT_KEYS.len() + 2
+        );
+    }
+
+    #[test]
+    fn payload_project_omite_campos_activados_pero_vacios() {
+        // Activados en el destino pero sin definir en el proyecto: se omite la
+        // clave (nunca null ni "").
+        let (root, pid) = project_with_classification("", "");
+        let target = target_with_project_fields(&["environment", "exposure"]);
+        let payload = build_api_payload(&root, &pid, &target).unwrap();
+        assert_eq!(project_keys(&payload), ORIGINAL_PROJECT_KEYS);
+
+        // Solo uno definido: sale solo ese.
+        let (root, pid) = project_with_classification("produccion", "");
+        let payload = build_api_payload(&root, &pid, &target).unwrap();
+        assert_eq!(payload["project"]["environment"], "produccion");
+        assert!(payload["project"].get("exposure").is_none());
+    }
+
+    #[test]
+    fn payload_project_ignora_claves_desconocidas() {
+        let (root, pid) = project_with_classification("qa", "internet");
+        let target = target_with_project_fields(&["bogus", "gerencia", "ambiente"]);
+        let payload = build_api_payload(&root, &pid, &target).unwrap();
+        assert_eq!(project_keys(&payload), ORIGINAL_PROJECT_KEYS);
+    }
+
+    #[test]
+    fn payload_project_no_envia_valores_fuera_de_la_lista() {
+        // Un project.yaml editado a mano con texto libre no sale por la API.
+        let (root, pid) = project_with_classification("staging", "dmz");
+        let target = target_with_project_fields(&["environment", "exposure"]);
+        let payload = build_api_payload(&root, &pid, &target).unwrap();
+        assert_eq!(project_keys(&payload), ORIGINAL_PROJECT_KEYS);
     }
 }

@@ -11,7 +11,9 @@ import {
 import * as api from "../lib/api";
 import { scheduleWrite } from "../lib/pendingWrites";
 import type {
+  Ambiente,
   BlockKind,
+  Exposicion,
   Finding,
   ProjectMeta,
   ReportBlock,
@@ -40,6 +42,19 @@ const BOILERPLATE: Record<string, string> = {
   conclusiones:
     "El nivel de seguridad general se considera mejorable. Se recomienda priorizar la remediacion de los hallazgos criticos y altos y reverificar tras aplicar las correcciones.",
 };
+
+// Opciones de clasificacion del proyecto (metadata para integraciones). El valor
+// guardado es el slug; el backend descarta cualquier otro.
+const AMBIENTE_OPTIONS: { value: Ambiente; label: string }[] = [
+  { value: "", label: "Sin especificar" },
+  { value: "qa", label: "QA" },
+  { value: "produccion", label: "Produccion" },
+];
+const EXPOSICION_OPTIONS: { value: Exposicion; label: string }[] = [
+  { value: "", label: "Sin especificar" },
+  { value: "internet", label: "Internet" },
+  { value: "interno", label: "Red interna" },
+];
 
 // Etiqueta, icono y descripcion (para los bloques automaticos) por kind.
 const BLOCK_META: Record<BlockKind, { label: string; icon: string; desc: string }> = {
@@ -818,6 +833,34 @@ function ProjectDataForm({
             onChange={(e) => patch((p) => ({ ...p, end_date: e.target.value }))}
           />
         </div>
+        <div className="field">
+          <label>Ambiente evaluado</label>
+          <select
+            className="input"
+            value={project.ambiente}
+            onChange={(e) => patch((p) => ({ ...p, ambiente: e.target.value as Ambiente }))}
+          >
+            {AMBIENTE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>Exposicion del activo</label>
+          <select
+            className="input"
+            value={project.exposicion}
+            onChange={(e) => patch((p) => ({ ...p, exposicion: e.target.value as Exposicion }))}
+          >
+            {EXPOSICION_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
         {typeInfo(project.project_type).exam && (
           <div className="field">
             <label>OSID</label>
@@ -830,6 +873,11 @@ function ProjectDataForm({
           </div>
         )}
       </div>
+      <p className="faint" style={{ fontSize: 11, margin: "4px 0 12px" }}>
+        Ambiente y exposicion son opcionales y no salen en el PDF: son metadata para integraciones
+        (ej. un SLA segun la exposicion del activo). Solo se envian a los destinos de API que los
+        activen.
+      </p>
       <div className="field full">
         <label>Alcance</label>
         <div className="tag-list" style={{ marginBottom: 6 }}>

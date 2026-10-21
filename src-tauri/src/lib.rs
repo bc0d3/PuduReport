@@ -308,8 +308,10 @@ fn delete_project(state: State<AppState>, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn save_project(state: State<AppState>, id: String, meta: ProjectMeta) -> Result<(), String> {
+fn save_project(state: State<AppState>, id: String, mut meta: ProjectMeta) -> Result<(), String> {
     let root = current_root(&state)?;
+    // Ambiente/exposicion son listas cerradas: nunca se guarda texto libre.
+    meta.normalize_classification();
     workspace::write_project_meta(&root, &id, &meta).map_err(|e| e.to_string())
 }
 
