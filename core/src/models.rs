@@ -330,6 +330,18 @@ pub struct ProjectMeta {
     /// Area del cliente (opcional). Se muestra en la portada si no esta vacio.
     #[serde(default)]
     pub area: String,
+    /// Ambiente evaluado (opcional): "" (sin especificar) | "qa" |
+    /// "produccion". Metadata para integraciones; no se muestra en el PDF.
+    /// Valores fuera de `AMBIENTES` se normalizan a "" (ver
+    /// `normalize_classification`).
+    #[serde(default)]
+    pub ambiente: String,
+    /// Exposicion del activo evaluado (opcional): "" (sin especificar) |
+    /// "internet" | "interno". Metadata para integraciones (ej. SLA segun
+    /// exposicion); no se muestra en el PDF. Valores fuera de `EXPOSICIONES` se
+    /// normalizan a "".
+    #[serde(default)]
+    pub exposicion: String,
     /// Tipo de proyecto: define el formulario, el scaffold de secciones y la
     /// plantilla por defecto. "pentest" | "redteam" | "oscp" | "htb" |
     /// "ejecutivo" | "documento" | "retest".
@@ -364,7 +376,34 @@ pub struct ProjectMeta {
     pub finding_order: Vec<String>,
 }
 
+/// Valores permitidos de `ProjectMeta::ambiente` ("" = sin especificar).
+pub const AMBIENTES: [&str; 3] = ["", "qa", "produccion"];
+
+/// Valores permitidos de `ProjectMeta::exposicion` ("" = sin especificar).
+pub const EXPOSICIONES: [&str; 3] = ["", "internet", "interno"];
+
+/// Normaliza un valor de clasificacion contra su lista cerrada: recorta
+/// espacios y pasa a minusculas; si no esta en `allowed`, devuelve "". Nunca
+/// acepta texto libre.
+fn normalize_choice(value: &str, allowed: &[&str]) -> String {
+    let v = value.trim().to_ascii_lowercase();
+    if allowed.contains(&v.as_str()) {
+        v
+    } else {
+        String::new()
+    }
+}
+
 impl ProjectMeta {
+    /// Deja `ambiente` y `exposicion` dentro de sus valores permitidos
+    /// (`AMBIENTES` / `EXPOSICIONES`); cualquier otro valor queda en "" (sin
+    /// especificar). Idempotente. Se aplica al leer y al guardar desde la UI,
+    /// asi un project.yaml editado a mano no propaga texto libre.
+    pub fn normalize_classification(&mut self) {
+        self.ambiente = normalize_choice(&self.ambiente, &AMBIENTES);
+        self.exposicion = normalize_choice(&self.exposicion, &EXPOSICIONES);
+    }
+
     /// Resuelve el layout efectivo del cuerpo, dejandolo consistente con las
     /// secciones. Idempotente. Si esta vacio usa `default_layout` del tipo; si
     /// no, sanea el layout guardado (descarta kinds desconocidos y secciones
@@ -646,6 +685,13 @@ pub struct ExportTarget {
     /// Incluir el bloque de conteos por severidad (summary) en el payload.
     #[serde(default)]
     pub include_summary: bool,
+    /// Datos extra del proyecto a incluir en `project` (opt-in): "environment"
+    /// (desde `ambiente`) y "exposure" (desde `exposicion`). Vacio por
+    /// default, asi los destinos existentes reciben el mismo payload de
+    /// siempre (un receptor podria rechazar claves que no conoce). Las claves
+    /// desconocidas se ignoran.
+    #[serde(default)]
+    pub project_fields: Vec<String>,
 }
 
 /// Resumen liviano de un proyecto para listados.
@@ -944,6 +990,58 @@ mod tests {
                 "findings"
             ]
         );
+    }
+
+    #[test]
+    fn project_yaml_viejo_sin_clasificacion_queda_sin_especificar() {
+        // project.yaml previo a ambiente/exposicion: backward-compat.
+        let p: ProjectMeta = serde_yaml::from_str("name: Legado\nclient: ACME\n").unwrap();
+        assert_eq!(p.ambiente, "");
+        assert_eq!(p.exposicion, "");
+    }
+
+    #[test]
+    fn normalize_classification_acepta_solo_valores_permitidos() {
+        let mut p = ProjectMeta {
+            ambiente: " QA ".to_string(),
+            exposicion: "internet".to_string(),
+            ..Default::default()
+        };
+        p.normalize_classification();
+        assert_eq!(p.ambiente, "qa");
+        assert_eq!(p.exposicion, "internet");
+
+        // Texto libre o valores desconocidos vuelven a "" (sin especificar).
+        let mut p = ProjectMeta {
+            ambiente: "staging".to_string(),
+            exposicion: "dmz publica".to_string(),
+            ..Default::default()
+        };
+        p.normalize_classification();
+        assert_eq!(p.ambiente, "");
+        assert_eq!(p.exposicion, "");
+
+        // Todos los valores permitidos se conservan y es idempotente.
+        for a in AMBIENTES {
+            for e in EXPOSICIONES {
+                let mut p = ProjectMeta {
+                    ambiente: a.to_string(),
+                    exposicion: e.to_string(),
+                    ..Default::default()
+                };
+                p.normalize_classification();
+                p.normalize_classification();
+                assert_eq!(p.ambiente, a);
+                assert_eq!(p.exposicion, e);
+            }
+        }
+    }
+
+    #[test]
+    fn export_target_viejo_sin_project_fields_queda_vacio() {
+        let t: ExportTarget =
+            serde_yaml::from_str("name: hub\nurl: https://x.example\nfields: [titulo]\n").unwrap();
+        assert!(t.project_fields.is_empty());
     }
 
     #[test]

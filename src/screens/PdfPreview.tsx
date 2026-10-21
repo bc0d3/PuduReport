@@ -40,9 +40,22 @@ const API_DEFAULT_FIELDS = [
   "afectados",
 ];
 
+// Datos opcionales del proyecto que un destino puede activar (bloque
+// `project`). Apagados por default: un receptor podria rechazar claves nuevas.
+const API_PROJECT_FIELDS: { key: string; label: string }[] = [
+  { key: "environment", label: "Ambiente (environment)" },
+  { key: "exposure", label: "Exposicion (exposure)" },
+];
+
 /** Destino nuevo vacio, listo para editar. */
 function emptyTarget(): ExportTarget {
-  return { name: "", url: "https://", fields: [...API_DEFAULT_FIELDS], include_summary: true };
+  return {
+    name: "",
+    url: "https://",
+    fields: [...API_DEFAULT_FIELDS],
+    include_summary: true,
+    project_fields: [],
+  };
 }
 
 export function PdfPreview({ projectId, onPickProject }: Props) {
@@ -85,6 +98,7 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
 
   // Al abrir el modal o cambiar de destino, cargar la vista previa exacta del
   // JSON y si el destino tiene token. Asi el usuario ve QUE sale antes de enviar.
+  // Depende de `targets` para refrescarla tras editar el destino seleccionado.
   useEffect(() => {
     if (!apiOpen || !projectId || !selName) {
       setPreviewJson(null);
@@ -103,7 +117,7 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [apiOpen, projectId, selName]);
+  }, [apiOpen, projectId, selName, targets]);
 
   async function handleExport() {
     if (!projectId) return;
@@ -132,7 +146,7 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
 
   function openConfig(target: ExportTarget | null) {
     const t = target ?? emptyTarget();
-    setEditing({ ...t, fields: [...t.fields] });
+    setEditing({ ...t, fields: [...t.fields], project_fields: [...t.project_fields] });
     setIsNew(target === null);
     setEditToken("");
     setEditHasToken(false);
@@ -511,6 +525,36 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
               />
               <span>Incluir conteos por severidad (summary)</span>
             </label>
+            <div className="field">
+              <label>Datos del proyecto (opcionales)</label>
+              <p className="faint" style={{ fontSize: 12, margin: "2px 0 0" }}>
+                Activalos solo si el receptor los soporta. Se envian si el proyecto los tiene
+                definidos.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+                {API_PROJECT_FIELDS.map((c) => (
+                  <label key={c.key} className="row" style={{ gap: 8, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={editing.project_fields.includes(c.key)}
+                      onChange={(e) =>
+                        setEditing((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                project_fields: e.target.checked
+                                  ? [...prev.project_fields, c.key]
+                                  : prev.project_fields.filter((f) => f !== c.key),
+                              }
+                            : prev,
+                        )
+                      }
+                    />
+                    <span>{c.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
         </Modal>
       )}
