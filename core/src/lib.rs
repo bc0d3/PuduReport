@@ -11,6 +11,7 @@ pub mod cvss;
 pub mod markdown;
 pub mod models;
 pub mod sections;
+pub mod template_upgrade;
 pub mod workspace;
 
 pub mod naming;

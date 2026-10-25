@@ -197,6 +197,70 @@ pub fn strip_hidden_sections(body: &str, hidden: &[String]) -> String {
     out
 }
 
+/// Seccion canonica del cuerpo de un hallazgo, separada para que la plantilla
+/// la ubique segun el orden configurado en el bloque "Hallazgos".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BodySection {
+    /// Clave canonica: descripcion | impacto | poc | remediacion.
+    pub key: &'static str,
+    /// Titulo tal como esta escrito en el archivo (se conserva, p.ej. un
+    /// "Proof of concept" legado); "Descripcion" para un preambulo suelto.
+    pub title: String,
+    /// true si en el archivo habia un encabezado `## ...` para la seccion. Un
+    /// cuerpo sin encabezados se dibuja sin titulo, igual que antes.
+    pub heading: bool,
+    /// Contenido markdown sin el encabezado.
+    pub content: String,
+}
+
+/// Separa el `body` en sus secciones canonicas, en orden de aparicion. El
+/// preambulo antes del primer encabezado cuenta como "descripcion" (igual que
+/// `parseSections` en el TS); encabezados repetidos se unen en la primera
+/// aparicion; los `##` no canonicos y los que estan dentro de bloques de
+/// codigo quedan como contenido de la seccion en curso.
+pub fn split_sections(body: &str) -> Vec<BodySection> {
+    let spans = headings(body);
+    let mut out: Vec<BodySection> = Vec::new();
+
+    let mut push = |key: &'static str, title: String, heading: bool, content: &str| {
+        let content = content.trim_matches('\n').trim_end();
+        if let Some(existing) = out.iter_mut().find(|s| s.key == key) {
+            if !content.trim().is_empty() {
+                if !existing.content.is_empty() {
+                    existing.content.push_str("\n\n");
+                }
+                existing.content.push_str(content);
+            }
+            existing.heading |= heading;
+        } else if heading || !content.trim().is_empty() {
+            out.push(BodySection {
+                key,
+                title,
+                heading,
+                content: content.to_string(),
+            });
+        }
+    };
+
+    let preamble_end = spans.first().map_or(body.len(), |(offset, _)| *offset);
+    push(
+        SECTIONS[0].0,
+        SECTIONS[0].1.to_string(),
+        false,
+        &body[..preamble_end],
+    );
+    for (i, (start, key)) in spans.iter().enumerate() {
+        let end = spans.get(i + 1).map_or(body.len(), |(offset, _)| *offset);
+        let chunk = &body[*start..end];
+        let (line, rest) = chunk.split_once('\n').unwrap_or((chunk, ""));
+        let title = heading_title(line.trim_end_matches('\r'))
+            .unwrap_or_default()
+            .to_string();
+        push(key, title, true, rest);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,5 +367,37 @@ mod tests {
         assert!(out.contains("Nota interna"));
         assert!(out.contains("Texto extra"));
         assert!(!out.contains("Texto B"));
+    }
+
+    #[test]
+    fn split_sections_keeps_order_titles_and_fenced_headings() {
+        let body = "Intro suelta\n\n## Descripcion\nA\n## Proof of concept\n```md\n## Remediacion\nno es seccion\n```\n### Paso\nC\n## Impacto\nB\n";
+        let out = split_sections(body);
+        let keys: Vec<_> = out.iter().map(|s| s.key).collect();
+        assert_eq!(keys, vec!["descripcion", "poc", "impacto"]);
+        assert_eq!(out[0].content, "Intro suelta\n\nA");
+        assert!(out[0].heading);
+        assert_eq!(out[1].title, "Proof of concept");
+        assert!(out[1].content.contains("## Remediacion\nno es seccion"));
+        assert!(out[1].content.contains("### Paso"));
+        assert_eq!(out[2].content, "B");
+    }
+
+    #[test]
+    fn split_sections_body_without_headings_has_no_title() {
+        let out = split_sections("Solo texto libre.\n");
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].key, "descripcion");
+        assert!(!out[0].heading);
+        assert_eq!(out[0].content, "Solo texto libre.");
+        assert!(split_sections("").is_empty());
+    }
+
+    #[test]
+    fn split_sections_keeps_empty_explicit_headings() {
+        let out = split_sections(BODY.replace("Texto C", "").as_str());
+        let poc = out.iter().find(|s| s.key == "poc").unwrap();
+        assert!(poc.heading);
+        assert!(poc.content.is_empty());
     }
 }

@@ -101,7 +101,21 @@ struct FindingData {
     affected: Vec<String>,
     /// Hallazgo nuevo detectado en el retest (la plantilla retest lo separa).
     new_in_retest: bool,
-    /// Cuerpo ya convertido a markup de Typst.
+    /// Cuerpo completo ya convertido a markup de Typst. Se conserva para las
+    /// plantillas personalizadas previas al orden configurable de campos.
+    body: String,
+    /// Secciones del cuerpo por separado (Descripcion/Impacto/PoC/Remediacion),
+    /// para que la plantilla las ubique segun el orden del bloque "Hallazgos".
+    sections: Vec<FindingSectionData>,
+}
+
+#[derive(Serialize)]
+struct FindingSectionData {
+    key: String,
+    title: String,
+    /// Si el archivo tenia encabezado para la seccion (sin el, no se titula).
+    heading: bool,
+    /// Contenido ya convertido a markup de Typst.
     body: String,
 }
 
@@ -217,6 +231,15 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
                 status: status_str(f.meta.status),
                 affected,
                 new_in_retest: f.meta.new_in_retest,
+                sections: sections::split_sections(&body)
+                    .into_iter()
+                    .map(|s| FindingSectionData {
+                        key: s.key.to_string(),
+                        title: s.title,
+                        heading: s.heading,
+                        body: markdown::to_typst(&s.content),
+                    })
+                    .collect(),
                 body: markdown::to_typst(&body),
             }
         })
@@ -593,6 +616,9 @@ mod tests {
         let f = &data.findings[0];
         assert!(f.affected.is_empty());
         assert!(!f.body.contains("Payload secreto"));
+        assert!(f.sections.iter().all(|s| s.key != "poc"));
+        let keys: Vec<_> = f.sections.iter().map(|s| s.key.as_str()).collect();
+        assert_eq!(keys, vec!["descripcion", "remediacion"]);
         assert!(f.body.contains("Texto"));
         assert!(f.body.contains("Arreglar"));
 
@@ -853,5 +879,138 @@ mod tests {
         assert_eq!(pdfs.len(), 2, "deberia generar principal + ejecutivo");
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn findings_block_fields_reorder_hide_and_separators() {
+        // Config del bloque "Hallazgos": PoC antes que Descripcion, el CVSS al
+        // final, activos ocultos y un salto de pagina. Un "linebreak" legado
+        // (opcion retirada) y claves desconocidas se ignoran. Debe compilar en
+        // las tres plantillas con bloques que dibujan hallazgos.
+        let templates = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("templates");
+        let typst_bin = resolve_typst().unwrap();
+        if !typst_available(&typst_bin) {
+            eprintln!("Typst no disponible; se omite el test de campos de hallazgos");
+            return;
+        }
+        let tmp = std::env::temp_dir().join(format!("pudu-fields-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        workspace::create_workspace(&tmp, "WS").unwrap();
+        let (pid, _) = workspace::create_project(&tmp, "Web", "ACME", "pentest").unwrap();
+        let mut f = workspace::create_finding(&tmp, &pid, "Hallazgo ordenado").unwrap();
+        f.meta.cvss = "9.8".into();
+        f.meta.cvss_vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H".into();
+        f.meta.affected = vec!["activo-oculto.example".into()];
+        f.body = "## Descripcion\n\nMARCA-DESC\n\n## Impacto\n\nMARCA-IMP\n\n## Prueba de concepto\n\nMARCA-POC\n\n## Remediacion\n\nMARCA-REM\n".into();
+        workspace::write_finding(&tmp, &pid, &f).unwrap();
+
+        let fields = serde_json::json!([
+            {"key": "title"}, {"key": "severity"},
+            {"key": "poc"}, {"key": "linebreak", "id": "legado"},
+            {"key": "descripcion"}, {"key": "affected", "enabled": false},
+            {"key": "pagebreak", "id": "sep-2"}, {"key": "impacto"},
+            {"key": "remediacion"}, {"key": "vector"}, {"key": "cvss"},
+            {"key": "cwe"}, {"key": "status"}, {"key": "bogus"}
+        ]);
+        for project_type in ["pentest", "htb", "retest"] {
+            let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();
+            project.project_type = project_type.to_string();
+            project.layout = crate::models::default_layout(project_type, &project.sections);
+            for b in project.layout.iter_mut().filter(|b| b.kind == "findings") {
+                b.config.insert("fields".into(), fields.clone());
+            }
+            workspace::write_project_meta(&tmp, &pid, &project).unwrap();
+            let pdfs = generate_pdf(&tmp, &pid, &templates, &typst_bin, false)
+                .unwrap_or_else(|e| panic!("campos configurados fallo {project_type}: {e}"));
+            assert!(std::fs::metadata(&pdfs[0]).unwrap().len() > 1000);
+            if let Some(dir) = std::env::var_os("PUDU_PDF_REVIEW_DIR") {
+                let dir = PathBuf::from(dir).join(format!("fields-{project_type}"));
+                std::fs::create_dir_all(&dir).unwrap();
+                std::fs::copy(&pdfs[0], dir.join("report.pdf")).unwrap();
+            }
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn upgraded_old_template_copies_honor_finding_fields() {
+        // Copias de plantillas hechas antes del orden configurable: tras
+        // actualizarlas deben compilar y respetar config.fields. Ademas de los
+        // fixtures, PUDU_UPGRADE_TEMPLATES (rutas separadas por ':') permite
+        // probar copias reales locales sin commitearlas.
+        let templates = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("templates");
+        let typst_bin = resolve_typst().unwrap();
+        if !typst_available(&typst_bin) {
+            eprintln!("Typst no disponible; se omite el test de actualizacion de plantillas");
+            return;
+        }
+        let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let mut sources = vec![
+            fixtures.join("pentest-v0.0.25.typ"),
+            fixtures.join("retest-v0.0.25.typ"),
+        ];
+        if let Ok(extra) = std::env::var("PUDU_UPGRADE_TEMPLATES") {
+            sources.extend(
+                extra
+                    .split(':')
+                    .filter(|p| !p.is_empty())
+                    .map(PathBuf::from),
+            );
+        }
+        for (n, src) in sources.iter().enumerate() {
+            let project_type = if src.to_string_lossy().contains("retest") {
+                "retest"
+            } else {
+                "pentest"
+            };
+            let tmp = std::env::temp_dir().join(format!("pudu-upgrade-{}-{n}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&tmp);
+            workspace::create_workspace(&tmp, "WS").unwrap();
+            let (pid, _) = workspace::create_project(&tmp, "Web", "ACME", project_type).unwrap();
+            let mut f = workspace::create_finding(&tmp, &pid, "Hallazgo").unwrap();
+            f.body = "## Descripcion\n\nMARCA-DESC\n\n## Impacto\n\nMARCA-IMP\n\n## Prueba de concepto\n\nMARCA-POC\n\n## Remediacion\n\nMARCA-REM\n".into();
+            workspace::write_finding(&tmp, &pid, &f).unwrap();
+
+            let name = "copia-vieja";
+            let source = std::fs::read_to_string(src).unwrap();
+            workspace::save_template_source(&tmp, name, &source).unwrap();
+            let outcome = workspace::upgrade_template_finding_fields(&tmp, name).unwrap();
+            assert_eq!(
+                outcome,
+                workspace::TemplateUpgrade::Upgraded,
+                "{}",
+                src.display()
+            );
+            let backup = workspace::user_templates_dir(&tmp).join(format!("{name}.typ.bak"));
+            assert_eq!(std::fs::read_to_string(backup).unwrap(), source);
+
+            let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();
+            project.template_override = name.to_string();
+            project.layout = crate::models::default_layout(project_type, &project.sections);
+            let fields = serde_json::json!([
+                {"key": "title"}, {"key": "descripcion"}, {"key": "impacto"},
+                {"key": "pagebreak", "id": "sep-1"}, {"key": "poc"}, {"key": "remediacion"}
+            ]);
+            for b in project.layout.iter_mut().filter(|b| b.kind == "findings") {
+                b.config.insert("fields".into(), fields.clone());
+            }
+            workspace::write_project_meta(&tmp, &pid, &project).unwrap();
+            let pdfs =
+                generate_pdf(&tmp, &pid, &templates, &typst_bin, false).unwrap_or_else(|e| {
+                    panic!("copia actualizada no compila ({}): {e}", src.display())
+                });
+            if let Some(dir) = std::env::var_os("PUDU_PDF_REVIEW_DIR") {
+                let dir = PathBuf::from(dir).join(format!("upgrade-{n}"));
+                std::fs::create_dir_all(&dir).unwrap();
+                std::fs::copy(&pdfs[0], dir.join("report.pdf")).unwrap();
+            }
+            let _ = std::fs::remove_dir_all(&tmp);
+        }
     }
 }

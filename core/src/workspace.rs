@@ -1215,6 +1215,40 @@ pub fn save_template_meta(root: &Path, name: &str, meta: &TemplateMeta) -> Resul
     Ok(())
 }
 
+/// Resultado de actualizar una plantilla de la libreria del usuario.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TemplateUpgrade {
+    /// Se reemplazo el detalle de hallazgos (respaldo en `<name>.typ.bak`).
+    Upgraded,
+    /// Ya respetaba el orden configurable de campos.
+    AlreadySupported,
+    /// Estructura no reconocida: no se toco.
+    Unsupported,
+}
+
+/// Actualiza una copia antigua de la libreria del usuario para que respete el
+/// orden de campos del bloque "Hallazgos" (ver `template_upgrade`). Antes de
+/// escribir guarda la version original en `<name>.typ.bak` (extension que el
+/// listado de plantillas ignora).
+pub fn upgrade_template_finding_fields(root: &Path, name: &str) -> Result<TemplateUpgrade> {
+    use crate::template_upgrade::{upgrade_source, Upgrade};
+
+    validate_id(name)?;
+    let dir = user_templates_dir(root);
+    let path = dir.join(format!("{name}.typ"));
+    let source = fs::read_to_string(&path)?;
+    match upgrade_source(&source) {
+        Upgrade::AlreadySupported => Ok(TemplateUpgrade::AlreadySupported),
+        Upgrade::Unsupported => Ok(TemplateUpgrade::Unsupported),
+        Upgrade::Upgraded(next) => {
+            write_atomic(&dir.join(format!("{name}.typ.bak")), source.as_bytes())?;
+            write_atomic(&path, next.as_bytes())?;
+            Ok(TemplateUpgrade::Upgraded)
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Utilidades
 // ---------------------------------------------------------------------------
