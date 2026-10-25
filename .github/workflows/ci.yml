@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
   workflow_dispatch:
 
@@ -14,6 +14,22 @@ permissions:
   contents: read
 
 jobs:
+  branch-policy:
+    name: branch-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Validar destino del pull request
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "main" ] && [ "$HEAD_REF" != "dev" ]; then
+            echo "Los pull requests hacia main solo pueden provenir de dev."
+            exit 1
+          fi
+
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
