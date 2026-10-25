@@ -59,13 +59,35 @@ fn status_label(s: FindingStatus) -> &'static str {
     }
 }
 
-/// Escapa un campo para CSV (RFC 4180): si trae coma, comilla o salto de linea,
-/// se encierra entre comillas y se duplican las comillas internas.
+/// Caracteres que, al inicio de una celda, hacen que Excel, LibreOffice o
+/// Google Sheets la interpreten como formula.
+const FORMULA_TRIGGERS: [char; 4] = ['=', '+', '-', '@'];
+
+/// Neutraliza la inyeccion de formulas (CSV injection): si el primer caracter
+/// no blanco es `=`, `+`, `-` o `@`, o si la celda empieza con tabulador o
+/// retorno de carro, antepone una comilla simple para que la planilla la trate
+/// como texto. Se aplica a todas las columnas por igual, sin excepciones por
+/// tipo: un valor numerico negativo (que hoy ninguna columna produce; CVSS va
+/// de 0 a 10 y el numero de hallazgo empieza en 1) se exportaria como texto
+/// `'-1`, que es preferible a abrir una excepcion que un texto libre podria
+/// aprovechar (ej. `-1+HYPERLINK(...)`).
+fn neutralize_formula(field: &str) -> std::borrow::Cow<'_, str> {
+    if field.starts_with(['\t', '\r']) || field.trim_start().starts_with(FORMULA_TRIGGERS) {
+        std::borrow::Cow::Owned(format!("'{field}"))
+    } else {
+        std::borrow::Cow::Borrowed(field)
+    }
+}
+
+/// Escapa un campo para CSV: primero neutraliza formulas (ver
+/// `neutralize_formula`) y luego aplica RFC 4180: si trae coma, comilla o salto
+/// de linea, se encierra entre comillas y se duplican las comillas internas.
 fn csv_escape(field: &str) -> String {
+    let field = neutralize_formula(field);
     if field.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", field.replace('"', "\"\""))
     } else {
-        field.to_string()
+        field.into_owned()
     }
 }
 
@@ -562,6 +584,83 @@ mod tests {
             "1,SQLi,Login,\"Fuga de la base de clientes, con datos personales.\",Fuga de datos personales,Validacion de entradas"
         );
         assert_eq!(lines[2], "2,Cabeceras,,,,");
+    }
+
+    #[test]
+    fn csv_escape_neutraliza_formulas() {
+        // Cada disparador de formula queda como texto con comilla simple.
+        assert_eq!(csv_escape("=1+1"), "'=1+1");
+        assert_eq!(csv_escape("+1"), "'+1");
+        assert_eq!(csv_escape("-1"), "'-1");
+        assert_eq!(csv_escape("@SUM(A1)"), "'@SUM(A1)");
+        // Blancos delante no esconden el disparador.
+        assert_eq!(csv_escape("  =1+1"), "'  =1+1");
+        assert_eq!(csv_escape("\u{00A0}=1"), "'\u{00A0}=1");
+        // Tabulador o retorno de carro al inicio tambien se neutralizan; el CR
+        // ademas obliga a citar el campo (RFC 4180).
+        assert_eq!(csv_escape("\tx"), "'\tx");
+        assert_eq!(csv_escape("\r=1"), "\"'\r=1\"");
+        // La neutralizacion va dentro de las comillas y las comillas internas
+        // se duplican.
+        assert_eq!(
+            csv_escape("=HYPERLINK(\"https://x.example\",\"ver\")"),
+            "\"'=HYPERLINK(\"\"https://x.example\"\",\"\"ver\"\")\""
+        );
+        assert_eq!(csv_escape("=1,2"), "\"'=1,2\"");
+    }
+
+    #[test]
+    fn csv_escape_no_altera_valores_normales() {
+        assert_eq!(csv_escape("9.8"), "9.8");
+        assert_eq!(csv_escape("0.0"), "0.0");
+        assert_eq!(csv_escape("1"), "1");
+        assert_eq!(
+            csv_escape("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"),
+            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        );
+        assert_eq!(csv_escape("CWE-89, CWE-79"), "\"CWE-89, CWE-79\"");
+        assert_eq!(csv_escape("a@b.example"), "a@b.example");
+        assert_eq!(csv_escape("1-2"), "1-2");
+        assert_eq!(csv_escape(""), "");
+        assert_eq!(csv_escape("dijo \"hola\""), "\"dijo \"\"hola\"\"\"");
+    }
+
+    #[test]
+    fn csv_neutraliza_formulas_en_columnas_de_texto_libre() {
+        let root = tmp_ws();
+        let (pid, mut meta) = workspace::create_project(&root, "Web", "ACME", "pentest").unwrap();
+        meta.causas_raiz = vec![pudureport_core::models::CausaRaiz {
+            clave: "formula".to_string(),
+            titulo: "@SUM(1+1)*cmd|' /C calc'!A0".to_string(),
+            descripcion: String::new(),
+        }];
+        workspace::write_project_meta(&root, &pid, &meta).unwrap();
+        let mut f = finding("001-a", "=1+1", Severity::Critical, "9.8", false);
+        f.meta.modulo = "+Login".to_string();
+        f.meta.impacto_negocio = "-2+3, fuga de datos".to_string();
+        f.meta.causa_raiz = "formula".to_string();
+        f.meta.affected = vec!["=HYPERLINK(\"https://x.example\")".to_string()];
+        workspace::write_finding(&root, &pid, &f).unwrap();
+
+        let columns: Vec<String> = [
+            "numero",
+            "titulo",
+            "cvss",
+            "afectados",
+            "modulo",
+            "impacto_negocio",
+            "causa_raiz",
+        ]
+        .iter()
+        .map(|c| c.to_string())
+        .collect();
+        let path = export_csv(&root, &pid, &columns).unwrap();
+        let csv = std::fs::read_to_string(path).unwrap();
+        let lines: Vec<&str> = csv.trim_start_matches('\u{FEFF}').lines().collect();
+        assert_eq!(
+            lines[1],
+            "1,'=1+1,9.8,\"'=HYPERLINK(\"\"https://x.example\"\")\",'+Login,\"'-2+3, fuga de datos\",'@SUM(1+1)*cmd|' /C calc'!A0"
+        );
     }
 
     /// Destino minimo con los datos opcionales del proyecto indicados.
