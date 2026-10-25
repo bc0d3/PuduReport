@@ -2,6 +2,7 @@
 // Copyright (c) 2026 bc0d3
 
 import {
+  Fragment,
   type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
@@ -25,6 +26,7 @@ import {
   usesBlockRenderer,
   usesCustomTemplate,
 } from "../lib/projectTypes";
+import { FINDING_SECTIONS } from "../lib/sections";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { LivePreview } from "../components/LivePreview";
 import { useToast } from "../components/Toast";
@@ -71,7 +73,7 @@ const BLOCK_META: Record<BlockKind, { label: string; icon: string; desc: string 
   findings: {
     label: "Hallazgos",
     icon: "ti-bug",
-    desc: "Detalle de cada hallazgo. Se edita en la pantalla Hallazgos.",
+    desc: "Detalle de cada hallazgo. Desplegalo en el arbol para ordenar sus campos (titulo, CVSS, secciones...) y agregar saltos de pagina; el contenido de cada hallazgo se edita en la pantalla Hallazgos.",
   },
   section: { label: "Seccion", icon: "ti-file-text", desc: "" },
   text: { label: "Texto libre", icon: "ti-text-caption", desc: "" },
@@ -97,10 +99,14 @@ interface Props {
   onPickProject: () => void;
 }
 
-type Selection = { kind: "data" } | { kind: "block"; index: number };
+type Selection =
+  | { kind: "data" }
+  | { kind: "block"; index: number }
+  /** Campo del bloque "Hallazgos" (indice en su lista de campos). */
+  | { kind: "field"; idx: number };
 
 export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPickProject }: Props) {
-  const { guard } = useToast();
+  const { guard, notify } = useToast();
   const [project, setProject] = useState<ProjectMeta | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [selection, setSelection] = useState<Selection>({ kind: "data" });
@@ -109,6 +115,13 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
   const [scopeInput, setScopeInput] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [previewOpen, setPreviewOpen] = useState(true);
+  // Arbol: los campos de cada hallazgo cuelgan del bloque "Hallazgos".
+  const [findingsOpen, setFindingsOpen] = useState(true);
+  const [fieldDragIdx, setFieldDragIdx] = useState<number | null>(null);
+  const [fieldOverIdx, setFieldOverIdx] = useState<number | null>(null);
+  // Si la plantilla efectiva dibuja los hallazgos con el orden de campos. Las
+  // copias hechas antes de esta funcion lo ignoran (ver upgradeTemplate).
+  const [fieldsSupport, setFieldsSupport] = useState<"yes" | "no" | "unknown">("yes");
 
   useEffect(() => {
     if (!projectId) return;
@@ -273,6 +286,177 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
     }));
   }
 
+  // --- Campos del bloque "Hallazgos" (orden de las piezas de cada hallazgo) ---
+  // Se escriben en config.fields del bloque dentro del patch() del proyecto,
+  // calculando sobre el estado mas reciente (sin closures viejos).
+  function patchFindingFields(mutate: (items: FieldItem[]) => FieldItem[]) {
+    patch((p) => {
+      const at = p.layout.findIndex((b) => b.kind === "findings");
+      if (at < 0) return p;
+      const items = mutate(findingFields(p.layout[at], isRetest(p)));
+      return {
+        ...p,
+        layout: p.layout.map((b, i) =>
+          i === at ? { ...b, config: { ...b.config, fields: serializeFields(items) } } : b,
+        ),
+      };
+    });
+  }
+
+  function moveField(from: number, to: number) {
+    if (from === to) return;
+    patchFindingFields((items) => {
+      const next = [...items];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setSelection((cur) => {
+      if (cur.kind !== "field") return cur;
+      const i = cur.idx;
+      return {
+        kind: "field",
+        idx: i === from ? to : from < i && i <= to ? i - 1 : to <= i && i < from ? i + 1 : i,
+      };
+    });
+  }
+
+  function toggleField(idx: number) {
+    patchFindingFields((items) =>
+      items.map((it, i) => (i === idx ? { ...it, enabled: !it.enabled } : it)),
+    );
+  }
+
+  function removeField(idx: number) {
+    patchFindingFields((items) =>
+      items.filter((it, i) => !(i === idx && SEPARATOR_FIELDS.has(it.key))),
+    );
+    setSelection({ kind: "data" });
+  }
+
+  // Inserta un separador despues del campo seleccionado (o al final).
+  function addSeparator(kind: "pagebreak") {
+    const after = selection.kind === "field" ? selection.idx + 1 : null;
+    patchFindingFields((items) => {
+      const next = [...items];
+      const item: FieldItem = { key: kind, enabled: true, id: `${kind}-${Date.now()}` };
+      next.splice(after ?? next.length, 0, item);
+      return next;
+    });
+    if (after !== null) setSelection({ kind: "field", idx: after });
+  }
+
+  function resetFields() {
+    patch((p) => ({
+      ...p,
+      layout: p.layout.map((b) =>
+        b.kind === "findings" ? { ...b, config: { ...b.config, fields: [] } } : b,
+      ),
+    }));
+    setSelection({ kind: "data" });
+  }
+
+  // Arrastre de campos dentro del arbol (mismo enfoque por eventos de mouse
+  // que los bloques, por el DnD nativo poco confiable del WKWebView).
+  const fieldDragFromRef = useRef<number | null>(null);
+  const fieldOverRef = useRef<number | null>(null);
+  const fieldCandidateRef = useRef<{ idx: number; x: number; y: number } | null>(null);
+  const moveFieldRef = useRef(moveField);
+  moveFieldRef.current = moveField;
+
+  function startFieldDrag(idx: number, e: ReactMouseEvent) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    fieldCandidateRef.current = { idx, x: e.clientX, y: e.clientY };
+  }
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      const c = fieldCandidateRef.current;
+      if (fieldDragFromRef.current === null && c) {
+        if (Math.hypot(e.clientX - c.x, e.clientY - c.y) > 4) {
+          fieldDragFromRef.current = c.idx;
+          window.getSelection()?.removeAllRanges();
+          setFieldDragIdx(c.idx);
+        }
+      }
+      if (fieldDragFromRef.current !== null) {
+        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+        const rowEl = el?.closest<HTMLElement>("[data-field-row]") ?? null;
+        const idx = rowEl ? Number(rowEl.dataset.fieldRow) : null;
+        fieldOverRef.current = idx;
+        setFieldOverIdx(idx);
+      }
+    }
+    function onUp() {
+      fieldCandidateRef.current = null;
+      const from = fieldDragFromRef.current;
+      const to = fieldOverRef.current;
+      fieldDragFromRef.current = null;
+      fieldOverRef.current = null;
+      setFieldDragIdx(null);
+      setFieldOverIdx(null);
+      if (from !== null && to !== null && from !== to) moveFieldRef.current(from, to);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
+
+  // Copia de la libreria del usuario activa en el proyecto (vacio = incluida).
+  const customTemplate = project && usesCustomTemplate(project) ? project.template_override : "";
+  useEffect(() => {
+    if (!customTemplate) {
+      setFieldsSupport("yes");
+      return;
+    }
+    let alive = true;
+    api
+      .readTemplateSource(customTemplate)
+      .then((src) => {
+        if (alive) setFieldsSupport(src.includes("render-finding(") ? "yes" : "no");
+      })
+      .catch(() => {
+        if (alive) setFieldsSupport("unknown");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [customTemplate]);
+
+  async function upgradeTemplate() {
+    if (!customTemplate) return;
+    const result = await guard(api.upgradeTemplateFindingFields(customTemplate));
+    if (result === "upgraded" || result === "already_supported") {
+      setFieldsSupport("yes");
+      setRefreshKey((k) => k + 1);
+      notify(
+        result === "upgraded"
+          ? `Plantilla "${customTemplate}" actualizada. El original quedo en ${customTemplate}.typ.bak`
+          : "La plantilla ya soportaba el orden de campos.",
+        "ok",
+      );
+    } else if (result === "unsupported") {
+      notify(
+        `No se reconoce como se dibujan los hallazgos en "${customTemplate}". Usa la plantilla incluida o editala desde Plantillas.`,
+        "error",
+      );
+    }
+  }
+
+  function switchToBuiltinTemplate() {
+    patch((p) => ({ ...p, template_override: "" }));
+  }
+
+  const templateWarning =
+    fieldsSupport === "no" && customTemplate
+      ? { name: customTemplate, onUpgrade: upgradeTemplate, onUseBuiltin: switchToBuiltinTemplate }
+      : undefined;
+
   const counts = countSeverities(findings);
 
   if (!projectId) {
@@ -306,6 +490,8 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
 
   const selectedBlock =
     selection.kind === "block" ? (project.layout[selection.index] ?? null) : null;
+  const findingsBlock = project.layout.find((b) => b.kind === "findings") ?? null;
+  const fields = findingsBlock ? findingFields(findingsBlock, isRetest(project)) : [];
 
   return (
     <>
@@ -369,21 +555,41 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
             {blockMode ? (
               <>
                 {project.layout.map((b, i) => (
-                  <BlockRow
-                    key={`${b.kind}-${b.kind === "section" ? cfgStr(b, "key") : i}`}
-                    index={i}
-                    block={b}
-                    section={b.kind === "section" ? sectionByKey(cfgStr(b, "key")) : undefined}
-                    findingsCount={findings.length}
-                    selected={selection.kind === "block" && selection.index === i}
-                    dragging={dragIdx === i}
-                    dropTarget={dragIdx !== null && overIdx === i && dragIdx !== i}
-                    onDragHandleDown={(e) => startBlockDrag(i, e)}
-                    onSelect={() => {
-                      setSelection({ kind: "block", index: i });
-                    }}
-                    onToggle={() => toggleBlock(i)}
-                  />
+                  <Fragment key={`${b.kind}-${b.kind === "section" ? cfgStr(b, "key") : i}`}>
+                    <BlockRow
+                      index={i}
+                      block={b}
+                      section={b.kind === "section" ? sectionByKey(cfgStr(b, "key")) : undefined}
+                      findingsCount={findings.length}
+                      expanded={b.kind === "findings" ? findingsOpen : undefined}
+                      onToggleExpand={
+                        b.kind === "findings" ? () => setFindingsOpen((o) => !o) : undefined
+                      }
+                      selected={selection.kind === "block" && selection.index === i}
+                      dragging={dragIdx === i}
+                      dropTarget={dragIdx !== null && overIdx === i && dragIdx !== i}
+                      onDragHandleDown={(e) => startBlockDrag(i, e)}
+                      onSelect={() => {
+                        setSelection({ kind: "block", index: i });
+                      }}
+                      onToggle={() => toggleBlock(i)}
+                    />
+                    {b.kind === "findings" && findingsOpen && (
+                      <FindingFieldTree
+                        prefix={String(i + 1).padStart(2, "0")}
+                        items={fields}
+                        parentHidden={!b.enabled}
+                        selectedIdx={selection.kind === "field" ? selection.idx : null}
+                        dragIdx={fieldDragIdx}
+                        overIdx={fieldOverIdx}
+                        onDragHandleDown={startFieldDrag}
+                        onSelect={(idx) => setSelection({ kind: "field", idx })}
+                        onToggle={toggleField}
+                        warning={Boolean(templateWarning)}
+                        onWarningClick={() => setSelection({ kind: "block", index: i })}
+                      />
+                    )}
+                  </Fragment>
                 ))}
                 <div className="row" style={{ gap: 6, marginTop: 8 }}>
                   <button className="btn small" onClick={() => addBlock("text")}>
@@ -459,12 +665,54 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
                 </div>
               </div>
             )}
-            {selection.kind === "data" ? (
+            {selection.kind === "field" ? (
+              fields[selection.idx] ? (
+                <>
+                  <div className="report-block-controls">
+                    <span className="faint">
+                      Campo {selection.idx + 1} de {fields.length} del hallazgo
+                    </span>
+                    <div className="row">
+                      <button
+                        className="btn small"
+                        disabled={selection.idx === 0}
+                        onClick={() => moveField(selection.idx, selection.idx - 1)}
+                      >
+                        <i className="ti ti-arrow-up" aria-hidden="true" /> Subir
+                      </button>
+                      <button
+                        className="btn small"
+                        disabled={selection.idx === fields.length - 1}
+                        onClick={() => moveField(selection.idx, selection.idx + 1)}
+                      >
+                        <i className="ti ti-arrow-down" aria-hidden="true" /> Bajar
+                      </button>
+                    </div>
+                  </div>
+                  <FindingFieldsCard
+                    templateWarning={templateWarning}
+                    field={fields[selection.idx]}
+                    onToggle={() => toggleField(selection.idx)}
+                    onRemove={() => removeField(selection.idx)}
+                    onAddSeparator={addSeparator}
+                    onReset={resetFields}
+                  />
+                </>
+              ) : (
+                <div className="card">Seleccion no disponible.</div>
+              )
+            ) : selection.kind === "data" ? (
               <ProjectDataForm
                 project={project}
                 patch={patch}
                 scopeInput={scopeInput}
                 setScopeInput={setScopeInput}
+              />
+            ) : blockMode && selectedBlock?.kind === "findings" ? (
+              <FindingFieldsCard
+                templateWarning={templateWarning}
+                onAddSeparator={addSeparator}
+                onReset={resetFields}
               />
             ) : blockMode && selectedBlock ? (
               <BlockEditor
@@ -537,6 +785,8 @@ function BlockRow({
   block,
   section,
   findingsCount,
+  expanded,
+  onToggleExpand,
   selected,
   dragging,
   dropTarget,
@@ -548,6 +798,9 @@ function BlockRow({
   block: ReportBlock;
   section: { title: string; enabled: boolean } | undefined;
   findingsCount: number;
+  /** Solo el bloque "Hallazgos": si su rama de campos esta desplegada. */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
   selected: boolean;
   dragging: boolean;
   dropTarget: boolean;
@@ -589,6 +842,21 @@ function BlockRow({
       >
         <i className="ti ti-grip-vertical grip" />
       </span>
+      {onToggleExpand && (
+        <button
+          type="button"
+          className="report-tree-caret"
+          aria-expanded={expanded}
+          title={expanded ? "Plegar campos del hallazgo" : "Desplegar campos del hallazgo"}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleExpand();
+          }}
+        >
+          <i className={`ti ${expanded ? "ti-chevron-down" : "ti-chevron-right"}`} />
+        </button>
+      )}
       <button
         type="button"
         className="report-block-select"
@@ -934,4 +1202,283 @@ function countSeverities(findings: Finding[]): Record<Severity, number> {
   };
   for (const f of findings) counts[f.meta.severity]++;
   return counts;
+}
+
+// ---------------------------------------------------------------------------
+// Campos del bloque "Hallazgos": orden y visibilidad de las piezas de cada
+// hallazgo en el PDF. Espeja finding-fields/render-finding de theme.typ.
+// ---------------------------------------------------------------------------
+
+/** Pieza del hallazgo (o separador) en config.fields del bloque. */
+interface FieldItem {
+  key: string;
+  enabled: boolean;
+  /** Solo separadores (se pueden repetir): identidad estable para la UI. */
+  id?: string;
+}
+
+const SEPARATOR_FIELDS = new Set(["pagebreak"]);
+/** Se dibujan como chips en linea; si siguen al titulo van en su franja. */
+const INLINE_FIELDS = new Set(["severity", "cvss", "cwe", "status"]);
+
+const SECTION_TITLE = Object.fromEntries(FINDING_SECTIONS.map((s) => [s.key, s.title]));
+
+const FIELD_META: Record<string, { label: string; icon: string; hint: string }> = {
+  title: {
+    label: "Titulo",
+    icon: "ti-heading",
+    hint: "Numero y titulo del hallazgo, con la franja de color. Los chips que lo siguen van dentro de la franja.",
+  },
+  severity: { label: "Severidad", icon: "ti-alert-triangle", hint: "Etiqueta de severidad." },
+  cvss: { label: "Puntaje CVSS", icon: "ti-gauge", hint: "Chip con la version y el puntaje CVSS." },
+  cwe: { label: "CWE", icon: "ti-tag", hint: "Identificadores CWE del hallazgo." },
+  status: { label: "Estado", icon: "ti-circle-check", hint: "Estado de remediacion." },
+  vector: { label: "Vector CVSS", icon: "ti-code", hint: "Vector CVSS completo en tipografia mono." },
+  affected: { label: "Activos afectados", icon: "ti-server", hint: "Lista de activos afectados." },
+  descripcion: { label: SECTION_TITLE.descripcion, icon: "ti-file-text", hint: "Seccion del cuerpo." },
+  impacto: { label: SECTION_TITLE.impacto, icon: "ti-file-text", hint: "Seccion del cuerpo." },
+  poc: { label: SECTION_TITLE.poc, icon: "ti-file-text", hint: "Seccion del cuerpo." },
+  remediacion: { label: SECTION_TITLE.remediacion, icon: "ti-file-text", hint: "Seccion del cuerpo." },
+  pagebreak: {
+    label: "Salto de pagina",
+    icon: "ti-page-break",
+    hint: "Lo que sigue arranca en una pagina nueva.",
+  },
+};
+
+/** Retest usa su propia plantilla: estado antes que severidad, sin CVSS/CWE/vector. */
+function isRetest(project: { project_type: string }): boolean {
+  return project.project_type === "retest";
+}
+
+function defaultFindingFields(retest: boolean): string[] {
+  const body = FINDING_SECTIONS.map((s) => s.key);
+  return retest
+    ? ["title", "status", "severity", "affected", ...body]
+    : ["title", "severity", "cvss", "cwe", "status", "vector", "affected", ...body];
+}
+
+/** Normaliza config.fields: descarta claves desconocidas o duplicadas y anexa
+ * al final (visibles) las piezas que falten, igual que la plantilla. */
+function findingFields(block: ReportBlock, retest: boolean): FieldItem[] {
+  const defaults = defaultFindingFields(retest);
+  const allowed = new Set([...defaults, ...SEPARATOR_FIELDS]);
+  const raw = block.config?.fields;
+  const items: FieldItem[] = [];
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      if (!entry || typeof entry !== "object") continue;
+      const { key, enabled, id } = entry as { key?: unknown; enabled?: unknown; id?: unknown };
+      if (typeof key !== "string" || !allowed.has(key)) continue;
+      const separator = SEPARATOR_FIELDS.has(key);
+      if (!separator && items.some((it) => it.key === key)) continue;
+      items.push({
+        key,
+        enabled: enabled !== false,
+        ...(separator ? { id: typeof id === "string" ? id : `${key}-${items.length}` } : {}),
+      });
+    }
+  }
+  for (const key of defaults) {
+    if (!items.some((it) => it.key === key)) items.push({ key, enabled: true });
+  }
+  return items;
+}
+
+function serializeFields(items: FieldItem[]): Record<string, unknown>[] {
+  return items.map(({ key, enabled, id }) => (id ? { key, enabled, id } : { key, enabled }));
+}
+
+/** Rama del arbol con los campos de cada hallazgo, en el orden del PDF. */
+function FindingFieldTree({
+  prefix,
+  items,
+  parentHidden,
+  selectedIdx,
+  dragIdx,
+  overIdx,
+  onDragHandleDown,
+  onSelect,
+  onToggle,
+  warning,
+  onWarningClick,
+}: {
+  prefix: string;
+  items: FieldItem[];
+  /** El bloque "Hallazgos" entero esta oculto: la rama se ve atenuada. */
+  parentHidden: boolean;
+  selectedIdx: number | null;
+  dragIdx: number | null;
+  overIdx: number | null;
+  onDragHandleDown: (idx: number, e: ReactMouseEvent) => void;
+  onSelect: (idx: number) => void;
+  onToggle: (idx: number) => void;
+  /** La plantilla del proyecto no aplica este orden (copia antigua). */
+  warning: boolean;
+  onWarningClick: () => void;
+}) {
+  return (
+    <div className="report-tree-children" style={{ opacity: parentHidden ? 0.5 : 1 }}>
+      {warning && (
+        <button type="button" className="report-tree-warning" onClick={onWarningClick}>
+          <i className="ti ti-alert-triangle" aria-hidden="true" />
+          Tu plantilla no aplica este orden. Ver como arreglarlo
+        </button>
+      )}
+      {items.map((it, i) => {
+        const meta = FIELD_META[it.key];
+        const separator = SEPARATOR_FIELDS.has(it.key);
+        const dragging = dragIdx === i;
+        return (
+          <div
+            key={it.id ?? it.key}
+            data-field-row={i}
+            className={`row ${selectedIdx === i ? "on" : ""} ${dragging ? "dragging" : ""} ${
+              dragIdx !== null && overIdx === i && dragIdx !== i ? "drop-target" : ""
+            } ${separator ? "report-tree-separator" : ""}`}
+            style={{
+              cursor: dragging ? "grabbing" : "grab",
+              opacity: dragging ? 0.4 : it.enabled ? 1 : 0.5,
+            }}
+          >
+            <span
+              onMouseDown={(e) => onDragHandleDown(i, e)}
+              title="Arrastrar para reordenar"
+              className="report-block-grip"
+            >
+              <i className="ti ti-grip-vertical grip" />
+            </span>
+            <button
+              type="button"
+              className="report-block-select"
+              aria-pressed={selectedIdx === i}
+              onClick={() => onSelect(i)}
+            >
+              <span className="report-block-number">
+                {prefix}.{i + 1}
+              </span>
+              <i className={`ti ${meta.icon}`} aria-hidden="true" />
+              <span className="report-block-label">
+                {meta.label}
+                {!it.enabled && <small>Oculto en el PDF</small>}
+              </span>
+            </button>
+            {!separator && (
+              <button
+                className={`toggle ${it.enabled ? "" : "off"}`}
+                title={it.enabled ? "Visible en el PDF" : "Oculto"}
+                style={{ marginLeft: "auto" }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggle(i);
+                }}
+              >
+                <i className={`ti ${it.enabled ? "ti-eye" : "ti-eye-off"}`} />
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Panel del bloque "Hallazgos" o de uno de sus campos: separadores y reset. */
+function FindingFieldsCard({
+  templateWarning,
+  field,
+  onToggle,
+  onRemove,
+  onAddSeparator,
+  onReset,
+}: {
+  templateWarning?: { name: string; onUpgrade: () => void; onUseBuiltin: () => void };
+  field?: FieldItem;
+  onToggle?: () => void;
+  onRemove?: () => void;
+  onAddSeparator: (kind: "pagebreak") => void;
+  onReset: () => void;
+}) {
+  const meta = field ? FIELD_META[field.key] : null;
+  const separator = field ? SEPARATOR_FIELDS.has(field.key) : false;
+  return (
+    <div className="card">
+      {templateWarning && (
+        <div className="report-template-warning" role="alert">
+          <strong>
+            <i className="ti ti-alert-triangle" aria-hidden="true" /> La plantilla &quot;
+            {templateWarning.name}&quot; no aplica este orden
+          </strong>
+          <p>
+            Es una copia hecha antes de esta funcion: dibuja los hallazgos con un formato fijo, asi
+            que el orden, lo oculto y los saltos de pagina se guardan pero no aparecen en el PDF.
+          </p>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            <button className="btn small primary" onClick={templateWarning.onUpgrade}>
+              <i className="ti ti-wand" />
+              Actualizar mi plantilla
+            </button>
+            <button className="btn small" onClick={templateWarning.onUseBuiltin}>
+              <i className="ti ti-template" />
+              Usar la plantilla incluida
+            </button>
+          </div>
+          <p className="faint" style={{ fontSize: 11, marginBottom: 0 }}>
+            Actualizar reemplaza solo la parte que dibuja los hallazgos y conserva el resto de tu
+            copia. El original queda en {templateWarning.name}.typ.bak.
+          </p>
+        </div>
+      )}
+      {field && meta ? (
+        <>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h3 style={{ margin: 0 }}>
+              <i className={`ti ${meta.icon}`} aria-hidden="true" /> {meta.label}
+            </h3>
+            {separator ? (
+              <button className="btn" onClick={onRemove}>
+                <i className="ti ti-trash" />
+                Quitar
+              </button>
+            ) : (
+              <button className="btn" onClick={onToggle}>
+                <i className={`ti ${field.enabled ? "ti-eye-off" : "ti-eye"}`} />
+                {field.enabled ? "Ocultar en el PDF" : "Mostrar en el PDF"}
+              </button>
+            )}
+          </div>
+          <p className="faint" style={{ fontSize: 13 }}>
+            {meta.hint}
+            {INLINE_FIELDS.has(field.key) &&
+              " Se dibuja en linea junto a los otros chips que tenga al lado."}
+          </p>
+        </>
+      ) : (
+        <>
+          <h3 style={{ marginTop: 0 }}>Hallazgos</h3>
+          <p className="faint" style={{ fontSize: 13 }}>
+            Define como se arma cada hallazgo en el PDF. Desplega el bloque en el arbol y arrastra
+            sus campos para ordenarlos; el ojo los oculta. Aplica a todos los hallazgos del
+            reporte: el contenido de cada uno se edita en la pantalla Hallazgos.
+          </p>
+        </>
+      )}
+      <div className="row" style={{ gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+        <button className="btn small" onClick={() => onAddSeparator("pagebreak")}>
+          <i className="ti ti-page-break" />
+          Salto de pagina
+        </button>
+        <button className="btn small" style={{ marginLeft: "auto" }} onClick={onReset}>
+          <i className="ti ti-restore" />
+          Restablecer orden
+        </button>
+      </div>
+      <p className="faint" style={{ fontSize: 11, marginTop: 8 }}>
+        {field
+          ? "El salto de pagina se inserta debajo del campo seleccionado: lo que sigue arranca en una hoja nueva."
+          : "El salto de pagina se agrega al final; despues arrastralo a su lugar."}
+      </p>
+    </div>
+  );
 }

@@ -204,6 +204,16 @@ export function readTemplateSource(name: string): Promise<string> {
   return invoke("read_template_source", { name });
 }
 
+/** Resultado de actualizar una copia de plantilla al orden de campos. */
+export type TemplateUpgrade = "upgraded" | "already_supported" | "unsupported";
+
+/** Actualiza una copia de la libreria del usuario (hecha antes del orden
+ * configurable de campos) para que respete el orden y los saltos del bloque
+ * "Hallazgos". Solo reemplaza el detalle de hallazgos; guarda `<name>.typ.bak`. */
+export function upgradeTemplateFindingFields(name: string): Promise<TemplateUpgrade> {
+  return invoke("upgrade_template_finding_fields", { name });
+}
+
 /** Guarda el codigo fuente .typ en la libreria del usuario. */
 export function saveTemplateSource(name: string, content: string): Promise<void> {
   return invoke("save_template_source", { name, content });

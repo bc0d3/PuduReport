@@ -1433,3 +1433,61 @@
     justify-content: flex-start;
   }
 }
+
+/* Arbol del reporte: campos del hallazgo colgando del bloque "Hallazgos". */
+.report-tree-children {
+  margin: 2px 0 6px 18px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.report-tree-separator .report-block-label {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.report-tree-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.report-tree-caret:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+.report-tree-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 2px 0 4px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--warning, #b4690e) 12%, transparent);
+  color: var(--warning, #b4690e);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.report-template-warning {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--warning, #b4690e);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--warning, #b4690e) 8%, transparent);
+}
+.report-template-warning strong {
+  color: var(--warning, #b4690e);
+}
+.report-template-warning p {
+  font-size: 13px;
+  margin: 6px 0 10px;
+}

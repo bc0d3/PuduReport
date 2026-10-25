@@ -781,6 +781,18 @@ fn read_template_source(
     std::fs::read_to_string(path).map_err(|e| e.to_string())
 }
 
+/// Actualiza una copia de la libreria del usuario, hecha antes del orden
+/// configurable de campos, para que respete el orden y los saltos del bloque
+/// "Hallazgos". Solo reemplaza el detalle de hallazgos y guarda `<name>.typ.bak`.
+#[tauri::command]
+fn upgrade_template_finding_fields(
+    state: State<AppState>,
+    name: String,
+) -> Result<workspace::TemplateUpgrade, String> {
+    let root = current_root(&state)?;
+    workspace::upgrade_template_finding_fields(&root, &name).map_err(|e| e.to_string())
+}
+
 /// Guarda el codigo fuente .typ en la libreria del usuario.
 #[tauri::command]
 fn save_template_source(
@@ -1053,6 +1065,7 @@ pub fn run() {
             duplicate_template,
             read_template_source,
             save_template_source,
+            upgrade_template_finding_fields,
             save_template_meta,
             delete_template,
             generate_pdf,
