@@ -1,0 +1,9 @@
+# Propietario por defecto. Las reglas especificas facilitan ampliarlo por area.
+* @bc0d3
+
+/.github/ @bc0d3
+/core/ @bc0d3
+/mcp/ @bc0d3
+/src-tauri/ @bc0d3
+/src/ @bc0d3
+/templates/ @bc0d3
