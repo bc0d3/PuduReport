@@ -14,6 +14,9 @@ Todo cambio notable se documenta en este archivo. El formato sigue Keep a Change
 - `update_finding` del servidor MCP acepta `impacto_negocio`, `categoria_riesgo` y `modulo`, con validacion de lista y largo.
 - El proyecto de ejemplo incluye causas raiz, plan de remediacion y los campos de negocio en sus hallazgos.
 
+### Security
+- La exportacion CSV neutraliza la inyeccion de formulas: toda celda cuyo primer caracter no blanco sea `=`, `+`, `-` o `@`, o que empiece con tabulador o retorno de carro, se exporta con una comilla simple delante para que Excel, LibreOffice o Google Sheets la muestren como texto. Aplica a todas las columnas, incluidas las de texto libre `modulo`, `impacto_negocio` y `causa_raiz`; el entrecomillado RFC 4180 se aplica despues. Los valores CVSS (ej. `9.8`) no cambian; un numero negativo, que hoy ninguna columna produce, se exportaria como texto.
+
 ### Compatibility
 - Los destinos existentes y los nuevos arrancan con estos datos apagados: el payload es el mismo de siempre hasta que el usuario los active. Los `project.yaml` previos se leen sin cambios (ambos campos quedan sin especificar) y cualquier valor fuera de la lista se descarta.
 - Los campos de negocio no estan en los campos por default de los destinos ni del CSV: los destinos existentes reciben el mismo payload. Los hallazgos y `project.yaml` previos se leen sin cambios y los campos vacios no se escriben a disco. Una categoria o prioridad fuera de la lista, una causa raiz inexistente o un hallazgo inexistente en el plan se descartan al leer y al guardar.
