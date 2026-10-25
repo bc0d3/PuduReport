@@ -98,7 +98,9 @@ npm run tauri build    # genera .dmg / .msi / .exe / .AppImage / .deb
 - **TS/React**: modo strict, prohibido `any`; todo el IPC encapsulado en `lib/api.ts` (nunca `invoke` suelto); componentes funcionales + hooks; Context solo para lo compartido.
 - **Diseno**: tokens en [DESIGN.md](DESIGN.md) (shell de escritorio, graphite oscuro y claro, Inter + JetBrains Mono, iconos Tabler). Sin emojis en codigo/UI/docs.
 - **Commits**: Conventional Commits (`feat:`, `fix:`, `docs:`...). Alimentan el CHANGELOG.
-- **Ramas**: `dev` (desarrollo) + `feature/*`; PR a `main` (estable). Los releases se taguean `v*` desde `main`.
+- **Ramas**: `feature/*`, `fix/*`, `docs/*` y `ci/*` abren PR contra `dev`.
+  Solo `dev` abre PR de release contra `main`. Los releases se taguean `v*`
+  desde `main`.
 
 ## Como agregar cosas
 
