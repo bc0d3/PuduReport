@@ -4,6 +4,8 @@ Todo cambio notable se documenta en este archivo. El formato sigue Keep a Change
 
 ## [Unreleased]
 
+## [0.0.26] - 2026-10-25
+
 ### Added
 - Datos del proyecto con dos clasificaciones opcionales de lista cerrada: Ambiente evaluado (`qa`, `produccion`) y Exposicion del activo (`internet`, `interno`). Son metadata para integraciones y no se muestran en el PDF.
 - Los destinos de exportacion a API pueden activar "Datos del proyecto (opcionales)" para enviar `project.environment` y `project.exposure`. Solo se incluyen si el destino los activa y el proyecto los tiene definidos.
