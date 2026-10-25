@@ -153,3 +153,116 @@
     #list(..items)
   ]
 }
+
+// --- Hallazgo con campos configurables ---
+//
+// El bloque "Hallazgos" del reporte guarda en config.fields el orden y la
+// visibilidad de las piezas de cada hallazgo, mas saltos de pagina (se pueden
+// repetir). Sin config se usa el orden de siempre, asi que un reporte que
+// no se toco se ve igual que antes.
+
+// Piezas que se dibujan en linea (chips); el resto son bloques.
+#let finding-inline-fields = ("severity", "cvss", "cwe", "status")
+
+// Orden por defecto de pentest/htb (el que tenian las plantillas).
+#let default-finding-fields = (
+  "title", "severity", "cvss", "cwe", "status", "vector", "affected",
+  "descripcion", "impacto", "poc", "remediacion",
+)
+
+// Normaliza config.fields a una lista de (key, enabled). Las piezas conocidas
+// que falten en la config (p.ej. agregadas en una version nueva) se anexan al
+// final visibles; los separadores se pueden repetir.
+#let finding-fields(cfg, defaults: default-finding-fields) = {
+  let raw = cfg.at("fields", default: ())
+  let items = if type(raw) == array {
+    raw
+      .filter(x => type(x) == dictionary and x.at("key", default: "") != "")
+      .map(x => (key: x.at("key"), enabled: x.at("enabled", default: true)))
+  } else { () }
+  let present = items.map(x => x.key)
+  for k in defaults {
+    if not present.contains(k) { items.push((key: k, enabled: true)) }
+  }
+  items
+}
+
+// Chips de pentest/htb: severidad, CVSS, CWE y estado.
+#let default-finding-chip(k, f) = {
+  let color = sev-color.at(f.severity, default: sev-color.info)
+  if k == "severity" {
+    badge(sev-label.at(f.severity, default: f.severity), color)
+  } else if k == "cvss" and f.cvss != "" {
+    box(fill: color, inset: (x: 6pt, y: 3pt), radius: 3pt)[
+      #text(size: 8pt, weight: "bold", fill: white)[CVSS #f.cvss_version: #f.cvss]
+    ]
+  } else if k == "cwe" and f.cwe != "" {
+    box(fill: luma(240), inset: (x: 6pt, y: 3pt), radius: 3pt, text(size: 8pt)[#f.cwe])
+  } else if k == "status" {
+    status-chip(f.status)
+  }
+}
+
+// Dibuja un hallazgo siguiendo `fields`. `color` es el de la franja; `chip`
+// resuelve cada pieza en linea; `skip` omite piezas que la plantilla no usa.
+#let render-finding(
+  f,
+  i,
+  fields,
+  color: sev-color.info,
+  mono-font: "DejaVu Sans Mono",
+  chip: default-finding-chip,
+  skip: (),
+) = {
+  let keys = fields.filter(x => x.enabled and not skip.contains(x.key)).map(x => x.key)
+  let sections = f.at("sections", default: ())
+  let chips-of(list) = list.map(c => chip(c, f)).filter(c => c != none)
+  let n = keys.len()
+  let j = 0
+  let first-section = true
+  while j < n {
+    let k = keys.at(j)
+    if k == "title" or finding-inline-fields.contains(k) {
+      // El titulo abre la franja y se lleva los chips que lo siguen; chips
+      // sueltos (sin titulo delante) van en una linea propia.
+      let start = if k == "title" { j + 1 } else { j }
+      let m = start
+      while m < n and finding-inline-fields.contains(keys.at(m)) { m += 1 }
+      let parts = chips-of(keys.slice(start, m))
+      if k == "title" {
+        block(
+          breakable: false,
+          sticky: true,
+          width: 100%,
+          inset: (left: 10pt),
+          stroke: (left: 3pt + color),
+        )[
+          #heading(level: 2, numbering: none, str(i + 1) + ". " + f.title)
+          #if parts.len() > 0 { parts.join(h(6pt)) }
+        ]
+      } else if parts.len() > 0 {
+        block(above: 6pt, parts.join(h(6pt)))
+      }
+      j = m
+    } else {
+      if k == "vector" and f.cvss_vector != "" {
+        block(above: 6pt, vector-chip(f.cvss_vector, mono-font))
+      } else if k == "affected" {
+        affected-assets(f.affected)
+      } else if k == "pagebreak" {
+        pagebreak(weak: true)
+      } else {
+        let s = sections.find(x => x.key == k)
+        if s != none {
+          if first-section { v(4pt) }
+          first-section = false
+          set heading(outlined: false)
+          if s.heading { heading(level: 2, numbering: none, s.title) }
+          eval(s.body, mode: "markup")
+        }
+      }
+      j += 1
+    }
+  }
+  v(0.6cm)
+}

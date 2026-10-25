@@ -250,43 +250,43 @@
   }
 }
 
-#let findings-detail(rows) = {
-  for (i, f) in rows.enumerate() {
-    let color = status-color.at(f.status, default: rgb("#78716c"))
-    if i > 0 and ws.branding.findings_page_break { pagebreak() }
-    block(
-      breakable: false,
-      sticky: true,
-      width: 100%,
-      inset: (left: 10pt),
-      stroke: (left: 3pt + color),
-    )[
-      #heading(level: 2, numbering: none, str(i + 1) + ". " + f.title)
-      #status-badge(f.status)
-      #h(6pt)
-      #badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info))
-    ]
+// Retest: franja por estado, el estado antes que la severidad y sin CVSS/CWE
+// ni vector (igual que antes). El orden de las piezas sale de la config del
+// bloque "Hallazgos"; sin config, este orden por defecto.
+#let retest-finding-fields = (
+  "title", "status", "severity", "affected",
+  "descripcion", "impacto", "poc", "remediacion",
+)
+#let retest-chip(k, f) = if k == "status" {
+  status-badge(f.status)
+} else if k == "severity" {
+  badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info))
+}
 
-    if f.affected.len() > 0 {
-      affected-assets(f.affected)
-    }
-    v(4pt)
-    {
-      set heading(outlined: false)
-      eval(f.body, mode: "markup")
-    }
-    v(0.6cm)
+#let findings-detail(rows, fields) = {
+  for (i, f) in rows.enumerate() {
+    if i > 0 and ws.branding.findings_page_break { pagebreak() }
+    render-finding(
+      f,
+      i,
+      fields,
+      color: status-color.at(f.status, default: rgb("#78716c")),
+      mono-font: mono-font,
+      chip: retest-chip,
+      skip: ("cvss", "cwe", "vector"),
+    )
   }
 }
 
-#let block-findings() = {
+#let block-findings(cfg) = {
+  let fields = finding-fields(cfg, defaults: retest-finding-fields)
   pagebreak()
   heading(level: 1, numbering: none)[Detalle de verificacion]
-  findings-detail(verified-findings)
+  findings-detail(verified-findings, fields)
   if new-findings.len() > 0 {
     pagebreak()
     heading(level: 1, numbering: none)[Hallazgos nuevos detectados]
-    findings-detail(new-findings)
+    findings-detail(new-findings, fields)
   }
 }
 
@@ -297,7 +297,7 @@
       block-info()
     } else if k == "severity" { block-severity() } else if k == "findings_index" {
       block-findings-index()
-    } else if k == "findings" { block-findings() } else if k == "section" {
+    } else if k == "findings" { block-findings(b.at("config", default: (:))) } else if k == "section" {
       block-section(b.at("config", default: (:)).at("key", default: none))
     } else if k == "text" { block-text(b) } else if k == "pagebreak" { pagebreak() }
   }
