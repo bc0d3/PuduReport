@@ -9,7 +9,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use pudureport_core::models::{
-    CvssVersion, ExportTarget, Finding, FindingStatus, ProjectMeta, Severity,
+    categoria_riesgo_label, CvssVersion, ExportTarget, Finding, FindingStatus, ProjectMeta,
+    Severity,
 };
 use pudureport_core::workspace;
 use serde_json::{json, Map, Value};
@@ -29,6 +30,10 @@ fn header_for(col: &str) -> &str {
         "estado" => "Estado",
         "afectados" => "Afectados",
         "nuevo" => "Nuevo",
+        "modulo" => "Modulo",
+        "impacto_negocio" => "Impacto al negocio",
+        "categoria_riesgo" => "Categoria de riesgo",
+        "causa_raiz" => "Causa raiz",
         other => other,
     }
 }
@@ -64,8 +69,18 @@ fn csv_escape(field: &str) -> String {
     }
 }
 
+/// Titulo de la causa raiz a la que apunta un hallazgo ("" si no tiene).
+fn root_cause_title<'a>(f: &Finding, project: &'a ProjectMeta) -> &'a str {
+    project
+        .causas_raiz
+        .iter()
+        .find(|c| !f.meta.causa_raiz.is_empty() && c.clave == f.meta.causa_raiz)
+        .map(|c| c.titulo.trim())
+        .unwrap_or("")
+}
+
 /// Valor de una columna para un hallazgo dado (1-based `n`).
-fn value_for(col: &str, n: usize, f: &pudureport_core::models::Finding) -> String {
+fn value_for(col: &str, n: usize, f: &Finding, project: &ProjectMeta) -> String {
     match col {
         "numero" => n.to_string(),
         "titulo" => f.meta.title.clone(),
@@ -81,6 +96,10 @@ fn value_for(col: &str, n: usize, f: &pudureport_core::models::Finding) -> Strin
         "estado" => status_label(f.meta.status).to_string(),
         "afectados" => f.meta.affected.join("; "),
         "nuevo" => if f.meta.new_in_retest { "Si" } else { "" }.to_string(),
+        "modulo" => f.meta.modulo.trim().to_string(),
+        "impacto_negocio" => f.meta.impacto_negocio.trim().to_string(),
+        "categoria_riesgo" => categoria_riesgo_label(&f.meta.categoria_riesgo).to_string(),
+        "causa_raiz" => root_cause_title(f, project).to_string(),
         _ => String::new(),
     }
 }
@@ -107,7 +126,7 @@ pub fn export_csv(root: &Path, project_id: &str, columns: &[String]) -> Result<S
     for (i, f) in findings.iter().enumerate() {
         let row: Vec<String> = columns
             .iter()
-            .map(|c| csv_escape(&value_for(c, i + 1, f)))
+            .map(|c| csv_escape(&value_for(c, i + 1, f, &project)))
             .collect();
         csv.push_str(&row.join(","));
         csv.push_str("\r\n");
@@ -151,8 +170,10 @@ fn status_slug(s: FindingStatus) -> &'static str {
 /// Valor JSON tipado de un campo para un hallazgo (1-based `n`). Mismo
 /// vocabulario de campos que el CSV, pero con tipos utiles para KPIs (numeros,
 /// arrays, slugs), no strings. Los campos desconocidos devuelven null. NUNCA
-/// expone el cuerpo/PoC del hallazgo.
-fn json_value_for(col: &str, n: usize, f: &Finding) -> Value {
+/// expone el cuerpo/PoC del hallazgo. Los campos de negocio (`modulo`,
+/// `impacto_negocio`, `categoria_riesgo`, `causa_raiz`) solo salen si el
+/// destino los configura: no estan en los campos por default.
+fn json_value_for(col: &str, n: usize, f: &Finding, project: &ProjectMeta) -> Value {
     match col {
         "numero" => json!(n),
         "titulo" => json!(f.meta.title),
@@ -171,6 +192,19 @@ fn json_value_for(col: &str, n: usize, f: &Finding) -> Value {
         "estado" => json!(status_slug(f.meta.status)),
         "afectados" => json!(f.meta.affected),
         "nuevo" => json!(f.meta.new_in_retest),
+        "modulo" => json!(f.meta.modulo.trim()),
+        "impacto_negocio" => json!(f.meta.impacto_negocio.trim()),
+        // Slug de la lista cerrada, o null si no esta definida.
+        "categoria_riesgo" => match f.meta.categoria_riesgo.as_str() {
+            "" => Value::Null,
+            slug => json!(slug),
+        },
+        // Clave estable + titulo legible, o null si no tiene causa raiz.
+        "causa_raiz" if f.meta.causa_raiz.is_empty() => Value::Null,
+        "causa_raiz" => json!({
+            "clave": f.meta.causa_raiz,
+            "titulo": root_cause_title(f, project),
+        }),
         _ => Value::Null,
     }
 }
@@ -212,7 +246,7 @@ pub fn build_api_payload(
         .map(|(i, f)| {
             let mut obj = Map::new();
             for field in &target.fields {
-                obj.insert(field.clone(), json_value_for(field, i + 1, f));
+                obj.insert(field.clone(), json_value_for(field, i + 1, f, &project));
             }
             Value::Object(obj)
         })
@@ -408,6 +442,126 @@ mod tests {
         // Summary con conteos por severidad.
         assert_eq!(payload["summary"]["total"], 1);
         assert_eq!(payload["summary"]["by_severity"]["critical"], 1);
+    }
+
+    /// Workspace con un proyecto que tiene una causa raiz y un hallazgo con
+    /// todos los campos de negocio, mas otro hallazgo sin ellos.
+    fn project_with_business_fields() -> (std::path::PathBuf, String) {
+        let root = tmp_ws();
+        let (pid, mut meta) = workspace::create_project(&root, "Web", "ACME", "pentest").unwrap();
+        meta.causas_raiz = vec![pudureport_core::models::CausaRaiz {
+            clave: "validacion".to_string(),
+            titulo: "Validacion de entradas".to_string(),
+            descripcion: String::new(),
+        }];
+        meta.finding_order = vec!["001-a".to_string(), "002-b".to_string()];
+        workspace::write_project_meta(&root, &pid, &meta).unwrap();
+        let mut f = finding("001-a", "SQLi", Severity::Critical, "9.8", false);
+        f.meta.modulo = "Login".to_string();
+        f.meta.impacto_negocio = "Fuga de la base de clientes, con datos personales.".to_string();
+        f.meta.categoria_riesgo = "fuga_datos".to_string();
+        f.meta.causa_raiz = "validacion".to_string();
+        workspace::write_finding(&root, &pid, &f).unwrap();
+        workspace::write_finding(
+            &root,
+            &pid,
+            &finding("002-b", "Cabeceras", Severity::Low, "3.1", false),
+        )
+        .unwrap();
+        (root, pid)
+    }
+
+    const BUSINESS_FIELDS: [&str; 4] = [
+        "modulo",
+        "impacto_negocio",
+        "categoria_riesgo",
+        "causa_raiz",
+    ];
+
+    #[test]
+    fn payload_no_incluye_campos_de_negocio_si_el_destino_no_los_configura() {
+        // Destino previo (campos por default): mismo esquema de siempre.
+        let (root, pid) = project_with_business_fields();
+        let target = ExportTarget {
+            name: "hub".to_string(),
+            url: "https://hub.example/api/import".to_string(),
+            fields: vec![
+                "titulo".to_string(),
+                "severidad".to_string(),
+                "cvss".to_string(),
+                "cvss_vector".to_string(),
+                "cwe".to_string(),
+                "estado".to_string(),
+                "afectados".to_string(),
+            ],
+            include_summary: true,
+            project_fields: Vec::new(),
+        };
+        let payload = build_api_payload(&root, &pid, &target).unwrap();
+        for item in payload["findings"].as_array().unwrap() {
+            assert_eq!(item.as_object().unwrap().len(), target.fields.len());
+            for key in BUSINESS_FIELDS {
+                assert!(item.get(key).is_none(), "{key} no deberia salir");
+            }
+        }
+        assert!(!payload.to_string().contains("Fuga de la base"));
+    }
+
+    #[test]
+    fn payload_incluye_campos_de_negocio_configurados_con_tipos_estables() {
+        let (root, pid) = project_with_business_fields();
+        let mut fields = vec!["numero".to_string()];
+        fields.extend(BUSINESS_FIELDS.iter().map(|k| k.to_string()));
+        let target = ExportTarget {
+            name: "hub".to_string(),
+            url: "https://hub.example/api/import".to_string(),
+            fields,
+            include_summary: false,
+            project_fields: Vec::new(),
+        };
+        let payload = build_api_payload(&root, &pid, &target).unwrap();
+        let items = payload["findings"].as_array().unwrap();
+        assert_eq!(items[0]["modulo"], "Login");
+        assert_eq!(
+            items[0]["impacto_negocio"],
+            "Fuga de la base de clientes, con datos personales."
+        );
+        assert_eq!(items[0]["categoria_riesgo"], "fuga_datos");
+        assert_eq!(items[0]["causa_raiz"]["clave"], "validacion");
+        assert_eq!(items[0]["causa_raiz"]["titulo"], "Validacion de entradas");
+        // Sin datos: la clave sigue presente (esquema estable por destino).
+        assert_eq!(items[1]["modulo"], "");
+        assert_eq!(items[1]["impacto_negocio"], "");
+        assert!(items[1]["categoria_riesgo"].is_null());
+        assert!(items[1]["causa_raiz"].is_null());
+        for item in items {
+            assert_eq!(item.as_object().unwrap().len(), target.fields.len());
+        }
+    }
+
+    #[test]
+    fn csv_agrega_columnas_de_negocio_solo_si_se_piden() {
+        let (root, pid) = project_with_business_fields();
+        let columns: Vec<String> = ["numero", "titulo"].iter().map(|c| c.to_string()).collect();
+        let path = export_csv(&root, &pid, &columns).unwrap();
+        let csv = std::fs::read_to_string(path).unwrap();
+        assert!(csv.starts_with("\u{FEFF}#,Titulo\r\n"));
+        assert!(!csv.contains("Login"));
+
+        let mut columns = columns;
+        columns.extend(BUSINESS_FIELDS.iter().map(|k| k.to_string()));
+        let path = export_csv(&root, &pid, &columns).unwrap();
+        let csv = std::fs::read_to_string(path).unwrap();
+        let lines: Vec<&str> = csv.trim_start_matches('\u{FEFF}').lines().collect();
+        assert_eq!(
+            lines[0],
+            "#,Titulo,Modulo,Impacto al negocio,Categoria de riesgo,Causa raiz"
+        );
+        assert_eq!(
+            lines[1],
+            "1,SQLi,Login,\"Fuga de la base de clientes, con datos personales.\",Fuga de datos personales,Validacion de entradas"
+        );
+        assert_eq!(lines[2], "2,Cabeceras,,,,");
     }
 
     /// Destino minimo con los datos opcionales del proyecto indicados.

@@ -356,3 +356,18 @@ Las filas distinguen contenido editable, automatico y oculto; la seleccion es un
 boton accesible. El agarre permite arrastrar y Subir/Bajar ofrece una alternativa.
 El orden persistido no cambia hasta una accion del usuario; la seleccion sigue
 al bloque movido. Se conservan la vista previa, exportacion y flujo fijo de OSCP.
+
+### Parte ejecutiva del informe de ethical hacking
+
+El editor de hallazgos suma, despues de Activos afectados, una fila con Modulo,
+Categoria de riesgo y Causa raiz (mismos controles `.input`/`.select` que
+severidad y estado) y un textarea de Impacto al negocio con contador de
+caracteres. Se ocultan en los tipos de examen. Causa raiz se deshabilita con una
+indicacion cuando el proyecto no tiene causas raiz.
+
+Datos del proyecto agrega dos listas editables en tarjetas: Causas raiz (titulo
+y descripcion) y Plan de remediacion (prioridad, responsable, accion y una lista
+de casillas con los hallazgos numerados como en el PDF). Son texto plano. En el
+Orden del documento aparecen cuatro bloques automaticos (Causas raiz, Riesgos
+para el negocio, Hallazgos e impacto, Plan de remediacion) que se ocultan o
+mueven como el resto y no generan contenido sin datos.

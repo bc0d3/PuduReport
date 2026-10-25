@@ -281,7 +281,10 @@
       block-info()
     } else if k == "severity" { block-severity() } else if k == "section" {
       block-section(b.at("config", default: (:)).at("key", default: none))
-    } else if k == "text" { block-text(b) } else if k == "pagebreak" { pagebreak() }
+    } else if k == "text" { block-text(b) } else if k == "pagebreak" { pagebreak() } else {
+      // Parte ejecutiva: causas raiz, riesgos, impacto y plan (theme.typ).
+      executive-block(k, data)
+    }
   }
 }
 

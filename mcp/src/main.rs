@@ -31,7 +31,10 @@
 use std::path::PathBuf;
 
 use base64::Engine;
-use pudureport_core::models::{CvssVersion, FindingMeta, FindingStatus, Severity};
+use pudureport_core::models::{
+    CvssVersion, FindingMeta, FindingStatus, Severity, CATEGORIAS_RIESGO, MAX_IMPACTO_NEGOCIO,
+    MAX_MODULO,
+};
 use pudureport_core::workspace;
 use pudureport_core::{cvss, pdf};
 use rmcp::handler::server::wrapper::Parameters;
@@ -192,6 +195,65 @@ struct UpdateFindingArgs {
     status: Option<String>,
     /// Recursos afectados (URLs, hosts, endpoints).
     affected: Option<Vec<String>>,
+    /// Impacto para el negocio en un parrafo corto de texto plano (hasta 500
+    /// caracteres): que le pasa a la organizacion si se explota. No reemplaza
+    /// la seccion Impacto. Un string vacio lo borra.
+    impacto_negocio: Option<String>,
+    /// Categoria de riesgo para el negocio: fuga_datos | fraude_economico |
+    /// interrupcion_servicio | incumplimiento_regulatorio | reputacional |
+    /// reconocimiento. Un string vacio la borra.
+    categoria_riesgo: Option<String>,
+    /// Modulo o componente afectado (hasta 120 caracteres). Un string vacio
+    /// lo borra.
+    modulo: Option<String>,
+}
+
+/// Campos de negocio ya validados de `update_finding` (None = no se tocan).
+struct BusinessFields {
+    impacto_negocio: Option<String>,
+    categoria_riesgo: Option<String>,
+    modulo: Option<String>,
+}
+
+/// Valida los campos de negocio de `update_finding` y devuelve sus valores
+/// normalizados (recortados; categoria en minusculas). Falla sin escribir nada
+/// si la categoria no es de la lista o si un texto excede su largo maximo.
+fn validate_business_fields(args: &UpdateFindingArgs) -> Result<BusinessFields, McpError> {
+    let categoria = match args.categoria_riesgo.as_deref() {
+        Some(value) => {
+            let v = value.trim().to_ascii_lowercase();
+            if !CATEGORIAS_RIESGO.contains(&v.as_str()) {
+                return Err(McpError::invalid_params(
+                    format!(
+                        "categoria_riesgo no valida: {value} (use {} o un string vacio)",
+                        CATEGORIAS_RIESGO[1..].join("|")
+                    ),
+                    None,
+                ));
+            }
+            Some(v)
+        }
+        None => None,
+    };
+    let bounded = |name: &str, value: Option<&str>, max: usize| match value {
+        Some(v) if v.trim().chars().count() > max => Err(McpError::invalid_params(
+            format!("{name} excede {max} caracteres"),
+            None,
+        )),
+        Some(v) => Ok(Some(v.trim().to_string())),
+        None => Ok(None),
+    };
+    let impacto = bounded(
+        "impacto_negocio",
+        args.impacto_negocio.as_deref(),
+        MAX_IMPACTO_NEGOCIO,
+    )?;
+    let modulo = bounded("modulo", args.modulo.as_deref(), MAX_MODULO)?;
+    Ok(BusinessFields {
+        impacto_negocio: impacto,
+        categoria_riesgo: categoria,
+        modulo,
+    })
 }
 
 /// Contenido Markdown sin encabezados H2 de seccion; use ### para subtitulos.
@@ -652,7 +714,7 @@ impl PuduReportServer {
 
     /// Actualiza el texto y los campos de un hallazgo existente.
     #[tool(
-        description = "Actualiza titulo, cuerpo y campos de un hallazgo. Prefiera sections para editar varias casillas (descripcion, impacto, poc, remediacion), conservando las omitidas. No combine sections con body: body reemplaza todo el texto. Solo cambia lo que se envia. No recompila: llame build_project despues para actualizar data.json y PDF. La severidad se deriva del cvss_vector (salvo tipos de examen)."
+        description = "Actualiza titulo, cuerpo y campos de un hallazgo. Prefiera sections para editar varias casillas (descripcion, impacto, poc, remediacion), conservando las omitidas. No combine sections con body: body reemplaza todo el texto. Solo cambia lo que se envia. Para la parte ejecutiva acepta impacto_negocio (parrafo de hasta 500 caracteres), categoria_riesgo (lista cerrada) y modulo (hasta 120 caracteres). No recompila: llame build_project despues para actualizar data.json y PDF. La severidad se deriva del cvss_vector (salvo tipos de examen)."
     )]
     async fn update_finding(
         &self,
@@ -663,6 +725,16 @@ impl PuduReportServer {
         let mut finding =
             workspace::load_finding(&root, &args.project_id, &args.finding_id).map_err(internal)?;
         validate_body_sections(&args.body, &args.sections)?;
+        let business = validate_business_fields(&args)?;
+        if let Some(value) = business.impacto_negocio {
+            finding.meta.impacto_negocio = value;
+        }
+        if let Some(value) = business.categoria_riesgo {
+            finding.meta.categoria_riesgo = value;
+        }
+        if let Some(value) = business.modulo {
+            finding.meta.modulo = value;
+        }
         if let Some(sections) = args.sections {
             finding.body = sections.apply(&finding.body)?;
         }
@@ -1302,6 +1374,9 @@ mod tests {
                 cwe: None,
                 status: None,
                 affected: None,
+                impacto_negocio: None,
+                categoria_riesgo: None,
+                modulo: None,
             }))
             .await;
         assert!(err.is_err(), "no debe permitir severidad manual sin CVSS");
@@ -1442,12 +1517,96 @@ mod tests {
                 cwe: None,
                 status: None,
                 affected: None,
+                impacto_negocio: None,
+                categoria_riesgo: None,
+                modulo: None,
             }))
             .await
             .unwrap(),
         );
         assert_eq!(updated["id"].as_str().unwrap(), fid);
         assert_eq!(updated["meta"]["title"], "Titulo nuevo");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Argumentos de update_finding que solo tocan los campos de negocio.
+    fn business_update(
+        pid: &str,
+        fid: &str,
+        impacto: Option<&str>,
+        categoria: Option<&str>,
+        modulo: Option<&str>,
+    ) -> UpdateFindingArgs {
+        UpdateFindingArgs {
+            sections: None,
+            project_id: pid.to_string(),
+            finding_id: fid.to_string(),
+            title: None,
+            body: None,
+            cvss_vector: None,
+            cvss_version: None,
+            severity: None,
+            cwe: None,
+            status: None,
+            affected: None,
+            impacto_negocio: impacto.map(str::to_string),
+            categoria_riesgo: categoria.map(str::to_string),
+            modulo: modulo.map(str::to_string),
+        }
+    }
+
+    #[tokio::test]
+    async fn update_finding_actualiza_y_valida_campos_de_negocio() {
+        let (root, pid) = temp_workspace("update-business", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        let fid = workspace::create_finding(&root, &pid, "SQLi").unwrap().id;
+
+        let updated = parse(
+            srv.update_finding(Parameters(business_update(
+                &pid,
+                &fid,
+                Some("  Fuga de la base de clientes.  "),
+                Some(" Fuga_Datos "),
+                Some("Login"),
+            )))
+            .await
+            .unwrap(),
+        );
+        assert_eq!(
+            updated["meta"]["impacto_negocio"],
+            "Fuga de la base de clientes."
+        );
+        assert_eq!(updated["meta"]["categoria_riesgo"], "fuga_datos");
+        assert_eq!(updated["meta"]["modulo"], "Login");
+
+        // Categoria fuera de la lista o textos demasiado largos: error y el
+        // hallazgo queda como estaba.
+        let long = "x".repeat(MAX_IMPACTO_NEGOCIO + 1);
+        for args in [
+            business_update(&pid, &fid, None, Some("phishing"), None),
+            business_update(&pid, &fid, Some(&long), None, None),
+            business_update(&pid, &fid, None, None, Some(&"m".repeat(MAX_MODULO + 1))),
+        ] {
+            assert!(srv.update_finding(Parameters(args)).await.is_err());
+        }
+        let stored = workspace::load_finding(&root, &pid, &fid).unwrap();
+        assert_eq!(stored.meta.categoria_riesgo, "fuga_datos");
+        assert_eq!(stored.meta.modulo, "Login");
+
+        // Un string vacio borra el campo; lo omitido no se toca.
+        let cleared = parse(
+            srv.update_finding(Parameters(business_update(
+                &pid,
+                &fid,
+                None,
+                Some(""),
+                None,
+            )))
+            .await
+            .unwrap(),
+        );
+        assert!(cleared["meta"].get("categoria_riesgo").is_none());
+        assert_eq!(cleared["meta"]["modulo"], "Login");
         let _ = std::fs::remove_dir_all(&root);
     }
 

@@ -27,6 +27,7 @@ Aplicacion de escritorio local-first para redactar reportes de vulnerabilidades 
 - Calculadora CVSS 3.1 y 4.0 integrada. La severidad se deriva del vector.
 - Libreria de plantillas: hallazgos y snippets reutilizables con variables.
 - Generacion de PDF con plantillas personalizables: portada con tu logo y colores, marca de agua, secciones activables.
+- Parte ejecutiva para informes de ethical hacking: impacto al negocio y categoria de riesgo por hallazgo, causas raiz, tabla de hallazgos con modulo e impacto y plan de remediacion priorizado.
 - Workspaces locales en la carpeta que elijas. Cada workspace es git-friendly (solo texto + assets).
 - Multiplataforma: macOS, Windows y Linux.
 

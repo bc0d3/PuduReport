@@ -312,6 +312,10 @@ fn save_project(state: State<AppState>, id: String, mut meta: ProjectMeta) -> Re
     let root = current_root(&state)?;
     // Ambiente/exposicion son listas cerradas: nunca se guarda texto libre.
     meta.normalize_classification();
+    // Parte ejecutiva: claves de causas raiz validas, prioridades de la lista
+    // y el plan solo con hallazgos que existen.
+    let finding_ids = workspace::finding_ids(&root, &id).map_err(|e| e.to_string())?;
+    meta.normalize_executive(&finding_ids);
     workspace::write_project_meta(&root, &id, &meta).map_err(|e| e.to_string())
 }
 
@@ -481,9 +485,11 @@ fn create_finding(
 fn save_finding(
     state: State<AppState>,
     project_id: String,
-    finding: Finding,
+    mut finding: Finding,
 ) -> Result<Finding, String> {
     let root = current_root(&state)?;
+    // Devuelve lo mismo que queda en disco (categoria y causa raiz validas).
+    workspace::normalize_finding(&root, &project_id, &mut finding);
     workspace::write_finding(&root, &project_id, &finding).map_err(|e| e.to_string())?;
     Ok(finding)
 }

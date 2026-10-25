@@ -85,13 +85,37 @@ todos los posibles y su tipo:
 | `estado`       | string (enum)               | `open` `fixed` `accepted` `wontfix`                          |
 | `afectados`    | string[]                    | URLs/hosts; puede venir vacio                                |
 | `nuevo`        | boolean                     | flag de "nuevo en retest"                                    |
+| `modulo`       | string, opcional            | modulo o componente afectado (hasta 120 caracteres); puede venir vacio |
+| `impacto_negocio` | string, opcional         | impacto para el negocio en un parrafo de texto plano (hasta 500 caracteres); puede venir vacio |
+| `categoria_riesgo` | string (enum) \| null, opcional | `fuga_datos` `fraude_economico` `interrupcion_servicio` `incumplimiento_regulatorio` `reputacional` `reconocimiento`; `null` si no esta definida |
+| `causa_raiz`   | objeto \| null, opcional     | `{ "clave": string, "titulo": string }` de la causa raiz del proyecto; `null` si el hallazgo no tiene |
+
+Los cuatro ultimos (campos de negocio del informe de ethical hacking) **no
+vienen activados por default** ni en destinos nuevos ni en los existentes: un
+receptor que rechaza claves desconocidas sigue recibiendo el mismo payload hasta
+que el usuario los marque en "Campos a enviar". Si el destino los activa, la
+clave viene en todos los hallazgos (esquema estable): `""` para los textos
+vacios y `null` para `categoria_riesgo` y `causa_raiz` sin definir. La `clave`
+de `causa_raiz` es un slug estable dentro del proyecto (no cambia si se edita el
+titulo); no es unica entre proyectos.
+
+Etiquetas legibles de `categoria_riesgo` (las que usa el PDF y el CSV):
+
+| Valor                        | Etiqueta                       |
+|------------------------------|--------------------------------|
+| `fuga_datos`                 | Fuga de datos personales       |
+| `fraude_economico`           | Fraude economico               |
+| `interrupcion_servicio`      | Interrupcion del servicio      |
+| `incumplimiento_regulatorio` | Incumplimiento regulatorio     |
+| `reputacional`               | Reputacional                   |
+| `reconocimiento`             | Reconocimiento y persistencia  |
 
 Nota sobre `cvss`: en tipos de examen (`oscp`, `htb`) la severidad es cualitativa
 y no hay CVSS numerico; en esos casos `cvss` puede llegar como string o `null`.
 Para KPIs numericos conviene basarse en `severidad` (siempre presente si esta
 configurada) y usar `cvss` solo cuando sea `number`.
 
-## Ejemplo real (todos los campos activados)
+## Ejemplo real (campos base activados)
 
 Con `environment` y `exposure` activados en el destino y definidos en el
 proyecto. Si no se activan, esas dos claves no aparecen.
@@ -140,6 +164,18 @@ proyecto. Si no se activan, esas dos claves no aparecen.
 }
 ```
 
+Con los campos de negocio activados, cada hallazgo agrega (ejemplo del primer
+hallazgo del proyecto de ejemplo):
+
+```json
+{
+  "modulo": "Inicio de sesion",
+  "impacto_negocio": "Un tercero sin credenciales puede ingresar como cualquier usuario y extraer la base de clientes, con exposicion de datos personales y obligacion de notificar la brecha.",
+  "categoria_riesgo": "fuga_datos",
+  "causa_raiz": { "clave": "validacion-entradas", "titulo": "Validacion de entradas insuficiente en el servidor" }
+}
+```
+
 ## DTO de referencia (TypeScript)
 
 Para tu API receptora. Los campos de `Finding` van como opcionales porque el
@@ -150,6 +186,13 @@ type Severity = "critical" | "high" | "medium" | "low" | "info";
 type Status = "open" | "fixed" | "accepted" | "wontfix";
 type Environment = "qa" | "produccion";
 type Exposure = "internet" | "interno";
+type RiskCategory =
+  | "fuga_datos"
+  | "fraude_economico"
+  | "interrupcion_servicio"
+  | "incumplimiento_regulatorio"
+  | "reputacional"
+  | "reconocimiento";
 
 interface PuduReportExport {
   source: "pudureport";
@@ -183,6 +226,11 @@ interface PuduReportFinding {
   estado?: Status;
   afectados?: string[];
   nuevo?: boolean;
+  // Campos de negocio: solo si el destino los activa (apagados por default).
+  modulo?: string;
+  impacto_negocio?: string;
+  categoria_riesgo?: RiskCategory | null;
+  causa_raiz?: { clave: string; titulo: string } | null;
 }
 ```
 
@@ -239,6 +287,11 @@ interface PuduReportExport {
     cvss?: number | string | null; // numero salvo examenes (oscp/htb)
     cvss_vector?: string; cvss_version?: "3.1" | "4.0";
     cwe?: string[]; estado?: Status; afectados?: string[]; nuevo?: boolean;
+    // Opcionales (apagados por default): contexto de negocio del hallazgo.
+    modulo?: string; impacto_negocio?: string; // "" si no esta definido
+    categoria_riesgo?: "fuga_datos" | "fraude_economico" | "interrupcion_servicio"
+      | "incumplimiento_regulatorio" | "reputacional" | "reconocimiento" | null;
+    causa_raiz?: { clave: string; titulo: string } | null;
   }>;
 }
 ```
@@ -265,6 +318,8 @@ Robustez:
 - `project.environment` y `project.exposure` pueden faltar: tratalos como "sin
   especificar" (no como un valor por defecto) y acepta solo los valores listados.
 - `cvss` puede ser number, string o null: normaliza a number-o-null para agregaciones.
+- `categoria_riesgo` y `causa_raiz` pueden faltar o venir en `null`: tratalos como
+  "sin especificar". Acepta solo las categorias listadas.
 - Registra los imports para auditoria (quien, cuando, cuantos hallazgos).
 
 Entrega el codigo del endpoint, el modelo de datos (migraciones) y un par de
