@@ -214,6 +214,19 @@ fn truncate_chars(value: &str, max: usize) -> String {
     value.chars().take(max).collect()
 }
 
+/// Texto de proyecto ya recortado: corta en `max` y vuelve a recortar el final,
+/// asi un corte justo antes de un espacio no cambia en la siguiente lectura.
+/// Idempotente.
+fn trimmed_text(value: &str, max: usize, paragraph: bool) -> String {
+    let value = value.trim();
+    let cut = if paragraph {
+        single_paragraph(value, max)
+    } else {
+        truncate_chars(value, max)
+    };
+    cut.trim_end().to_string()
+}
+
 impl FindingMeta {
     /// Deja los campos de negocio dentro de sus reglas: `categoria_riesgo` en la
     /// lista cerrada, `impacto_negocio` y `modulo` en un parrafo y con su largo
@@ -663,14 +676,14 @@ impl ProjectMeta {
             }
             seen.insert(clave.clone());
             causa.clave = clave;
-            causa.titulo = single_paragraph(causa.titulo.trim(), MAX_TEXTO_CORTO);
-            causa.descripcion = truncate_chars(causa.descripcion.trim(), MAX_TEXTO_LARGO);
+            causa.titulo = trimmed_text(&causa.titulo, MAX_TEXTO_CORTO, true);
+            causa.descripcion = trimmed_text(&causa.descripcion, MAX_TEXTO_LARGO, false);
         }
 
         for accion in &mut self.plan_remediacion {
             accion.prioridad = normalize_choice(&accion.prioridad, &PRIORIDADES_REMEDIACION);
-            accion.accion = truncate_chars(accion.accion.trim(), MAX_TEXTO_LARGO);
-            accion.responsable = single_paragraph(accion.responsable.trim(), MAX_TEXTO_CORTO);
+            accion.accion = trimmed_text(&accion.accion, MAX_TEXTO_LARGO, false);
+            accion.responsable = trimmed_text(&accion.responsable, MAX_TEXTO_CORTO, true);
             let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
             accion
                 .hallazgos
@@ -1539,6 +1552,35 @@ mod tests {
         }
         assert!(prioridad_rank("inmediata") < prioridad_rank("cierre"));
         assert!(prioridad_rank("cierre") < prioridad_rank(""));
+    }
+
+    #[test]
+    fn normalize_executive_corte_antes_de_espacio_es_idempotente() {
+        let titulo = format!("{} resto", "a".repeat(MAX_TEXTO_CORTO - 1));
+        let accion = format!("{} resto", "b".repeat(MAX_TEXTO_LARGO - 1));
+        let mut p = ProjectMeta {
+            causas_raiz: vec![CausaRaiz {
+                clave: "c".into(),
+                titulo,
+                descripcion: String::new(),
+            }],
+            plan_remediacion: vec![AccionRemediacion {
+                prioridad: "cierre".into(),
+                accion,
+                hallazgos: vec![],
+                responsable: String::new(),
+            }],
+            ..ProjectMeta::default()
+        };
+        p.normalize_executive(&[]);
+        assert_eq!(p.causas_raiz[0].titulo, "a".repeat(MAX_TEXTO_CORTO - 1));
+        assert_eq!(
+            p.plan_remediacion[0].accion,
+            "b".repeat(MAX_TEXTO_LARGO - 1)
+        );
+        let antes = (p.causas_raiz.clone(), p.plan_remediacion.clone());
+        p.normalize_executive(&[]);
+        assert_eq!((p.causas_raiz.clone(), p.plan_remediacion.clone()), antes);
     }
 
     #[test]
