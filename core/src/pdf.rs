@@ -14,7 +14,10 @@ use std::process::Command;
 use serde::Serialize;
 
 use crate::markdown;
-use crate::models::{Branding, ProjectMeta, ReportBlock, Severity, TeamMember, Watermark};
+use crate::models::{
+    categoria_riesgo_label, prioridad_label, prioridad_rank, Branding, ProjectMeta, ReportBlock,
+    Severity, TeamMember, Watermark, CATEGORIAS_RIESGO,
+};
 use crate::sections;
 use crate::workspace;
 
@@ -48,6 +51,9 @@ struct DataDoc {
     project: ProjectData,
     findings: Vec<FindingData>,
     severity_counts: SeverityCounts,
+    /// Riesgos para el negocio: hallazgos agrupados por `categoria_riesgo`, en
+    /// el orden de `CATEGORIAS_RIESGO`. Solo grupos con hallazgos.
+    riesgos_negocio: Vec<RiesgoNegocioData>,
 }
 
 #[derive(Serialize)]
@@ -78,6 +84,52 @@ struct ProjectData {
     /// renderiza cada uno segun su kind. Se reconcilia (o se usa el default del
     /// tipo) en build_data.
     layout: Vec<ReportBlock>,
+    /// Causas raiz con titulo, cada una con los numeros de los hallazgos
+    /// visibles que apuntan a ella.
+    causas_raiz: Vec<CausaRaizData>,
+    /// Acciones con texto, ordenadas por prioridad (estable: dentro de una
+    /// misma prioridad se conserva el orden del usuario).
+    plan_remediacion: Vec<AccionData>,
+}
+
+#[derive(Serialize)]
+struct CausaRaizData {
+    clave: String,
+    titulo: String,
+    /// Texto plano (no markup): la plantilla lo inserta como string.
+    descripcion: String,
+    /// Numeros de hallazgo del reporte (1-based), en orden.
+    hallazgos: Vec<usize>,
+}
+
+#[derive(Serialize)]
+struct AccionData {
+    /// Slug de `PRIORIDADES_REMEDIACION` ("" = sin especificar).
+    prioridad: String,
+    /// Etiqueta legible de la prioridad ("" si no tiene).
+    prioridad_label: String,
+    /// Texto plano.
+    accion: String,
+    /// Numeros de los hallazgos visibles que cierra, ascendentes.
+    hallazgos: Vec<usize>,
+    responsable: String,
+}
+
+#[derive(Serialize)]
+struct RiesgoNegocioData {
+    /// Slug de la categoria.
+    categoria: String,
+    /// Etiqueta legible de la categoria.
+    etiqueta: String,
+    hallazgos: Vec<RiesgoHallazgoData>,
+}
+
+#[derive(Serialize)]
+struct RiesgoHallazgoData {
+    number: usize,
+    title: String,
+    severity: String,
+    impacto_negocio: String,
 }
 
 #[derive(Serialize)]
@@ -91,6 +143,9 @@ struct SectionData {
 #[derive(Serialize)]
 struct FindingData {
     id: String,
+    /// Numero del hallazgo en el reporte (1-based, sin contar los ocultos): el
+    /// mismo que muestran el indice y el detalle.
+    number: usize,
     title: String,
     severity: String,
     cvss: String,
@@ -101,6 +156,14 @@ struct FindingData {
     affected: Vec<String>,
     /// Hallazgo nuevo detectado en el retest (la plantilla retest lo separa).
     new_in_retest: bool,
+    /// Modulo o componente afectado (texto plano, puede venir vacio).
+    modulo: String,
+    /// Impacto para el negocio (texto plano, puede venir vacio).
+    impacto_negocio: String,
+    /// Slug de la categoria de riesgo ("" = sin especificar).
+    categoria_riesgo: String,
+    /// Clave de la causa raiz ("" = sin causa raiz).
+    causa_raiz: String,
     /// Cuerpo ya convertido a markup de Typst.
     body: String,
 }
@@ -192,7 +255,8 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
     let mut counts = SeverityCounts::default();
     let findings_data: Vec<FindingData> = findings
         .into_iter()
-        .map(|f| {
+        .enumerate()
+        .map(|(i, f)| {
             counts.add(f.meta.severity);
             // Campos ocultados puntualmente (sin ocultar el hallazgo entero):
             // "affected" se vacia (las plantillas ya omiten la linea si el
@@ -207,6 +271,7 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
             let body = sections::strip_hidden_sections(&f.body, &f.meta.hidden_fields);
             FindingData {
                 id: f.id,
+                number: i + 1,
                 title: f.meta.title,
                 severity: severity_str(f.meta.severity),
                 cvss: f.meta.cvss,
@@ -217,10 +282,18 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
                 status: status_str(f.meta.status),
                 affected,
                 new_in_retest: f.meta.new_in_retest,
+                modulo: f.meta.modulo.trim().to_string(),
+                impacto_negocio: f.meta.impacto_negocio.trim().to_string(),
+                categoria_riesgo: f.meta.categoria_riesgo,
+                causa_raiz: f.meta.causa_raiz,
                 body: markdown::to_typst(&body),
             }
         })
         .collect();
+
+    let causas_raiz = root_causes_data(&project, &findings_data);
+    let plan_remediacion = remediation_plan_data(&project, &findings_data);
+    let riesgos_negocio = business_risks_data(&findings_data);
 
     // Solo se incluyen las secciones activadas.
     let sections = project
@@ -257,10 +330,88 @@ fn build_data(root: &Path, project_id: &str) -> Result<DataDoc> {
             team: project.team,
             sections,
             layout: layout_for_data(project.layout),
+            causas_raiz,
+            plan_remediacion,
         },
         findings: findings_data,
         severity_counts: counts,
+        riesgos_negocio,
     })
+}
+
+/// Causas raiz para el PDF: solo las que tienen titulo, con los numeros de los
+/// hallazgos visibles que las referencian.
+fn root_causes_data(project: &ProjectMeta, findings: &[FindingData]) -> Vec<CausaRaizData> {
+    project
+        .causas_raiz
+        .iter()
+        .filter(|c| !c.titulo.trim().is_empty())
+        .map(|c| CausaRaizData {
+            clave: c.clave.clone(),
+            titulo: c.titulo.trim().to_string(),
+            descripcion: c.descripcion.trim().to_string(),
+            hallazgos: findings
+                .iter()
+                .filter(|f| f.causa_raiz == c.clave)
+                .map(|f| f.number)
+                .collect(),
+        })
+        .collect()
+}
+
+/// Plan de remediacion para el PDF: solo acciones con texto, ordenadas por
+/// prioridad (orden estable), con los ids traducidos a los numeros del
+/// reporte. Los hallazgos ocultos no tienen numero y no se listan.
+fn remediation_plan_data(project: &ProjectMeta, findings: &[FindingData]) -> Vec<AccionData> {
+    let mut plan: Vec<AccionData> = project
+        .plan_remediacion
+        .iter()
+        .filter(|a| !a.accion.trim().is_empty())
+        .map(|a| {
+            let mut hallazgos: Vec<usize> = a
+                .hallazgos
+                .iter()
+                .filter_map(|id| findings.iter().find(|f| &f.id == id).map(|f| f.number))
+                .collect();
+            hallazgos.sort_unstable();
+            hallazgos.dedup();
+            AccionData {
+                prioridad: a.prioridad.clone(),
+                prioridad_label: prioridad_label(&a.prioridad).to_string(),
+                accion: a.accion.trim().to_string(),
+                hallazgos,
+                responsable: a.responsable.trim().to_string(),
+            }
+        })
+        .collect();
+    plan.sort_by_key(|a| prioridad_rank(&a.prioridad));
+    plan
+}
+
+/// Riesgos para el negocio: hallazgos visibles con categoria, agrupados en el
+/// orden de `CATEGORIAS_RIESGO` y, dentro de cada grupo, en el del reporte.
+fn business_risks_data(findings: &[FindingData]) -> Vec<RiesgoNegocioData> {
+    CATEGORIAS_RIESGO
+        .iter()
+        .filter(|c| !c.is_empty())
+        .filter_map(|categoria| {
+            let hallazgos: Vec<RiesgoHallazgoData> = findings
+                .iter()
+                .filter(|f| f.categoria_riesgo == *categoria)
+                .map(|f| RiesgoHallazgoData {
+                    number: f.number,
+                    title: f.title.clone(),
+                    severity: f.severity.clone(),
+                    impacto_negocio: f.impacto_negocio.clone(),
+                })
+                .collect();
+            (!hallazgos.is_empty()).then(|| RiesgoNegocioData {
+                categoria: categoria.to_string(),
+                etiqueta: categoria_riesgo_label(categoria).to_string(),
+                hallazgos,
+            })
+        })
+        .collect()
 }
 
 /// Resuelve la plantilla .typ activa: primero la libreria del usuario, luego
@@ -622,6 +773,140 @@ mod tests {
     }
 
     #[test]
+    fn build_data_incluye_la_parte_ejecutiva_con_la_numeracion_del_reporte() {
+        use crate::models::{AccionRemediacion, CausaRaiz};
+
+        let tmp = std::env::temp_dir().join(format!("pudu-pdf-exec-{}", uuid::Uuid::new_v4()));
+        workspace::create_workspace(&tmp, "WS").unwrap();
+        let (pid, mut meta) = workspace::create_project(&tmp, "Web", "ACME", "pentest").unwrap();
+        meta.causas_raiz = vec![
+            CausaRaiz {
+                clave: "validacion".into(),
+                titulo: "Validacion de entradas".into(),
+                descripcion: "Solo en el cliente.".into(),
+            },
+            // Sin titulo: no sale en el PDF.
+            CausaRaiz {
+                clave: "vacia".into(),
+                ..Default::default()
+            },
+        ];
+        workspace::write_project_meta(&tmp, &pid, &meta).unwrap();
+
+        // Tres hallazgos; el segundo oculto (no tiene numero en el reporte).
+        let mut ids = Vec::new();
+        for (title, hidden, categoria, causa) in [
+            ("SQLi", false, "fuga_datos", "validacion"),
+            ("Oculto", true, "fuga_datos", "validacion"),
+            ("XSS", false, "reputacional", "validacion"),
+        ] {
+            let mut f = workspace::create_finding(&tmp, &pid, title).unwrap();
+            f.meta.hidden = hidden;
+            f.meta.categoria_riesgo = categoria.into();
+            f.meta.causa_raiz = causa.into();
+            f.meta.modulo = " Login ".into();
+            f.meta.impacto_negocio = format!("Impacto de {title}");
+            workspace::write_finding(&tmp, &pid, &f).unwrap();
+            ids.push(f.id);
+        }
+
+        let mut meta = workspace::read_project_meta(&tmp, &pid).unwrap();
+        meta.plan_remediacion = vec![
+            AccionRemediacion {
+                prioridad: "mediano".into(),
+                accion: "Agregar cabeceras".into(),
+                hallazgos: vec![ids[2].clone()],
+                responsable: "Infra".into(),
+            },
+            // Sin accion: no sale en el PDF.
+            AccionRemediacion {
+                prioridad: "inmediata".into(),
+                ..Default::default()
+            },
+            AccionRemediacion {
+                prioridad: "inmediata".into(),
+                accion: "Parametrizar consultas".into(),
+                hallazgos: vec![ids[2].clone(), ids[1].clone(), ids[0].clone()],
+                responsable: String::new(),
+            },
+        ];
+        workspace::write_project_meta(&tmp, &pid, &meta).unwrap();
+
+        let data = build_data(&tmp, &pid).unwrap();
+        // Numeracion del reporte: sin contar los ocultos.
+        let numbers: Vec<(usize, &str)> = data
+            .findings
+            .iter()
+            .map(|f| (f.number, f.title.as_str()))
+            .collect();
+        assert_eq!(numbers, vec![(1, "SQLi"), (2, "XSS")]);
+        assert_eq!(data.findings[0].modulo, "Login");
+        assert_eq!(data.findings[1].categoria_riesgo, "reputacional");
+
+        // Causas raiz: solo con titulo y con los numeros visibles.
+        assert_eq!(data.project.causas_raiz.len(), 1);
+        assert_eq!(data.project.causas_raiz[0].hallazgos, vec![1, 2]);
+
+        // Plan: sin acciones vacias, ordenado por prioridad y con numeros.
+        let plan: Vec<(&str, &[usize])> = data
+            .project
+            .plan_remediacion
+            .iter()
+            .map(|a| (a.prioridad.as_str(), a.hallazgos.as_slice()))
+            .collect();
+        assert_eq!(
+            plan,
+            vec![("inmediata", &[1, 2][..]), ("mediano", &[2][..])]
+        );
+        assert_eq!(
+            data.project.plan_remediacion[0].prioridad_label,
+            "Inmediata"
+        );
+
+        // Riesgos agrupados por categoria, en el orden de la lista cerrada.
+        let groups: Vec<(&str, Vec<usize>)> = data
+            .riesgos_negocio
+            .iter()
+            .map(|g| {
+                (
+                    g.etiqueta.as_str(),
+                    g.hallazgos.iter().map(|h| h.number).collect(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            groups,
+            vec![
+                ("Fuga de datos personales", vec![1]),
+                ("Reputacional", vec![2])
+            ]
+        );
+
+        // El JSON expone los nombres que usan las plantillas.
+        let json = serde_json::to_value(&data).unwrap();
+        assert_eq!(json["findings"][0]["number"], 1);
+        assert_eq!(json["findings"][0]["impacto_negocio"], "Impacto de SQLi");
+        assert_eq!(json["project"]["plan_remediacion"][0]["hallazgos"][1], 2);
+        assert_eq!(json["riesgos_negocio"][1]["categoria"], "reputacional");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn build_data_sin_datos_ejecutivos_deja_las_listas_vacias() {
+        let tmp = std::env::temp_dir().join(format!("pudu-pdf-noexec-{}", uuid::Uuid::new_v4()));
+        workspace::create_workspace(&tmp, "WS").unwrap();
+        let (pid, _) = workspace::create_project(&tmp, "Web", "ACME", "pentest").unwrap();
+        workspace::create_finding(&tmp, &pid, "SQLi").unwrap();
+        let data = build_data(&tmp, &pid).unwrap();
+        assert!(data.project.causas_raiz.is_empty());
+        assert!(data.project.plan_remediacion.is_empty());
+        assert!(data.riesgos_negocio.is_empty());
+        assert_eq!(data.findings[0].modulo, "");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
     fn compile_error_summary_drops_font_warnings() {
         let stderr = "warning: unknown font family: helvetica neue\n  ┌─ report.typ:107:19\n  │\n107 │ #set text(font: body-font)\n  │                   ^^^^^^^^^\n\nerror: unclosed delimiter\n  ┌─ report.typ:422:7\n  │\n422 │       eval(f.body, mode: \"markup\")\n  │       ^^^^\n";
         let summary = compile_error_summary(stderr);
@@ -844,6 +1129,24 @@ mod tests {
         wsm.branding.cover_layout = "centered".to_string();
         wsm.branding.cover_elements = Vec::new();
         workspace::write_workspace_meta(&tmp, &wsm).unwrap();
+
+        // Parte ejecutiva con datos (proyecto de ejemplo): compila en las
+        // plantillas que la renderizan y en las que la ignoran.
+        let (example, _) = workspace::create_example_project(&tmp).unwrap();
+        for project_type in ["pentest", "redteam", "ejecutivo", "retest", "htb"] {
+            let mut project = workspace::read_project_meta(&tmp, &example).unwrap();
+            project.project_type = project_type.to_string();
+            project.layout = Vec::new();
+            workspace::write_project_meta(&tmp, &example, &project).unwrap();
+            let pdfs = generate_pdf(&tmp, &example, &templates, &typst_bin, false)
+                .unwrap_or_else(|e| panic!("parte ejecutiva fallo {project_type}: {e}"));
+            if let Some(dir) = std::env::var_os("PUDU_PDF_REVIEW_DIR") {
+                let dir = PathBuf::from(dir).join(format!("ejecutiva-{project_type}"));
+                std::fs::create_dir_all(&dir).unwrap();
+                std::fs::copy(&pdfs[0], dir.join("report.pdf")).unwrap();
+            }
+            assert!(std::fs::metadata(&pdfs[0]).unwrap().len() > 1000);
+        }
 
         // Salida ejecutiva secundaria desde un proyecto de pentest.
         let mut project = workspace::read_project_meta(&tmp, &pid).unwrap();

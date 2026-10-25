@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { scheduleWrite } from "../lib/pendingWrites";
 import type {
+  CategoriaRiesgo,
+  CausaRaiz,
   CvssResult,
   CvssVersion,
   Finding,
@@ -12,6 +14,13 @@ import type {
   FindingStatus,
   Severity,
 } from "../lib/types";
+import {
+  CATEGORIA_RIESGO_OPTIONS,
+  IMPACTO_NEGOCIO_MAX,
+  MODULO_MAX,
+  charCount,
+  singleParagraph,
+} from "../lib/executive";
 import { FINDING_SECTIONS, joinSections, parseSections } from "../lib/sections";
 import { SEVERITY_COLOR, SEVERITY_LABEL } from "../lib/severity";
 import { typeInfo } from "../lib/projectTypes";
@@ -45,6 +54,8 @@ interface Props {
   projectType?: string;
   /** Familia de render efectiva (deriva de la plantilla); gatea el orden de retest. */
   family?: "findings" | "retest" | "narrative";
+  /** Causas raiz del proyecto (se definen en Reporte > Datos del proyecto). */
+  rootCauses?: CausaRaiz[];
   onGoToPreview: () => void;
   onPickProject: () => void;
 }
@@ -54,6 +65,7 @@ export function FindingEditor({
   assetBase,
   projectType,
   family,
+  rootCauses = [],
   onGoToPreview,
   onPickProject,
 }: Props) {
@@ -489,6 +501,107 @@ export function FindingEditor({
               </button>
             </div>
           </div>
+
+          {!examMode && (
+            <>
+              <div className="fieldrow">
+                <div>
+                  <label className="field-label-top" htmlFor="finding-modulo">
+                    modulo
+                  </label>
+                  <input
+                    id="finding-modulo"
+                    className="input"
+                    placeholder="Ej. Inicio de sesion"
+                    maxLength={MODULO_MAX}
+                    value={current.meta.modulo ?? ""}
+                    onChange={(e) =>
+                      patchMeta((m) => ({
+                        ...m,
+                        modulo: singleParagraph(e.target.value, MODULO_MAX),
+                      }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="field-label-top" htmlFor="finding-categoria">
+                    categoria de riesgo
+                  </label>
+                  <select
+                    id="finding-categoria"
+                    className="select"
+                    style={{ width: "100%" }}
+                    value={current.meta.categoria_riesgo ?? ""}
+                    onChange={(e) =>
+                      patchMeta((m) => ({
+                        ...m,
+                        categoria_riesgo: e.target.value as CategoriaRiesgo,
+                      }))
+                    }
+                  >
+                    {CATEGORIA_RIESGO_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="field-label-top" htmlFor="finding-causa">
+                    causa raiz
+                  </label>
+                  <select
+                    id="finding-causa"
+                    className="select"
+                    style={{ width: "100%" }}
+                    disabled={rootCauses.length === 0}
+                    title={
+                      rootCauses.length === 0
+                        ? "Las causas raiz se definen en Reporte, Datos del proyecto"
+                        : undefined
+                    }
+                    value={current.meta.causa_raiz ?? ""}
+                    onChange={(e) => patchMeta((m) => ({ ...m, causa_raiz: e.target.value }))}
+                  >
+                    <option value="">
+                      {rootCauses.length === 0 ? "Sin causas raiz definidas" : "Sin causa raiz"}
+                    </option>
+                    {rootCauses.map((c) => (
+                      <option key={c.clave} value={c.clave}>
+                        {c.titulo.trim() || c.clave}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="field" style={{ marginBottom: 14 }}>
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <label htmlFor="finding-impacto-negocio">Impacto al negocio</label>
+                  <span className="faint" style={{ fontSize: 11 }}>
+                    {charCount(current.meta.impacto_negocio ?? "")}/{IMPACTO_NEGOCIO_MAX}
+                  </span>
+                </div>
+                <p className="muted">
+                  Un parrafo para gestion: que le pasa a la organizacion si se explota (datos,
+                  dinero, servicio, cumplimiento o reputacion). Sale en la parte ejecutiva del PDF.
+                </p>
+                <textarea
+                  id="finding-impacto-negocio"
+                  className="textarea"
+                  rows={3}
+                  maxLength={IMPACTO_NEGOCIO_MAX}
+                  value={current.meta.impacto_negocio ?? ""}
+                  onChange={(e) =>
+                    patchMeta((m) => ({
+                      ...m,
+                      impacto_negocio: singleParagraph(e.target.value, IMPACTO_NEGOCIO_MAX),
+                    }))
+                  }
+                />
+              </div>
+            </>
+          )}
 
           <div className="section-grid">
             {FINDING_SECTIONS.map((s) => (

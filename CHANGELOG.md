@@ -7,9 +7,17 @@ Todo cambio notable se documenta en este archivo. El formato sigue Keep a Change
 ### Added
 - Datos del proyecto con dos clasificaciones opcionales de lista cerrada: Ambiente evaluado (`qa`, `produccion`) y Exposicion del activo (`internet`, `interno`). Son metadata para integraciones y no se muestran en el PDF.
 - Los destinos de exportacion a API pueden activar "Datos del proyecto (opcionales)" para enviar `project.environment` y `project.exposure`. Solo se incluyen si el destino los activa y el proyecto los tiene definidos.
+- Contenido de informe de ethical hacking. Cada hallazgo suma cuatro campos opcionales: Impacto al negocio (un parrafo de hasta 500 caracteres), Categoria de riesgo (lista cerrada: fuga de datos personales, fraude economico, interrupcion del servicio, incumplimiento regulatorio, reputacional, reconocimiento y persistencia), Modulo y Causa raiz.
+- Datos del proyecto con Causas raiz (titulo y descripcion) y Plan de remediacion priorizado (prioridad inmediata, corto plazo, mediano plazo o cierre; accion; hallazgos que cierra; responsable).
+- Parte ejecutiva en las plantillas Pentest / Red Team y Ejecutivo con cuatro bloques nuevos del orden del documento: Causas raiz, Riesgos para el negocio, Hallazgos e impacto (N°, hallazgo, modulo, severidad, impacto) y Plan de remediacion priorizado. Se pueden ocultar o mover como cualquier bloque y no aparecen si el proyecto no tiene esos datos. Los numeros de hallazgo coinciden con los del indice y el detalle.
+- Exportacion CSV y destinos de API con los campos opcionales `modulo`, `impacto_negocio`, `categoria_riesgo` y `causa_raiz`.
+- `update_finding` del servidor MCP acepta `impacto_negocio`, `categoria_riesgo` y `modulo`, con validacion de lista y largo.
+- El proyecto de ejemplo incluye causas raiz, plan de remediacion y los campos de negocio en sus hallazgos.
 
 ### Compatibility
 - Los destinos existentes y los nuevos arrancan con estos datos apagados: el payload es el mismo de siempre hasta que el usuario los active. Los `project.yaml` previos se leen sin cambios (ambos campos quedan sin especificar) y cualquier valor fuera de la lista se descarta.
+- Los campos de negocio no estan en los campos por default de los destinos ni del CSV: los destinos existentes reciben el mismo payload. Los hallazgos y `project.yaml` previos se leen sin cambios y los campos vacios no se escriben a disco. Una categoria o prioridad fuera de la lista, una causa raiz inexistente o un hallazgo inexistente en el plan se descartan al leer y al guardar.
+- Los proyectos Pentest, Red Team y Ejecutivo existentes reciben los cuatro bloques nuevos en su orden del documento (despues del resumen). Sin datos no generan contenido, asi que el PDF no cambia hasta que se cargan. El resto de los tipos y plantillas no cambia.
 
 ## [0.0.25] - 2026-09-21
 

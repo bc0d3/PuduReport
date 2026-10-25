@@ -33,6 +33,44 @@ export interface FindingMeta {
    * las claves de FINDING_SECTIONS ("descripcion", "impacto", "poc",
    * "remediacion"). Ausente o vacio = todo visible. */
   hidden_fields?: string[];
+  /** Impacto para el negocio: un parrafo de texto plano (hasta 500 caracteres). */
+  impacto_negocio?: string;
+  /** Categoria de riesgo para el negocio. Lista cerrada; ausente o "" = sin especificar. */
+  categoria_riesgo?: CategoriaRiesgo;
+  /** Modulo o componente afectado (hasta 120 caracteres). */
+  modulo?: string;
+  /** Clave de una causa raiz del proyecto. Ausente o "" = sin causa raiz. */
+  causa_raiz?: string;
+}
+
+/** Categoria de riesgo para el negocio de un hallazgo. "" = sin especificar. */
+export type CategoriaRiesgo =
+  | ""
+  | "fuga_datos"
+  | "fraude_economico"
+  | "interrupcion_servicio"
+  | "incumplimiento_regulatorio"
+  | "reputacional"
+  | "reconocimiento";
+
+/** Prioridad de una accion del plan de remediacion. "" = sin especificar. */
+export type PrioridadRemediacion = "" | "inmediata" | "corto" | "mediano" | "cierre";
+
+/** Causa raiz comun a varios hallazgos (parte ejecutiva del informe). */
+export interface CausaRaiz {
+  /** Slug estable que referencian los hallazgos; no cambia al editar el titulo. */
+  clave: string;
+  titulo: string;
+  descripcion: string;
+}
+
+/** Accion del plan de remediacion priorizado. */
+export interface AccionRemediacion {
+  prioridad: PrioridadRemediacion;
+  accion: string;
+  /** Ids de los hallazgos que cierra. */
+  hallazgos: string[];
+  responsable: string;
 }
 
 /** Hallazgo completo: front-matter + cuerpo markdown. */
@@ -80,7 +118,11 @@ export type BlockKind =
   | "section"
   | "findings"
   | "text"
-  | "pagebreak";
+  | "pagebreak"
+  | "root_causes"
+  | "business_risks"
+  | "findings_impact"
+  | "remediation_plan";
 
 /**
  * Bloque del cuerpo: el reporte es una lista ordenada de bloques que la
@@ -139,6 +181,10 @@ export interface ProjectMeta {
   layout: ReportBlock[];
   /** Orden de los hallazgos en el PDF (ids). Drag & drop reescribe este array. */
   finding_order: string[];
+  /** Causas raiz (parte ejecutiva). Ausente = ninguna. */
+  causas_raiz?: CausaRaiz[];
+  /** Plan de remediacion priorizado (parte ejecutiva). Ausente = vacio. */
+  plan_remediacion?: AccionRemediacion[];
 }
 
 export interface Watermark {

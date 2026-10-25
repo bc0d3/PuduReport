@@ -317,6 +317,7 @@ function AppInner() {
                 assetBase={assetBase}
                 projectType={activeProject?.project_type}
                 family={activeFamily}
+                rootCauses={activeProject?.causas_raiz}
                 onGoToPreview={() => navigate("preview")}
                 onPickProject={() => navigate("proyectos")}
               />
