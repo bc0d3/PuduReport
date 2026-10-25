@@ -19,7 +19,7 @@
     "@tabler/icons-webfont": "^3.44.0",
     "@tauri-apps/api": "^2.1.1",
     "@tauri-apps/plugin-dialog": "^2.2.0",
-    "@tauri-apps/plugin-fs": "^2.2.0",
+    "@tauri-apps/plugin-fs": "^2.7.1",
     "@tauri-apps/plugin-store": "^2.2.0",
     "@tiptap/extension-code-block-lowlight": "^2.27.2",
     "@tiptap/extension-image": "^2.27.2",
