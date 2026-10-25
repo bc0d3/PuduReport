@@ -11,15 +11,28 @@ import {
 import * as api from "../lib/api";
 import { scheduleWrite } from "../lib/pendingWrites";
 import type {
+  AccionRemediacion,
   Ambiente,
   BlockKind,
+  CausaRaiz,
   Exposicion,
   Finding,
+  PrioridadRemediacion,
   ProjectMeta,
   ReportBlock,
   Severity,
   WorkspaceMeta,
 } from "../lib/types";
+import {
+  PRIORIDAD_OPTIONS,
+  TEXTO_CORTO_MAX,
+  TEXTO_LARGO_MAX,
+  findingNumbers,
+  newRemediationAction,
+  newRootCause,
+  singleParagraph,
+  toggleFindingId,
+} from "../lib/executive";
 import { SEVERITY_LABEL, SEVERITY_ORDER, SEVERITY_COLOR } from "../lib/severity";
 import {
   PROJECT_TYPES,
@@ -94,6 +107,26 @@ const BLOCK_META: Record<BlockKind, { label: string; icon: string; desc: string 
     label: "Salto de pagina",
     icon: "ti-page-break",
     desc: "Fuerza el inicio de una pagina nueva en el PDF.",
+  },
+  root_causes: {
+    label: "Causas raiz",
+    icon: "ti-hierarchy",
+    desc: "Causas raiz con su descripcion y los hallazgos que explican. Se definen en Datos del proyecto y se asignan en cada hallazgo. Sin causas raiz no aparece.",
+  },
+  business_risks: {
+    label: "Riesgos para el negocio",
+    icon: "ti-alert-triangle",
+    desc: "Hallazgos agrupados por categoria de riesgo, con su impacto al negocio. Se arma desde los campos de cada hallazgo. Sin categorias no aparece.",
+  },
+  findings_impact: {
+    label: "Hallazgos e impacto",
+    icon: "ti-table",
+    desc: "Tabla con numero, hallazgo, modulo, severidad e impacto para el negocio. Aparece si algun hallazgo tiene modulo o impacto al negocio.",
+  },
+  remediation_plan: {
+    label: "Plan de remediacion",
+    icon: "ti-checklist",
+    desc: "Acciones ordenadas por prioridad, con los hallazgos que cierran y su responsable. Se edita en Datos del proyecto. Sin acciones no aparece.",
   },
 };
 
@@ -477,6 +510,7 @@ export function ReportBuilder({ projectId, assetBase, onProjectMetaChange, onPic
             {selection.kind === "data" ? (
               <ProjectDataForm
                 project={project}
+                findings={findings}
                 patch={patch}
                 scopeInput={scopeInput}
                 setScopeInput={setScopeInput}
@@ -746,11 +780,13 @@ function BlockEditor({
 
 function ProjectDataForm({
   project,
+  findings,
   patch,
   scopeInput,
   setScopeInput,
 }: {
   project: ProjectMeta;
+  findings: Finding[];
   patch: (u: (p: ProjectMeta) => ProjectMeta) => void;
   scopeInput: string;
   setScopeInput: (v: string) => void;
@@ -908,6 +944,247 @@ function ProjectDataForm({
           </button>
         </div>
       </div>
+      <RootCausesEditor project={project} patch={patch} />
+      <RemediationPlanEditor project={project} findings={findings} patch={patch} />
+    </div>
+  );
+}
+
+// --- Parte ejecutiva: causas raiz y plan de remediacion ---
+// Texto plano (no markdown): el PDF los muestra tal cual en tablas y listas.
+
+function RootCausesEditor({
+  project,
+  patch,
+}: {
+  project: ProjectMeta;
+  patch: (u: (p: ProjectMeta) => ProjectMeta) => void;
+}) {
+  const causas = project.causas_raiz ?? [];
+
+  function update(index: number, next: Partial<CausaRaiz>) {
+    patch((p) => ({
+      ...p,
+      causas_raiz: (p.causas_raiz ?? []).map((c, i) => (i === index ? { ...c, ...next } : c)),
+    }));
+  }
+
+  return (
+    <div className="field full" style={{ marginTop: 18 }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <label>Causas raiz</label>
+        <button
+          className="btn small"
+          onClick={() =>
+            patch((p) => ({
+              ...p,
+              causas_raiz: [...(p.causas_raiz ?? []), newRootCause(p.causas_raiz ?? [])],
+            }))
+          }
+        >
+          <i className="ti ti-plus" />
+          Agregar causa raiz
+        </button>
+      </div>
+      <p className="faint" style={{ fontSize: 11, margin: "2px 0 6px" }}>
+        Debilidades de fondo que explican varios hallazgos. Cada hallazgo elige la suya en el editor
+        de hallazgos; el PDF las lista con los hallazgos que explican.
+      </p>
+      {causas.length === 0 && (
+        <p className="faint" style={{ fontSize: 12 }}>
+          Sin causas raiz. El bloque no aparece en el PDF.
+        </p>
+      )}
+      {causas.map((c, i) => (
+        <div className="card" key={c.clave} style={{ padding: 12, marginBottom: 8 }}>
+          <div className="inline-form" style={{ marginBottom: 6 }}>
+            <input
+              className="input"
+              aria-label={`Titulo de la causa raiz ${i + 1}`}
+              placeholder="Ej. Validacion de entradas solo en el cliente"
+              maxLength={TEXTO_CORTO_MAX}
+              value={c.titulo}
+              onChange={(e) =>
+                update(i, { titulo: singleParagraph(e.target.value, TEXTO_CORTO_MAX) })
+              }
+              style={{ flex: 1 }}
+            />
+            <button
+              className="btn small"
+              title="Quitar causa raiz. Los hallazgos que la usaban quedan sin causa raiz."
+              aria-label={`Quitar causa raiz ${i + 1}`}
+              onClick={() =>
+                patch((p) => ({
+                  ...p,
+                  causas_raiz: (p.causas_raiz ?? []).filter((_, idx) => idx !== i),
+                }))
+              }
+            >
+              <i className="ti ti-trash" />
+            </button>
+          </div>
+          <textarea
+            className="textarea"
+            aria-label={`Descripcion de la causa raiz ${i + 1}`}
+            placeholder="Por que ocurre y que la origina (opcional)"
+            rows={2}
+            maxLength={TEXTO_LARGO_MAX}
+            value={c.descripcion}
+            onChange={(e) => update(i, { descripcion: e.target.value })}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RemediationPlanEditor({
+  project,
+  findings,
+  patch,
+}: {
+  project: ProjectMeta;
+  findings: Finding[];
+  patch: (u: (p: ProjectMeta) => ProjectMeta) => void;
+}) {
+  const plan = project.plan_remediacion ?? [];
+  const numbers = findingNumbers(findings);
+  const order = findings.map((f) => f.id);
+  // Solo hallazgos con numero en el reporte (los ocultos no salen en el PDF).
+  const selectable = findings.filter((f) => numbers.has(f.id));
+
+  function update(index: number, next: Partial<AccionRemediacion>) {
+    patch((p) => ({
+      ...p,
+      plan_remediacion: (p.plan_remediacion ?? []).map((a, i) =>
+        i === index ? { ...a, ...next } : a,
+      ),
+    }));
+  }
+
+  return (
+    <div className="field full" style={{ marginTop: 18 }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <label>Plan de remediacion</label>
+        <button
+          className="btn small"
+          onClick={() =>
+            patch((p) => ({
+              ...p,
+              plan_remediacion: [...(p.plan_remediacion ?? []), newRemediationAction()],
+            }))
+          }
+        >
+          <i className="ti ti-plus" />
+          Agregar accion
+        </button>
+      </div>
+      <p className="faint" style={{ fontSize: 11, margin: "2px 0 6px" }}>
+        El PDF ordena las acciones por prioridad y muestra el numero de cada hallazgo que cierran.
+      </p>
+      {plan.length === 0 && (
+        <p className="faint" style={{ fontSize: 12 }}>
+          Sin acciones. El bloque no aparece en el PDF.
+        </p>
+      )}
+      {plan.map((a, i) => (
+        <div className="card" key={i} style={{ padding: 12, marginBottom: 8 }}>
+          <div className="editor-grid">
+            <div className="field">
+              <label htmlFor={`plan-prioridad-${i}`}>Prioridad</label>
+              <select
+                id={`plan-prioridad-${i}`}
+                className="input"
+                value={a.prioridad}
+                onChange={(e) => update(i, { prioridad: e.target.value as PrioridadRemediacion })}
+              >
+                {PRIORIDAD_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor={`plan-responsable-${i}`}>Responsable</label>
+              <input
+                id={`plan-responsable-${i}`}
+                className="input"
+                placeholder="Opcional"
+                maxLength={TEXTO_CORTO_MAX}
+                value={a.responsable}
+                onChange={(e) =>
+                  update(i, { responsable: singleParagraph(e.target.value, TEXTO_CORTO_MAX) })
+                }
+              />
+            </div>
+            <div className="field full">
+              <label htmlFor={`plan-accion-${i}`}>Accion</label>
+              <textarea
+                id={`plan-accion-${i}`}
+                className="textarea"
+                placeholder="Que hay que hacer, en imperativo"
+                rows={2}
+                maxLength={TEXTO_LARGO_MAX}
+                value={a.accion}
+                onChange={(e) => update(i, { accion: e.target.value })}
+              />
+            </div>
+            <div className="field full">
+              <label>Hallazgos que cierra</label>
+              {selectable.length === 0 ? (
+                <p className="faint" style={{ fontSize: 12, margin: 0 }}>
+                  El proyecto no tiene hallazgos visibles.
+                </p>
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                    maxHeight: 150,
+                    overflowY: "auto",
+                  }}
+                >
+                  {selectable.map((f) => (
+                    <label
+                      key={f.id}
+                      className="row"
+                      style={{ gap: 8, cursor: "pointer", fontSize: 12 }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={a.hallazgos.includes(f.id)}
+                        onChange={() =>
+                          update(i, { hallazgos: toggleFindingId(a.hallazgos, f.id, order) })
+                        }
+                      />
+                      <span>
+                        {numbers.get(f.id)}. {f.meta.title || f.id}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="row" style={{ justifyContent: "flex-end", marginTop: 6 }}>
+            <button
+              className="btn small"
+              aria-label={`Quitar accion ${i + 1}`}
+              onClick={() =>
+                patch((p) => ({
+                  ...p,
+                  plan_remediacion: (p.plan_remediacion ?? []).filter((_, idx) => idx !== i),
+                }))
+              }
+            >
+              <i className="ti ti-trash" />
+              Quitar accion
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -26,6 +26,11 @@ no es evidente por contexto.
   (capturas, bloques de codigo) intercalada.
 - **Remediacion**: imperativo, orientado a la accion ("Validar el parametro
   en el servidor", "Aplicar un allowlist de dominios permitidos").
+- **Impacto al negocio** (campo corto del hallazgo, no la seccion Impacto): un
+  solo parrafo para gestion, sin jerga tecnica, que diga que le pasa a la
+  organizacion (datos expuestos, dinero, continuidad, cumplimiento o
+  reputacion). Las acciones del **plan de remediacion** van en imperativo, igual
+  que la Remediacion.
 
 ## Vocabulario de severidad e impacto
 

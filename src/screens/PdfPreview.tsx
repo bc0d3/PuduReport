@@ -15,7 +15,9 @@ interface Props {
 
 // Columnas del CSV de resumen (en el orden en que salen). El usuario elige
 // cuales incluir; "nuevo" sirve sobre todo para retest. El mismo vocabulario de
-// campos se reutiliza para la exportacion a API (esquema estable).
+// campos se reutiliza para la exportacion a API (esquema estable). Los campos
+// de negocio (modulo en adelante) son opcionales: no estan en los defaults, asi
+// los destinos existentes reciben el mismo payload.
 const CSV_COLUMNS: { key: string; label: string }[] = [
   { key: "numero", label: "#" },
   { key: "titulo", label: "Titulo" },
@@ -27,6 +29,10 @@ const CSV_COLUMNS: { key: string; label: string }[] = [
   { key: "estado", label: "Estado" },
   { key: "afectados", label: "Afectados" },
   { key: "nuevo", label: "Nuevo (retest)" },
+  { key: "modulo", label: "Modulo" },
+  { key: "impacto_negocio", label: "Impacto al negocio" },
+  { key: "categoria_riesgo", label: "Categoria de riesgo" },
+  { key: "causa_raiz", label: "Causa raiz" },
 ];
 const CSV_DEFAULT = ["numero", "titulo", "severidad", "cvss", "estado", "afectados"];
 // Campos por default de un destino de API nuevo (metadata util para KPIs).
@@ -493,6 +499,10 @@ export function PdfPreview({ projectId, onPickProject }: Props) {
             </div>
             <div className="field">
               <label>Campos a enviar (esquema estable)</label>
+              <p className="faint" style={{ fontSize: 12, margin: "2px 0 0" }}>
+                Modulo, impacto al negocio, categoria de riesgo y causa raiz son opcionales:
+                activalos solo si el receptor los soporta.
+              </p>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
                 {CSV_COLUMNS.map((c) => (
                   <label key={c.key} className="row" style={{ gap: 8, cursor: "pointer" }}>

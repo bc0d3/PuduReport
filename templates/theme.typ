@@ -153,3 +153,132 @@
     #list(..items)
   ]
 }
+
+// --- Parte ejecutiva (informe de ethical hacking) ---
+// Bloques del layout "root_causes", "business_risks", "findings_impact" y
+// "remediation_plan". Reciben el data.json completo y no renderizan nada si
+// el proyecto no tiene los datos que muestran. Los textos llegan como texto
+// plano (no markup): se insertan como string, nunca con eval. Los numeros de
+// hallazgo son los mismos del indice y del detalle.
+
+#let priority-color = (
+  inmediata: rgb("#a32d2d"),
+  corto: rgb("#c2410c"),
+  mediano: rgb("#ba7517"),
+  cierre: rgb("#639922"),
+)
+
+// Lista de numeros de hallazgo: "1, 3, 4".
+#let finding-numbers(nums) = nums.map(n => str(n)).join(", ")
+
+// Celda vacia de las tablas ejecutivas.
+#let empty-cell = text(fill: luma(150), "—")
+
+#let priority-chip(a) = {
+  if a.prioridad == "" { empty-cell } else {
+    let color = priority-color.at(a.prioridad, default: rgb("#78716c"))
+    box(
+      inset: (x: 6pt, y: 2pt),
+      radius: 3pt,
+      stroke: 0.7pt + color,
+      text(size: 8pt, weight: "bold", fill: color, upper(a.prioridad_label)),
+    )
+  }
+}
+
+#let block-root-causes(data) = {
+  let items = data.project.at("causas_raiz", default: ())
+  if items.len() > 0 {
+    v(0.5cm)
+    heading(numbering: none)[Causas raiz]
+    for (i, c) in items.enumerate() {
+      block(breakable: false, above: 10pt, below: 8pt, width: 100%, inset: (left: 10pt), stroke: (left: 2pt + luma(200)))[
+        #text(weight: "bold", str(i + 1) + ". " + c.titulo)
+        #if c.hallazgos.len() > 0 [
+          #h(6pt)
+          #text(size: 9pt, fill: luma(90))[Hallazgos N° #finding-numbers(c.hallazgos)]
+        ]
+        #if c.descripcion != "" [
+          #block(above: 5pt, text(size: 10pt, c.descripcion))
+        ]
+      ]
+    }
+  }
+}
+
+#let block-business-risks(data) = {
+  let groups = data.at("riesgos_negocio", default: ())
+  if groups.len() > 0 {
+    v(0.5cm)
+    heading(numbering: none)[Riesgos para el negocio]
+    for g in groups {
+      block(above: 12pt, below: 4pt, sticky: true, text(weight: "bold", size: 11pt, g.etiqueta))
+      for f in g.hallazgos {
+        block(breakable: false, above: 6pt, below: 6pt, width: 100%, inset: (left: 10pt))[
+          #badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info))
+          #h(4pt)
+          #text(weight: "bold", str(f.number) + ". " + f.title)
+          #if f.impacto_negocio != "" [
+            #block(above: 4pt, text(size: 10pt, f.impacto_negocio))
+          ]
+        ]
+      }
+    }
+  }
+}
+
+#let block-findings-impact(data) = {
+  let rows = data.findings
+  let has-data = rows.any(f => f.at("modulo", default: "") != "" or f.at("impacto_negocio", default: "") != "")
+  if has-data {
+    v(0.5cm)
+    heading(numbering: none)[Hallazgos e impacto para el negocio]
+    table(
+      columns: (auto, 1.3fr, 0.8fr, auto, 2fr),
+      align: (center + horizon, left + horizon, left + horizon, center + horizon, left + horizon),
+      stroke: 0.5pt + luma(220),
+      table.header([N°], [Hallazgo], [Modulo], [Severidad], [Impacto para el negocio]),
+      ..rows.map(f => {
+        let modulo = f.at("modulo", default: "")
+        let impacto = f.at("impacto_negocio", default: "")
+        (
+          str(f.at("number", default: 0)),
+          f.title,
+          if modulo != "" { modulo } else { empty-cell },
+          badge(sev-label.at(f.severity, default: f.severity), sev-color.at(f.severity, default: sev-color.info)),
+          if impacto != "" { impacto } else { empty-cell },
+        )
+      }).flatten(),
+    )
+  }
+}
+
+#let block-remediation-plan(data) = {
+  let items = data.project.at("plan_remediacion", default: ())
+  if items.len() > 0 {
+    v(0.5cm)
+    heading(numbering: none)[Plan de remediacion priorizado]
+    table(
+      columns: (auto, 2fr, auto, 1fr),
+      align: (center + horizon, left + horizon, center + horizon, left + horizon),
+      stroke: 0.5pt + luma(220),
+      table.header([Prioridad], [Accion], [Cierra N°], [Responsable]),
+      ..items.map(a => (
+        priority-chip(a),
+        a.accion,
+        if a.hallazgos.len() > 0 { finding-numbers(a.hallazgos) } else { empty-cell },
+        if a.responsable != "" { a.responsable } else { empty-cell },
+      )).flatten(),
+    )
+  }
+}
+
+// Despacho de los bloques ejecutivos. Devuelve none si el kind no es uno de
+// ellos, asi cada plantilla lo agrega a su render-block sin duplicar codigo.
+#let executive-block(kind, data) = {
+  if kind == "root_causes" { block-root-causes(data) } else if kind == "business_risks" {
+    block-business-risks(data)
+  } else if kind == "findings_impact" { block-findings-impact(data) } else if kind == "remediation_plan" {
+    block-remediation-plan(data)
+  }
+}

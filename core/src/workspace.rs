@@ -356,10 +356,9 @@ pub fn create_example_project(root: &Path) -> Result<(String, ProjectMeta)> {
 
     let findings = example_findings();
     let order: Vec<String> = findings.iter().map(|f| f.id.clone()).collect();
-    for finding in &findings {
-        write_finding(root, &id, finding)?;
-    }
 
+    // El proyecto se escribe antes que los hallazgos: write_finding valida la
+    // causa raiz de cada hallazgo contra las causas raiz del proyecto.
     let meta = ProjectMeta {
         name: "Proyecto de ejemplo".to_string(),
         client: "Cliente Demo S.A.".to_string(),
@@ -383,10 +382,72 @@ pub fn create_example_project(root: &Path) -> Result<(String, ProjectMeta)> {
         sections: default_sections(),
         finding_order: order,
         project_status: ProjectStatus::Todo,
+        causas_raiz: example_root_causes(),
+        plan_remediacion: example_remediation_plan(),
         ..Default::default()
     };
     write_project_meta(root, &id, &meta)?;
+    for finding in &findings {
+        write_finding(root, &id, finding)?;
+    }
     Ok((id, meta))
+}
+
+/// Causas raiz del proyecto de ejemplo (parte ejecutiva del informe).
+fn example_root_causes() -> Vec<crate::models::CausaRaiz> {
+    use crate::models::CausaRaiz;
+    vec![
+        CausaRaiz {
+            clave: "validacion-entradas".to_string(),
+            titulo: "Validacion de entradas insuficiente en el servidor".to_string(),
+            descripcion: "Los datos que envia el usuario se usan sin validar ni parametrizar antes de llegar a la base de datos. La validacion existe solo en el navegador, donde un atacante la puede omitir.".to_string(),
+        },
+        CausaRaiz {
+            clave: "control-acceso".to_string(),
+            titulo: "Control de acceso por objeto ausente en la API".to_string(),
+            descripcion: "La API confia en el identificador que recibe y no verifica que el recurso pertenezca al usuario autenticado.".to_string(),
+        },
+        CausaRaiz {
+            clave: "configuracion-segura".to_string(),
+            titulo: "Configuracion segura no estandarizada".to_string(),
+            descripcion: "No existe una linea base de configuracion para los servidores web, por lo que los controles de seguridad del navegador dependen de cada despliegue.".to_string(),
+        },
+    ]
+}
+
+/// Plan de remediacion priorizado del proyecto de ejemplo.
+fn example_remediation_plan() -> Vec<crate::models::AccionRemediacion> {
+    use crate::models::AccionRemediacion;
+    vec![
+        AccionRemediacion {
+            prioridad: "inmediata".to_string(),
+            accion: "Reemplazar la construccion dinamica de consultas del inicio de sesion por consultas parametrizadas.".to_string(),
+            hallazgos: vec!["001-inyeccion-sql-en-login".to_string()],
+            responsable: "Equipo de desarrollo".to_string(),
+        },
+        AccionRemediacion {
+            prioridad: "corto".to_string(),
+            accion: "Verificar en cada endpoint de la API que el recurso solicitado pertenezca al usuario autenticado.".to_string(),
+            hallazgos: vec!["002-idor-en-api".to_string()],
+            responsable: "Equipo de desarrollo".to_string(),
+        },
+        AccionRemediacion {
+            prioridad: "mediano".to_string(),
+            accion: "Definir una linea base de cabeceras de seguridad y aplicarla en todos los servidores web.".to_string(),
+            hallazgos: vec!["003-cabeceras-seguridad-ausentes".to_string()],
+            responsable: "Infraestructura".to_string(),
+        },
+        AccionRemediacion {
+            prioridad: "cierre".to_string(),
+            accion: "Ejecutar un retest de los hallazgos corregidos y actualizar este informe.".to_string(),
+            hallazgos: vec![
+                "001-inyeccion-sql-en-login".to_string(),
+                "002-idor-en-api".to_string(),
+                "003-cabeceras-seguridad-ausentes".to_string(),
+            ],
+            responsable: "Seguridad de la informacion".to_string(),
+        },
+    ]
 }
 
 /// Tres hallazgos de ejemplo con contenido generico pero realista.
@@ -408,6 +469,10 @@ fn example_findings() -> Vec<Finding> {
                 hidden: false,
                 new_in_retest: false,
                 hidden_fields: Vec::new(),
+                impacto_negocio: "Un tercero sin credenciales puede ingresar como cualquier usuario y extraer la base de clientes, con exposicion de datos personales y obligacion de notificar la brecha.".to_string(),
+                categoria_riesgo: "fuga_datos".to_string(),
+                modulo: "Inicio de sesion".to_string(),
+                causa_raiz: "validacion-entradas".to_string(),
             },
             body: "## Descripcion\n\nEl campo de usuario del formulario de inicio de sesion no valida ni parametriza la entrada antes de construir la consulta SQL. Esto permite a un atacante alterar la logica de la consulta e interactuar directamente con la base de datos.\n\n## Impacto\n\nUn atacante puede omitir la autenticacion, extraer informacion sensible de la base de datos (credenciales, datos personales) y, segun la configuracion del motor, ejecutar comandos en el sistema operativo subyacente.\n\n## Prueba de concepto\n\nEnviando el siguiente valor en el campo de usuario se omite la verificacion de credenciales:\n\n```\nusuario: admin' OR '1'='1' -- \npassword: cualquier_cosa\n```\n\nLa aplicacion responde con una sesion valida sin conocer la contrasena real.\n\n## Remediacion\n\nUtilizar consultas parametrizadas (prepared statements) o un ORM que las aplique por defecto. Validar y normalizar toda entrada del usuario y aplicar el principio de minimo privilegio a la cuenta de base de datos.".to_string(),
         },
@@ -426,6 +491,10 @@ fn example_findings() -> Vec<Finding> {
                 hidden: false,
                 new_in_retest: false,
                 hidden_fields: Vec::new(),
+                impacto_negocio: "Cualquier cliente autenticado puede consultar los datos de otros clientes, lo que expone a la organizacion a sanciones por incumplimiento de la normativa de proteccion de datos.".to_string(),
+                categoria_riesgo: "incumplimiento_regulatorio".to_string(),
+                modulo: "API de usuarios".to_string(),
+                causa_raiz: "control-acceso".to_string(),
             },
             body: "## Descripcion\n\nEl endpoint de la API que devuelve datos de un usuario utiliza un identificador numerico secuencial sin verificar que el solicitante tenga permiso sobre ese recurso. Cualquier usuario autenticado puede acceder a los datos de otros.\n\n## Impacto\n\nExposicion masiva de informacion de otros usuarios (datos personales, configuracion de cuenta) recorriendo los identificadores. Constituye una violacion de confidencialidad a nivel de toda la base de usuarios.\n\n## Prueba de concepto\n\nAutenticado como el usuario con identificador 1001, la siguiente peticion devuelve los datos de otro usuario:\n\n```\nGET /v1/users/1002 HTTP/1.1\nHost: api.demo.example\nAuthorization: Bearer <token-del-usuario-1001>\n```\n\nLa respuesta contiene los datos del usuario 1002.\n\n## Remediacion\n\nAplicar controles de autorizacion a nivel de objeto en cada peticion, verificando que el recurso pertenezca al usuario autenticado. Considerar el uso de identificadores no predecibles (UUID) como defensa en profundidad.".to_string(),
         },
@@ -443,6 +512,10 @@ fn example_findings() -> Vec<Finding> {
                 hidden: false,
                 new_in_retest: false,
                 hidden_fields: Vec::new(),
+                impacto_negocio: "Facilita ataques contra los usuarios del portal que, combinados con otra vulnerabilidad, pueden afectar la confianza en el servicio.".to_string(),
+                categoria_riesgo: "reputacional".to_string(),
+                modulo: "Portal web".to_string(),
+                causa_raiz: "configuracion-segura".to_string(),
             },
             body: "## Descripcion\n\nLas respuestas de la aplicacion no incluyen varias cabeceras de seguridad recomendadas, como Content-Security-Policy, Strict-Transport-Security y X-Content-Type-Options.\n\n## Impacto\n\nLa ausencia de estas cabeceras facilita ataques del lado del cliente como cross-site scripting, clickjacking o la degradacion de la conexion a HTTP. Por si sola es de bajo riesgo, pero amplifica el impacto de otras vulnerabilidades.\n\n## Prueba de concepto\n\nAl inspeccionar las cabeceras de respuesta de la pagina principal no se observan las cabeceras de seguridad mencionadas:\n\n```\nGET / HTTP/1.1\nHost: app.demo.example\n```\n\n## Remediacion\n\nConfigurar el servidor web o la aplicacion para enviar las cabeceras de seguridad apropiadas. Definir una Content-Security-Policy restrictiva, habilitar HSTS y agregar X-Content-Type-Options: nosniff.".to_string(),
         },
@@ -682,7 +755,40 @@ pub fn read_project_meta(root: &Path, id: &str) -> Result<ProjectMeta> {
     // Clasificacion (ambiente/exposicion) solo con valores permitidos, aunque
     // el project.yaml se haya editado a mano.
     meta.normalize_classification();
+    // Parte ejecutiva: claves de causas raiz validas y el plan de remediacion
+    // solo con hallazgos que existen.
+    meta.normalize_executive(&finding_ids(root, id)?);
     Ok(meta)
+}
+
+/// Ids de los hallazgos de un proyecto (nombres de archivo `.md` sin
+/// extension), sin parsearlos. Lo usa `read_project_meta` para validar las
+/// referencias del plan de remediacion sin leer cada hallazgo.
+pub fn finding_ids(root: &Path, project_id: &str) -> Result<Vec<String>> {
+    validate_id(project_id)?;
+    let dir = findings_dir(root, project_id);
+    let mut ids = Vec::new();
+    if dir.exists() {
+        for entry in fs::read_dir(dir)? {
+            let path = entry?.path();
+            if path.extension().is_some_and(|e| e == "md") {
+                if let Some(stem) = path.file_stem() {
+                    ids.push(stem.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+    Ok(ids)
+}
+
+/// Deja los campos de negocio de un hallazgo dentro de sus reglas (ver
+/// `FindingMeta::normalize_business_fields`), validando `causa_raiz` contra
+/// las causas raiz del proyecto. Si el proyecto no se puede leer, no toca
+/// `causa_raiz` (no se pierde el dato por un error transitorio).
+pub fn normalize_finding(root: &Path, project_id: &str, finding: &mut Finding) {
+    let project = read_project_meta(root, project_id).ok();
+    let keys = project.as_ref().map(|p| p.root_cause_keys());
+    finding.meta.normalize_business_fields(keys.as_deref());
 }
 
 pub fn write_project_meta(root: &Path, id: &str, meta: &ProjectMeta) -> Result<()> {
@@ -781,10 +887,14 @@ pub fn list_findings(root: &Path, project_id: &str) -> Result<Vec<Finding>> {
         }
     }
 
-    // Ordenar por finding_order; los no listados van al final por id.
-    let order = read_project_meta(root, project_id)
-        .map(|m| m.finding_order)
-        .unwrap_or_default();
+    // Ordenar por finding_order; los no listados van al final por id. Los
+    // campos de negocio se validan contra las causas raiz del proyecto.
+    let project = read_project_meta(root, project_id).ok();
+    let keys = project.as_ref().map(|p| p.root_cause_keys());
+    for f in &mut findings {
+        f.meta.normalize_business_fields(keys.as_deref());
+    }
+    let order = project.map(|m| m.finding_order).unwrap_or_default();
     findings.sort_by_key(|f| {
         order
             .iter()
@@ -801,7 +911,9 @@ pub fn load_finding(root: &Path, project_id: &str, finding_id: &str) -> Result<F
     if !path.exists() {
         return Err(WorkspaceError::FindingNotFound(finding_id.to_string()));
     }
-    parse_finding_file(&path)
+    let mut finding = parse_finding_file(&path)?;
+    normalize_finding(root, project_id, &mut finding);
+    Ok(finding)
 }
 
 /// Limita solo slugs de hallazgos nuevos; los IDs existentes nunca cambian.
@@ -863,10 +975,16 @@ fn next_finding_number(dir: &Path) -> Result<u32> {
 }
 
 /// Escribe un hallazgo a disco (id estable, no se renombra al cambiar titulo).
+/// Los campos de negocio se normalizan antes de escribir (ver
+/// `normalize_finding`): nunca se guarda una categoria o causa raiz invalida.
 pub fn write_finding(root: &Path, project_id: &str, finding: &Finding) -> Result<()> {
     validate_id(project_id)?;
     validate_id(&finding.id)?;
-    let content = join_front_matter(&finding.meta, &finding.body)?;
+    let mut meta = finding.meta.clone();
+    let project = read_project_meta(root, project_id).ok();
+    let keys = project.as_ref().map(|p| p.root_cause_keys());
+    meta.normalize_business_fields(keys.as_deref());
+    let content = join_front_matter(&meta, &finding.body)?;
     write_atomic(
         &finding_path(root, project_id, &finding.id),
         content.as_bytes(),
@@ -1542,6 +1660,86 @@ mod tests {
             .iter()
             .any(|f| f.meta.severity == crate::models::Severity::Critical));
 
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn example_project_trae_la_parte_ejecutiva_consistente() {
+        let tmp = std::env::temp_dir().join(format!("pudu-ex-exec-{}", uuid::Uuid::new_v4()));
+        create_workspace(&tmp, "WS").unwrap();
+        let (id, _) = create_example_project(&tmp).unwrap();
+        let meta = read_project_meta(&tmp, &id).unwrap();
+        assert_eq!(meta.causas_raiz.len(), 3);
+        assert_eq!(meta.plan_remediacion.len(), 4);
+        // Las referencias sobreviven a la normalizacion al leer.
+        assert_eq!(meta.plan_remediacion[3].hallazgos.len(), 3);
+        let findings = list_findings(&tmp, &id).unwrap();
+        assert!(findings
+            .iter()
+            .all(|f| !f.meta.causa_raiz.is_empty() && !f.meta.categoria_riesgo.is_empty()));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn referencias_de_la_parte_ejecutiva_se_validan_al_leer_y_escribir() {
+        use crate::models::{AccionRemediacion, CausaRaiz};
+
+        let tmp = std::env::temp_dir().join(format!("pudu-exec-refs-{}", uuid::Uuid::new_v4()));
+        create_workspace(&tmp, "WS").unwrap();
+        let (pid, _) = create_project(&tmp, "Web", "ACME", "pentest").unwrap();
+        let a = create_finding(&tmp, &pid, "A").unwrap();
+        let b = create_finding(&tmp, &pid, "B").unwrap();
+
+        let mut meta = read_project_meta(&tmp, &pid).unwrap();
+        meta.causas_raiz = vec![CausaRaiz {
+            clave: "validacion".into(),
+            titulo: "Validacion".into(),
+            descripcion: String::new(),
+        }];
+        meta.plan_remediacion = vec![AccionRemediacion {
+            prioridad: "corto".into(),
+            accion: "Corregir".into(),
+            hallazgos: vec![a.id.clone(), "999-fantasma".into(), b.id.clone()],
+            responsable: String::new(),
+        }];
+        write_project_meta(&tmp, &pid, &meta).unwrap();
+
+        // Al leer, el plan solo conserva hallazgos que existen.
+        let meta = read_project_meta(&tmp, &pid).unwrap();
+        assert_eq!(
+            meta.plan_remediacion[0].hallazgos,
+            vec![a.id.clone(), b.id.clone()]
+        );
+
+        // write_finding descarta una causa raiz inexistente o una categoria
+        // fuera de la lista, y conserva las validas.
+        let mut fa = load_finding(&tmp, &pid, &a.id).unwrap();
+        fa.meta.causa_raiz = "validacion".into();
+        fa.meta.categoria_riesgo = "fraude_economico".into();
+        write_finding(&tmp, &pid, &fa).unwrap();
+        let mut fb = load_finding(&tmp, &pid, &b.id).unwrap();
+        fb.meta.causa_raiz = "inexistente".into();
+        fb.meta.categoria_riesgo = "otra".into();
+        write_finding(&tmp, &pid, &fb).unwrap();
+        let raw_b =
+            fs::read_to_string(tmp.join(&pid).join("findings").join(format!("{}.md", b.id)))
+                .unwrap();
+        assert!(!raw_b.contains("inexistente"));
+        assert!(!raw_b.contains("categoria_riesgo"));
+        let fa = load_finding(&tmp, &pid, &a.id).unwrap();
+        assert_eq!(fa.meta.causa_raiz, "validacion");
+        assert_eq!(fa.meta.categoria_riesgo, "fraude_economico");
+
+        // Al borrar la causa raiz del proyecto, el hallazgo deja de apuntarla.
+        let mut meta = read_project_meta(&tmp, &pid).unwrap();
+        meta.causas_raiz.clear();
+        write_project_meta(&tmp, &pid, &meta).unwrap();
+        assert_eq!(load_finding(&tmp, &pid, &a.id).unwrap().meta.causa_raiz, "");
+
+        // Al borrar un hallazgo, sale del plan.
+        delete_finding(&tmp, &pid, &a.id).unwrap();
+        let meta = read_project_meta(&tmp, &pid).unwrap();
+        assert_eq!(meta.plan_remediacion[0].hallazgos, vec![b.id.clone()]);
         let _ = fs::remove_dir_all(&tmp);
     }
 

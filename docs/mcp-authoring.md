@@ -187,21 +187,36 @@ No confundir este DTO con la respuesta de `get_finding`:
 
 - `workspace`: `name`, `branding`, `watermark`.
 - `project`: `name`, `client`, `gerencia`, `area`, `project_type`, `osid`,
-  `start_date`, `end_date`, `scope`, `team`, `sections`, `layout`.
+  `start_date`, `end_date`, `scope`, `team`, `sections`, `layout`,
+  `causas_raiz`, `plan_remediacion`.
 - `project.sections`: array de `{key, title, body}`.
-- `findings`: array de objetos PLANOS: `id`, `title`, `severity`, `cvss`,
-  `cvss_version`, `cvss_vector`, `cwe` (string), `status`, `affected` (array),
-  `new_in_retest` (boolean) y `body`. No hay `finding.meta` ni `finding.poc`:
+- `project.causas_raiz`: array de `{clave, titulo, descripcion, hallazgos}`;
+  `hallazgos` son numeros de hallazgo del reporte. Solo las que tienen titulo.
+- `project.plan_remediacion`: array de `{prioridad, prioridad_label, accion,
+  hallazgos, responsable}`, ya ordenado por prioridad (`inmediata`, `corto`,
+  `mediano`, `cierre`, sin especificar al final). Solo acciones con texto.
+- `findings`: array de objetos PLANOS: `id`, `number` (numero en el reporte,
+  sin contar ocultos), `title`, `severity`, `cvss`, `cvss_version`,
+  `cvss_vector`, `cwe` (string), `status`, `affected` (array), `new_in_retest`
+  (boolean), `modulo`, `impacto_negocio`, `categoria_riesgo` (slug o ""),
+  `causa_raiz` (clave o "") y `body`. No hay `finding.meta` ni `finding.poc`:
   la PoC forma parte del body.
 - `severity_counts`: `critical`, `high`, `medium`, `low`, `info`.
+- `riesgos_negocio`: array de `{categoria, etiqueta, hallazgos}` con
+  `hallazgos` de `{number, title, severity, impacto_negocio}`, solo grupos con
+  hallazgos.
 
 `body` de hallazgos/secciones y los elementos de `scope` ya contienen markup
 Typst convertido por el backend: renderice con `eval(valor, mode: "markup")`.
-Los titulos y metadata son strings: paselos como texto, sin `eval`.
+Los titulos y metadata son strings: paselos como texto, sin `eval`. Los textos
+de la parte ejecutiva (causas raiz, plan, impacto al negocio, modulo) tambien
+son texto plano.
 
 Respete el orden y `enabled` de `project.layout`: sus bloques tienen `kind`,
 `enabled`, `config`. Kinds: `cover`, `toc`, `info`, `severity`, `findings_index`,
-`findings`, `section`, `text`, `pagebreak`. `section` apunta a `config.key`.
+`findings`, `section`, `text`, `pagebreak` y los de la parte ejecutiva
+`root_causes`, `business_risks`, `findings_impact`, `remediation_plan`
+(`theme.typ` trae su render en `executive-block(kind, data)`). `section` apunta a `config.key`.
 Los bloques `text` usan `config.title` y `config.body` ya convertido. Conserve
 branding, watermark y ocultacion al evolucionar una base para produccion.
 

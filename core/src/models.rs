@@ -143,6 +143,96 @@ pub struct FindingMeta {
     /// en reportes de familia retest; la plantilla los muestra aparte.
     #[serde(default, skip_serializing_if = "is_false")]
     pub new_in_retest: bool,
+    /// Impacto para el negocio en un parrafo corto de texto plano (opcional,
+    /// hasta `MAX_IMPACTO_NEGOCIO` caracteres). Lo usan la parte ejecutiva del
+    /// PDF y las exportaciones; no reemplaza la seccion Impacto del cuerpo.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub impacto_negocio: String,
+    /// Categoria de riesgo para el negocio (opcional, lista cerrada
+    /// `CATEGORIAS_RIESGO`; "" = sin especificar). Agrupa los hallazgos en
+    /// "Riesgos para el negocio".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub categoria_riesgo: String,
+    /// Modulo o componente afectado (opcional, hasta `MAX_MODULO` caracteres).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub modulo: String,
+    /// Clave de una causa raiz del proyecto (`ProjectMeta::causas_raiz`). ""
+    /// = sin causa raiz. Una clave que no existe en el proyecto se descarta.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub causa_raiz: String,
+}
+
+/// Valores permitidos de `FindingMeta::categoria_riesgo` ("" = sin especificar).
+pub const CATEGORIAS_RIESGO: [&str; 7] = [
+    "",
+    "fuga_datos",
+    "fraude_economico",
+    "interrupcion_servicio",
+    "incumplimiento_regulatorio",
+    "reputacional",
+    "reconocimiento",
+];
+
+/// Etiqueta legible de una categoria de riesgo (PDF y CSV). "" si no aplica.
+pub fn categoria_riesgo_label(slug: &str) -> &'static str {
+    match slug {
+        "fuga_datos" => "Fuga de datos personales",
+        "fraude_economico" => "Fraude economico",
+        "interrupcion_servicio" => "Interrupcion del servicio",
+        "incumplimiento_regulatorio" => "Incumplimiento regulatorio",
+        "reputacional" => "Reputacional",
+        "reconocimiento" => "Reconocimiento y persistencia",
+        _ => "",
+    }
+}
+
+/// Largo maximo (en caracteres) de `FindingMeta::impacto_negocio`.
+pub const MAX_IMPACTO_NEGOCIO: usize = 500;
+/// Largo maximo (en caracteres) de `FindingMeta::modulo`.
+pub const MAX_MODULO: usize = 120;
+/// Largo maximo de los textos cortos de la parte ejecutiva (titulo de una
+/// causa raiz, responsable de una accion).
+pub const MAX_TEXTO_CORTO: usize = 120;
+/// Largo maximo de los textos largos de la parte ejecutiva (descripcion de una
+/// causa raiz, accion de remediacion).
+pub const MAX_TEXTO_LARGO: usize = 1000;
+
+/// Reemplaza los saltos de linea por espacios (texto de un solo parrafo) y
+/// corta en `max` caracteres. No recorta espacios: se aplica al guardar
+/// mientras el usuario escribe, y recortar le moveria el texto. Idempotente.
+fn single_paragraph(value: &str, max: usize) -> String {
+    value
+        .chars()
+        .map(|c| if c == '\n' || c == '\r' { ' ' } else { c })
+        .take(max)
+        .collect()
+}
+
+/// Corta un texto en `max` caracteres (no en bytes, para no partir un
+/// caracter multibyte).
+fn truncate_chars(value: &str, max: usize) -> String {
+    value.chars().take(max).collect()
+}
+
+impl FindingMeta {
+    /// Deja los campos de negocio dentro de sus reglas: `categoria_riesgo` en la
+    /// lista cerrada, `impacto_negocio` y `modulo` en un parrafo y con su largo
+    /// maximo, y `causa_raiz` solo si es una de `root_cause_keys` (si no, "").
+    /// Con `root_cause_keys = None` (proyecto ilegible) no toca `causa_raiz`.
+    /// Idempotente.
+    pub fn normalize_business_fields(&mut self, root_cause_keys: Option<&[&str]>) {
+        self.categoria_riesgo = normalize_choice(&self.categoria_riesgo, &CATEGORIAS_RIESGO);
+        self.impacto_negocio = single_paragraph(&self.impacto_negocio, MAX_IMPACTO_NEGOCIO);
+        self.modulo = single_paragraph(&self.modulo, MAX_MODULO);
+        if let Some(keys) = root_cause_keys {
+            let key = self.causa_raiz.trim();
+            self.causa_raiz = if keys.contains(&key) {
+                key.to_string()
+            } else {
+                String::new()
+            };
+        }
+    }
 }
 
 /// Para `skip_serializing_if`: omite los bool en false (no ensucia el
@@ -184,7 +274,8 @@ fn default_true() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ReportBlock {
     /// cover | info | toc | severity | findings_index | section | findings |
-    /// text | pagebreak.
+    /// text | pagebreak | root_causes | business_risks | findings_impact |
+    /// remediation_plan.
     pub kind: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -195,7 +286,7 @@ pub struct ReportBlock {
 }
 
 /// Todos los kinds reconocidos.
-pub const KNOWN_BLOCK_KINDS: [&str; 9] = [
+pub const KNOWN_BLOCK_KINDS: [&str; 13] = [
     "cover",
     "info",
     "toc",
@@ -205,22 +296,47 @@ pub const KNOWN_BLOCK_KINDS: [&str; 9] = [
     "findings",
     "text",
     "pagebreak",
+    "root_causes",
+    "business_risks",
+    "findings_impact",
+    "remediation_plan",
 ];
 
 /// Kinds estructurales que solo deben aparecer una vez (singletons). `section`,
 /// `text` y `pagebreak` pueden repetirse.
-pub const SINGLETON_BLOCK_KINDS: [&str; 6] = [
+pub const SINGLETON_BLOCK_KINDS: [&str; 10] = [
     "cover",
     "info",
     "toc",
     "severity",
     "findings_index",
     "findings",
+    "root_causes",
+    "business_risks",
+    "findings_impact",
+    "remediation_plan",
 ];
+
+/// Bloques de la parte ejecutiva (informe de ethical hacking), en su orden
+/// canonico: causas raiz, riesgos para el negocio, tabla de hallazgos con su
+/// impacto y plan de remediacion priorizado. Cada uno no renderiza nada si el
+/// proyecto no tiene los datos que muestra.
+pub const EXECUTIVE_BLOCK_KINDS: [&str; 4] = [
+    "root_causes",
+    "business_risks",
+    "findings_impact",
+    "remediation_plan",
+];
+
+/// Tipos de proyecto cuyas plantillas incluidas renderizan los bloques de la
+/// parte ejecutiva (pentest y red team comparten `pentest.typ`).
+pub fn supports_executive_blocks(project_type: &str) -> bool {
+    matches!(project_type, "pentest" | "redteam" | "ejecutivo")
+}
 
 impl ReportBlock {
     /// Bloque simple sin config (cover, toc, info, severity, findings_index,
-    /// findings, pagebreak).
+    /// findings, pagebreak y los bloques ejecutivos).
     pub fn simple(kind: &str) -> Self {
         ReportBlock {
             kind: kind.to_string(),
@@ -262,11 +378,13 @@ pub fn default_layout(project_type: &str, sections: &[ReportSection]) -> Vec<Rep
     match project_type {
         // Informe ejecutivo: portada, indice, info, resumen de severidades y
         // prosa. Sin detalle de hallazgos.
+        // Incluye la parte ejecutiva (vacia si no hay datos) tras el resumen.
         "ejecutivo" => {
             blocks.push(ReportBlock::simple("cover"));
             blocks.push(ReportBlock::simple("toc"));
             blocks.push(ReportBlock::simple("info"));
             blocks.push(ReportBlock::simple("severity"));
+            blocks.extend(executive_blocks());
             blocks.extend(sections_blocks());
         }
         // Tipos de lienzo markdown (documento libre, CTI, DFIR y los defensivos):
@@ -297,7 +415,20 @@ pub fn default_layout(project_type: &str, sections: &[ReportSection]) -> Vec<Rep
             blocks.extend(sections_blocks());
             blocks.push(ReportBlock::simple("findings"));
         }
-        // pentest, redteam, htb y cualquier desconocido: cuerpo completo.
+        // Pentest y red team: cuerpo completo con la parte ejecutiva antes de la
+        // prosa y del detalle tecnico. Los bloques ejecutivos no renderizan nada
+        // sin datos, asi un proyecto que no los usa genera el mismo PDF.
+        "pentest" | "redteam" => {
+            blocks.push(ReportBlock::simple("cover"));
+            blocks.push(ReportBlock::simple("toc"));
+            blocks.push(ReportBlock::simple("info"));
+            blocks.push(ReportBlock::simple("severity"));
+            blocks.push(ReportBlock::simple("findings_index"));
+            blocks.extend(executive_blocks());
+            blocks.extend(sections_blocks());
+            blocks.push(ReportBlock::simple("findings"));
+        }
+        // htb y cualquier desconocido: cuerpo completo.
         _ => {
             blocks.push(ReportBlock::simple("cover"));
             blocks.push(ReportBlock::simple("toc"));
@@ -309,6 +440,11 @@ pub fn default_layout(project_type: &str, sections: &[ReportSection]) -> Vec<Rep
         }
     }
     blocks
+}
+
+/// Bloques de la parte ejecutiva en su orden canonico.
+fn executive_blocks() -> impl Iterator<Item = ReportBlock> {
+    EXECUTIVE_BLOCK_KINDS.iter().map(|k| ReportBlock::simple(k))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -374,6 +510,102 @@ pub struct ProjectMeta {
     pub layout: Vec<ReportBlock>,
     #[serde(default)]
     pub finding_order: Vec<String>,
+    /// Causas raiz del proyecto (parte ejecutiva del informe). Cada hallazgo
+    /// puede apuntar a una por su `clave` (`FindingMeta::causa_raiz`). No se
+    /// escribe a disco mientras este vacio.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub causas_raiz: Vec<CausaRaiz>,
+    /// Plan de remediacion priorizado (parte ejecutiva del informe). No se
+    /// escribe a disco mientras este vacio.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plan_remediacion: Vec<AccionRemediacion>,
+}
+
+/// Causa raiz comun a varios hallazgos (ej. "Validacion de entradas solo en
+/// el cliente"). La `clave` es un slug estable que referencian los hallazgos.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct CausaRaiz {
+    /// Slug estable (minusculas, digitos y guiones). Se genera al crearla y no
+    /// cambia al editar el titulo, para no romper las referencias.
+    #[serde(default)]
+    pub clave: String,
+    #[serde(default)]
+    pub titulo: String,
+    #[serde(default)]
+    pub descripcion: String,
+}
+
+/// Accion del plan de remediacion priorizado.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct AccionRemediacion {
+    /// Lista cerrada `PRIORIDADES_REMEDIACION` ("" = sin especificar).
+    #[serde(default)]
+    pub prioridad: String,
+    /// Que hay que hacer, en imperativo.
+    #[serde(default)]
+    pub accion: String,
+    /// Ids de los hallazgos que cierra esta accion. Los ids que no existen en
+    /// el proyecto se descartan al leer y al guardar.
+    #[serde(default)]
+    pub hallazgos: Vec<String>,
+    /// Area o persona responsable (texto libre corto, opcional).
+    #[serde(default)]
+    pub responsable: String,
+}
+
+/// Valores permitidos de `AccionRemediacion::prioridad`, en orden de urgencia
+/// ("" = sin especificar, va al final).
+pub const PRIORIDADES_REMEDIACION: [&str; 5] = ["", "inmediata", "corto", "mediano", "cierre"];
+
+/// Etiqueta legible de una prioridad de remediacion. "" si no aplica.
+pub fn prioridad_label(slug: &str) -> &'static str {
+    match slug {
+        "inmediata" => "Inmediata",
+        "corto" => "Corto plazo",
+        "mediano" => "Mediano plazo",
+        "cierre" => "Cierre",
+        _ => "",
+    }
+}
+
+/// Orden de urgencia de una prioridad (menor = mas urgente). Sin especificar
+/// va al final.
+pub fn prioridad_rank(slug: &str) -> usize {
+    match slug {
+        "inmediata" => 0,
+        "corto" => 1,
+        "mediano" => 2,
+        "cierre" => 3,
+        _ => 4,
+    }
+}
+
+/// Slug para la clave de una causa raiz: minusculas ASCII, digitos y guiones
+/// simples, sin guiones en los extremos y hasta 64 caracteres. Las vocales
+/// acentuadas y la enie se transliteran; el resto de los simbolos separa.
+pub fn slug_key(value: &str) -> String {
+    let mut out = String::new();
+    for c in value.trim().chars().flat_map(char::to_lowercase) {
+        let c = match c {
+            'á' | 'à' | 'ä' | 'â' => 'a',
+            'é' | 'è' | 'ë' | 'ê' => 'e',
+            'í' | 'ì' | 'ï' | 'î' => 'i',
+            'ó' | 'ò' | 'ö' | 'ô' => 'o',
+            'ú' | 'ù' | 'ü' | 'û' => 'u',
+            'ñ' => 'n',
+            other => other,
+        };
+        if c.is_ascii_alphanumeric() {
+            out.push(c);
+        } else if !out.is_empty() && !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    let mut out: String = out.chars().take(64).collect();
+    while out.ends_with('-') {
+        out.pop();
+    }
+    out
 }
 
 /// Valores permitidos de `ProjectMeta::ambiente` ("" = sin especificar).
@@ -402,6 +634,54 @@ impl ProjectMeta {
     pub fn normalize_classification(&mut self) {
         self.ambiente = normalize_choice(&self.ambiente, &AMBIENTES);
         self.exposicion = normalize_choice(&self.exposicion, &EXPOSICIONES);
+    }
+
+    /// Sanea la parte ejecutiva del proyecto. Idempotente. Se aplica al leer y
+    /// al guardar, asi un project.yaml editado a mano no propaga datos
+    /// invalidos:
+    /// - Causas raiz: la clave queda como slug valido y unico (si falta, se
+    ///   deriva del titulo o se numera); titulo y descripcion se recortan a su
+    ///   largo maximo.
+    /// - Plan de remediacion: `prioridad` dentro de `PRIORIDADES_REMEDIACION`
+    ///   (si no, ""), `hallazgos` solo con ids de `finding_ids` y sin
+    ///   repetidos, y textos acotados a su largo maximo.
+    pub fn normalize_executive(&mut self, finding_ids: &[String]) {
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for (i, causa) in self.causas_raiz.iter_mut().enumerate() {
+            let mut base = slug_key(&causa.clave);
+            if base.is_empty() {
+                base = slug_key(&causa.titulo);
+            }
+            if base.is_empty() {
+                base = format!("causa-{}", i + 1);
+            }
+            let mut clave = base.clone();
+            let mut n = 2;
+            while seen.contains(&clave) {
+                clave = format!("{base}-{n}");
+                n += 1;
+            }
+            seen.insert(clave.clone());
+            causa.clave = clave;
+            causa.titulo = single_paragraph(causa.titulo.trim(), MAX_TEXTO_CORTO);
+            causa.descripcion = truncate_chars(causa.descripcion.trim(), MAX_TEXTO_LARGO);
+        }
+
+        for accion in &mut self.plan_remediacion {
+            accion.prioridad = normalize_choice(&accion.prioridad, &PRIORIDADES_REMEDIACION);
+            accion.accion = truncate_chars(accion.accion.trim(), MAX_TEXTO_LARGO);
+            accion.responsable = single_paragraph(accion.responsable.trim(), MAX_TEXTO_CORTO);
+            let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+            accion
+                .hallazgos
+                .retain(|id| finding_ids.contains(id) && seen_ids.insert(id.clone()));
+        }
+    }
+
+    /// Claves de las causas raiz definidas (para validar
+    /// `FindingMeta::causa_raiz`).
+    pub fn root_cause_keys(&self) -> Vec<&str> {
+        self.causas_raiz.iter().map(|c| c.clave.as_str()).collect()
     }
 
     /// Resuelve el layout efectivo del cuerpo, dejandolo consistente con las
@@ -463,7 +743,46 @@ impl ProjectMeta {
         for (i, blk) in missing.into_iter().enumerate() {
             self.layout.insert(pos + i, blk);
         }
+
+        // 4. Proyectos previos a la parte ejecutiva: agregar los bloques que
+        //    falten (solo en los tipos cuya plantilla los renderiza). No cambian
+        //    el PDF mientras no haya datos, y asi el usuario puede activarlos,
+        //    ocultarlos o moverlos sin recrear el layout.
+        if supports_executive_blocks(&self.project_type) {
+            let missing: Vec<ReportBlock> = EXECUTIVE_BLOCK_KINDS
+                .iter()
+                .filter(|k| !self.layout.iter().any(|b| b.kind == **k))
+                .map(|k| ReportBlock::simple(k))
+                .collect();
+            if !missing.is_empty() {
+                let pos = executive_insert_position(&self.layout);
+                for (i, blk) in missing.into_iter().enumerate() {
+                    self.layout.insert(pos + i, blk);
+                }
+            }
+        }
     }
+}
+
+/// Donde insertar los bloques ejecutivos que falten: despues del ultimo
+/// bloque ejecutivo presente; si no hay, despues del resumen (severity /
+/// findings_index); si tampoco, antes de la primera seccion o del detalle de
+/// hallazgos; y si no, al final.
+fn executive_insert_position(layout: &[ReportBlock]) -> usize {
+    let after_last = |kinds: &[&str]| {
+        layout
+            .iter()
+            .rposition(|b| kinds.contains(&b.kind.as_str()))
+            .map(|i| i + 1)
+    };
+    after_last(&EXECUTIVE_BLOCK_KINDS)
+        .or_else(|| after_last(&["severity", "findings_index"]))
+        .or_else(|| {
+            layout
+                .iter()
+                .position(|b| b.kind == "section" || b.kind == "findings")
+        })
+        .unwrap_or(layout.len())
 }
 
 /// Tipo de proyecto por defecto cuando el archivo no lo trae.
@@ -911,23 +1230,48 @@ mod tests {
                 "info",
                 "severity",
                 "findings_index",
+                "root_causes",
+                "business_risks",
+                "findings_impact",
+                "remediation_plan",
                 s,
                 a,
                 "findings"
             ]
         );
-        // redteam y htb comparten el cuerpo completo de pentest.
+        // redteam comparte el cuerpo completo de pentest (misma plantilla).
         assert_eq!(
             layout_kinds(&default_layout("redteam", &secs)),
             layout_kinds(&default_layout("pentest", &secs))
         );
+        // htb conserva el cuerpo completo sin la parte ejecutiva.
         assert_eq!(
             layout_kinds(&default_layout("htb", &secs)),
-            layout_kinds(&default_layout("pentest", &secs))
+            vec![
+                "cover",
+                "toc",
+                "info",
+                "severity",
+                "findings_index",
+                s,
+                a,
+                "findings"
+            ]
         );
         assert_eq!(
             layout_kinds(&default_layout("ejecutivo", &secs)),
-            vec!["cover", "toc", "info", "severity", s, a]
+            vec![
+                "cover",
+                "toc",
+                "info",
+                "severity",
+                "root_causes",
+                "business_risks",
+                "findings_impact",
+                "remediation_plan",
+                s,
+                a
+            ]
         );
         assert_eq!(
             layout_kinds(&default_layout("documento", &secs)),
@@ -979,17 +1323,231 @@ mod tests {
         )
         .unwrap();
         p.reconcile_layout();
+        // Sin project_type el tipo es pentest: tambien se agregan los bloques
+        // ejecutivos que faltan, antes de la primera seccion.
         assert_eq!(
             layout_kinds(&p.layout),
             vec![
                 "toc",
                 "text",
                 "text",
+                "root_causes",
+                "business_risks",
+                "findings_impact",
+                "remediation_plan",
                 "section:resumen",
                 "section:metodologia",
                 "findings"
             ]
         );
+    }
+
+    #[test]
+    fn reconcile_layout_agrega_bloques_ejecutivos_a_layouts_previos() {
+        // Layout guardado antes de la parte ejecutiva: se agregan despues del
+        // resumen, sin tocar el resto ni el estado de los demas bloques.
+        let mut p: ProjectMeta = serde_yaml::from_str(
+            "project_type: pentest\nsections:\n- {key: resumen, title: R}\nlayout:\n- {kind: cover}\n- {kind: severity, enabled: false}\n- {kind: findings_index}\n- {kind: section, config: {key: resumen}}\n- {kind: findings}\n",
+        )
+        .unwrap();
+        p.reconcile_layout();
+        assert_eq!(
+            layout_kinds(&p.layout),
+            vec![
+                "cover",
+                "severity",
+                "findings_index",
+                "root_causes",
+                "business_risks",
+                "findings_impact",
+                "remediation_plan",
+                "section:resumen",
+                "findings"
+            ]
+        );
+        assert!(!p.layout[1].enabled);
+        // Idempotente, y un bloque ejecutivo ya presente (oculto o movido) se
+        // respeta: solo se agregan los que faltan, despues del ultimo presente.
+        let antes = p.layout.clone();
+        p.reconcile_layout();
+        assert_eq!(p.layout, antes);
+
+        let mut p: ProjectMeta = serde_yaml::from_str(
+            "project_type: redteam\nlayout:\n- {kind: cover}\n- {kind: remediation_plan, enabled: false}\n- {kind: findings}\n- {kind: root_causes}\n",
+        )
+        .unwrap();
+        p.reconcile_layout();
+        assert_eq!(
+            layout_kinds(&p.layout),
+            vec![
+                "cover",
+                "remediation_plan",
+                "findings",
+                "root_causes",
+                "business_risks",
+                "findings_impact"
+            ]
+        );
+        assert!(!p.layout[1].enabled);
+
+        // Tipos cuya plantilla no los renderiza: no se agregan.
+        for project_type in ["htb", "oscp", "retest", "documento", "cti"] {
+            let mut p: ProjectMeta = serde_yaml::from_str(&format!(
+                "project_type: {project_type}\nlayout:\n- {{kind: cover}}\n- {{kind: findings}}\n"
+            ))
+            .unwrap();
+            p.reconcile_layout();
+            assert_eq!(layout_kinds(&p.layout), vec!["cover", "findings"]);
+        }
+    }
+
+    #[test]
+    fn finding_viejo_sin_campos_de_negocio_se_lee_y_no_los_escribe() {
+        // Front matter previo a la parte ejecutiva: backward-compat.
+        let f: FindingMeta =
+            serde_yaml::from_str("title: x\nseverity: high\nstatus: open\n").unwrap();
+        assert_eq!(f.impacto_negocio, "");
+        assert_eq!(f.categoria_riesgo, "");
+        assert_eq!(f.modulo, "");
+        assert_eq!(f.causa_raiz, "");
+        // Vacios no ensucian el front matter.
+        let yaml = serde_yaml::to_string(&f).unwrap();
+        for key in [
+            "impacto_negocio",
+            "categoria_riesgo",
+            "modulo",
+            "causa_raiz",
+        ] {
+            assert!(!yaml.contains(key), "no deberia escribir {key}");
+        }
+        // Con valores, ida y vuelta sin perdida.
+        let f = FindingMeta {
+            impacto_negocio: "Fuga de la base de clientes.".into(),
+            categoria_riesgo: "fuga_datos".into(),
+            modulo: "Login".into(),
+            causa_raiz: "validacion".into(),
+            ..Default::default()
+        };
+        let back: FindingMeta = serde_yaml::from_str(&serde_yaml::to_string(&f).unwrap()).unwrap();
+        assert_eq!(back.impacto_negocio, f.impacto_negocio);
+        assert_eq!(back.categoria_riesgo, f.categoria_riesgo);
+        assert_eq!(back.modulo, f.modulo);
+        assert_eq!(back.causa_raiz, f.causa_raiz);
+    }
+
+    #[test]
+    fn normalize_business_fields_aplica_las_reglas() {
+        let mut f = FindingMeta {
+            categoria_riesgo: " Fuga_Datos ".into(),
+            impacto_negocio: format!("Linea uno\nlinea dos\r\n{}", "x".repeat(600)),
+            modulo: "m".repeat(200),
+            causa_raiz: " validacion ".into(),
+            ..Default::default()
+        };
+        f.normalize_business_fields(Some(&["validacion", "acceso"]));
+        assert_eq!(f.categoria_riesgo, "fuga_datos");
+        assert!(f.impacto_negocio.starts_with("Linea uno linea dos  x"));
+        assert!(!f.impacto_negocio.contains('\n'));
+        assert_eq!(f.impacto_negocio.chars().count(), MAX_IMPACTO_NEGOCIO);
+        assert_eq!(f.modulo.chars().count(), MAX_MODULO);
+        assert_eq!(f.causa_raiz, "validacion");
+        // Idempotente.
+        let antes = f.clone();
+        f.normalize_business_fields(Some(&["validacion", "acceso"]));
+        assert_eq!(f.impacto_negocio, antes.impacto_negocio);
+        assert_eq!(f.modulo, antes.modulo);
+
+        // Valores fuera de la lista y causas inexistentes quedan en "".
+        let mut f = FindingMeta {
+            categoria_riesgo: "phishing".into(),
+            causa_raiz: "borrada".into(),
+            ..Default::default()
+        };
+        f.normalize_business_fields(Some(&["validacion"]));
+        assert_eq!(f.categoria_riesgo, "");
+        assert_eq!(f.causa_raiz, "");
+
+        // Sin proyecto legible no se pierde la causa raiz.
+        let mut f = FindingMeta {
+            causa_raiz: "validacion".into(),
+            ..Default::default()
+        };
+        f.normalize_business_fields(None);
+        assert_eq!(f.causa_raiz, "validacion");
+
+        // Todas las categorias permitidas tienen etiqueta y se conservan.
+        for c in CATEGORIAS_RIESGO {
+            let mut f = FindingMeta {
+                categoria_riesgo: c.to_string(),
+                ..Default::default()
+            };
+            f.normalize_business_fields(None);
+            assert_eq!(f.categoria_riesgo, c);
+            assert_eq!(categoria_riesgo_label(c).is_empty(), c.is_empty());
+        }
+        // Multibyte: se corta por caracteres, no por bytes.
+        let mut f = FindingMeta {
+            modulo: "ñ".repeat(300),
+            ..Default::default()
+        };
+        f.normalize_business_fields(None);
+        assert_eq!(f.modulo.chars().count(), MAX_MODULO);
+    }
+
+    #[test]
+    fn project_yaml_viejo_sin_parte_ejecutiva() {
+        let p: ProjectMeta = serde_yaml::from_str("name: Legado\nclient: ACME\n").unwrap();
+        assert!(p.causas_raiz.is_empty());
+        assert!(p.plan_remediacion.is_empty());
+        // Vacias no se escriben a disco.
+        let yaml = serde_yaml::to_string(&p).unwrap();
+        assert!(!yaml.contains("causas_raiz"));
+        assert!(!yaml.contains("plan_remediacion"));
+    }
+
+    #[test]
+    fn normalize_executive_sanea_causas_y_plan() {
+        let mut p: ProjectMeta = serde_yaml::from_str(
+            "causas_raiz:\n- {clave: ' Validacion Entradas ', titulo: '  Validacion  '}\n- {clave: '', titulo: 'Control de acceso'}\n- {clave: '', titulo: ''}\n- {clave: validacion-entradas, titulo: Duplicada}\nplan_remediacion:\n- {prioridad: ' Inmediata ', accion: ' Parametrizar ', hallazgos: [001-a, 999-fantasma, 001-a, 002-b]}\n- {prioridad: urgente, accion: Otra}\n",
+        )
+        .unwrap();
+        let ids = vec!["001-a".to_string(), "002-b".to_string()];
+        p.normalize_executive(&ids);
+        let claves: Vec<&str> = p.causas_raiz.iter().map(|c| c.clave.as_str()).collect();
+        assert_eq!(
+            claves,
+            vec![
+                "validacion-entradas",
+                "control-de-acceso",
+                "causa-3",
+                "validacion-entradas-2"
+            ]
+        );
+        assert_eq!(p.causas_raiz[0].titulo, "Validacion");
+        assert_eq!(p.plan_remediacion[0].prioridad, "inmediata");
+        assert_eq!(p.plan_remediacion[0].accion, "Parametrizar");
+        assert_eq!(p.plan_remediacion[0].hallazgos, vec!["001-a", "002-b"]);
+        // Prioridad fuera de la lista: sin especificar.
+        assert_eq!(p.plan_remediacion[1].prioridad, "");
+        // Idempotente.
+        let antes = (p.causas_raiz.clone(), p.plan_remediacion.clone());
+        p.normalize_executive(&ids);
+        assert_eq!((p.causas_raiz.clone(), p.plan_remediacion.clone()), antes);
+
+        for prioridad in PRIORIDADES_REMEDIACION {
+            assert_eq!(prioridad_label(prioridad).is_empty(), prioridad.is_empty());
+        }
+        assert!(prioridad_rank("inmediata") < prioridad_rank("cierre"));
+        assert!(prioridad_rank("cierre") < prioridad_rank(""));
+    }
+
+    #[test]
+    fn slug_key_genera_claves_validas() {
+        assert_eq!(slug_key("Validación de entradas"), "validacion-de-entradas");
+        assert_eq!(slug_key("  --Año 2026!!  "), "ano-2026");
+        assert_eq!(slug_key("***"), "");
+        assert!(slug_key(&"a-".repeat(100)).len() <= 64);
+        assert!(!slug_key(&"a-".repeat(100)).ends_with('-'));
     }
 
     #[test]
