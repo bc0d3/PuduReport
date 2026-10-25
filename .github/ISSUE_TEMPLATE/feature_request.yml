@@ -1,0 +1,29 @@
+name: Propuesta de mejora
+description: Propone una mejora concreta para PuduReport.
+title: "feat: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema
+      description: Que necesidad existe y a quien afecta.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Solucion propuesta
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Alcance
+      options:
+        - label: La propuesta conserva compatibilidad con proyectos existentes o explica la migracion necesaria.
+          required: true

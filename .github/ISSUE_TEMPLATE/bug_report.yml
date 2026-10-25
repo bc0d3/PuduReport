@@ -1,0 +1,42 @@
+name: Reporte de error
+description: Informa un comportamiento reproducible de PuduReport.
+title: "bug: "
+labels: ["bug", "triage"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripcion
+      description: Explica que ocurrio y que esperabas.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para reproducir
+      placeholder: |
+        1. Abrir...
+        2. Seleccionar...
+        3. Observar...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version de PuduReport
+      placeholder: v0.0.25
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Sistema operativo
+      options: ["Windows", "macOS", "Linux"]
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Registros o capturas
+      description: No incluyas tokens, secretos ni datos sensibles de clientes.
+      render: shell
