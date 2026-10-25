@@ -35,7 +35,7 @@ jobs:
           cache: npm
 
       # Toolchain fijo (no @stable) para builds de release reproducibles.
-      - uses: dtolnay/rust-toolchain@1.93.0
+      - uses: dtolnay/rust-toolchain@1.120.0
         with:
           targets: ${{ matrix.target }}
 
