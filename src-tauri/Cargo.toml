@@ -31,7 +31,7 @@ serde_yaml = "0.9"
 rusqlite = { version = "0.32", features = ["bundled"] }
 thiserror = "2"
 anyhow = "1"
-dirs = "5"
+dirs = "6"
 regex = "1"
 git2 = { version = "0.21", default-features = false }
 pulldown-cmark = { version = "0.12", default-features = false }
