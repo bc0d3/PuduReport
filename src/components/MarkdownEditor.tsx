@@ -67,6 +67,8 @@ const CODE_LANGS: { value: string; label: string }[] = [
 ];
 
 interface Props {
+  /** Nombre accesible compartido por las vistas fuente y visual. */
+  labelledBy?: string;
   /** Contenido markdown inicial. El componente debe re-montarse (key) al cambiar de seccion. */
   value: string;
   onChange: (markdown: string) => void;
@@ -143,7 +145,14 @@ function filesFrom(dt: DataTransfer | null | undefined): File[] {
  * Si recibe assetBase + projectId, permite pegar o soltar evidencias: las
  * imagenes se guardan en assets/ con nombre UUID y quedan como ![](assets/...).
  */
-export function MarkdownEditor({ value, onChange, placeholder, assetBase, projectId }: Props) {
+export function MarkdownEditor({
+  value,
+  onChange,
+  placeholder,
+  assetBase,
+  projectId,
+  labelledBy,
+}: Readonly<Props>) {
   const editorRef = useRef<Editor | null>(null);
   // Vista activa: "source" muestra el markdown crudo en un textarea; "rich" el
   // editor WYSIWYG renderizado. Se alterna desde la barra.
@@ -274,6 +283,13 @@ export function MarkdownEditor({ value, onChange, placeholder, assetBase, projec
       TableCell,
     ],
     editorProps: {
+      attributes: {
+        role: "textbox",
+        "aria-multiline": "true",
+        ...(labelledBy
+          ? { "aria-labelledby": labelledBy }
+          : { "aria-label": "Contenido Markdown" }),
+      },
       handlePaste(_view, event) {
         const files = filesFrom(event.clipboardData);
         if (uploadEnabled && files.length > 0) {
@@ -329,6 +345,8 @@ export function MarkdownEditor({ value, onChange, placeholder, assetBase, projec
       {mode === "source" ? (
         <textarea
           ref={sourceRef}
+          aria-labelledby={labelledBy}
+          aria-label={labelledBy ? undefined : "Contenido Markdown"}
           className="md-source"
           value={source}
           placeholder={placeholder ?? "Escribe aqui..."}
@@ -386,7 +404,7 @@ function Toolbar({
   onPickFile,
   onAnnotate,
   onSourceFormat,
-}: {
+}: Readonly<{
   editor: Editor;
   mode: "source" | "rich";
   onSetMode: (mode: "source" | "rich") => void;
@@ -394,7 +412,7 @@ function Toolbar({
   onPickFile: (file: File) => void;
   onAnnotate: () => void;
   onSourceFormat: (action: MarkdownAction) => void;
-}) {
+}>) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
 
@@ -555,11 +573,7 @@ function Toolbar({
           () =>
             editor.isActive("table")
               ? editor.chain().focus().deleteTable().run()
-              : editor
-                  .chain()
-                  .focus()
-                  .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-                  .run(),
+              : editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
           editor.isActive("table") ? "Eliminar tabla" : "Insertar tabla",
         )}
         {btn(
@@ -600,12 +614,18 @@ function Toolbar({
         {editor.isActive("image") && (
           <>
             <span className="md-sep" />
-            {(["35%", "60%", "100%"] as const).map((w) =>
+            {(
+              [
+                { width: "35%", label: "S" },
+                { width: "60%", label: "M" },
+                { width: "100%", label: "L" },
+              ] as const
+            ).map(({ width, label }) =>
               btn(
-                w === "100%" ? "L" : w === "60%" ? "M" : "S",
-                editor.getAttributes("image").alt === w,
-                () => editor.chain().focus().updateAttributes("image", { alt: w }).run(),
-                `Imagen ${w}`,
+                label,
+                editor.getAttributes("image").alt === width,
+                () => editor.chain().focus().updateAttributes("image", { alt: width }).run(),
+                `Imagen ${width}`,
               ),
             )}
             {btn(

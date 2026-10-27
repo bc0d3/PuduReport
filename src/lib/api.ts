@@ -9,6 +9,9 @@ import type {
   CvssResult,
   CvssVersion,
   ExportTarget,
+  IdentityStatus,
+  PreparedExport,
+  ProjectCopyMode,
   Finding,
   FindingTemplate,
   GitBranch,
@@ -101,8 +104,61 @@ export function deleteProject(id: string): Promise<void> {
   return invoke("delete_project", { id });
 }
 
-export function saveProject(id: string, meta: ProjectMeta): Promise<void> {
+export function saveProject(id: string, meta: ProjectMeta): Promise<ProjectMeta> {
   return invoke("save_project", { id, meta });
+}
+
+function identityStatus(value: unknown): IdentityStatus {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("project_uid" in value) ||
+    (value.project_uid !== null && typeof value.project_uid !== "string") ||
+    !("findings" in value) ||
+    typeof value.findings !== "number" ||
+    !Number.isSafeInteger(value.findings) ||
+    value.findings < 0 ||
+    !("missing" in value) ||
+    typeof value.missing !== "number" ||
+    !Number.isSafeInteger(value.missing) ||
+    value.missing < 0 ||
+    !("conflicts" in value) ||
+    !Array.isArray(value.conflicts) ||
+    !value.conflicts.every((item: unknown) => typeof item === "string")
+  )
+    throw new Error("Respuesta de inventario de identidades invalida");
+  return {
+    project_uid: value.project_uid,
+    findings: value.findings,
+    missing: value.missing,
+    conflicts: value.conflicts,
+  };
+}
+
+export async function inspectProjectIdentity(projectId: string): Promise<IdentityStatus> {
+  return identityStatus(await invoke<unknown>("inspect_project_identity", { projectId }));
+}
+
+export async function prepareProjectIdentity(projectId: string): Promise<IdentityStatus> {
+  return identityStatus(await invoke<unknown>("prepare_project_identity", { projectId }));
+}
+
+export function copyProject(
+  projectId: string,
+  name: string,
+  mode: ProjectCopyMode,
+  externalReference?: string,
+): Promise<string> {
+  return invoke("copy_project", {
+    projectId,
+    name,
+    mode,
+    externalReference: externalReference ?? null,
+  });
+}
+
+export function duplicateFinding(projectId: string, findingId: string): Promise<Finding> {
+  return invoke("duplicate_finding", { projectId, findingId });
 }
 
 // --- Hallazgos ---
@@ -115,7 +171,7 @@ export function loadFinding(projectId: string, findingId: string): Promise<Findi
   return invoke("load_finding", { projectId, findingId });
 }
 
-/** Guarda un hallazgo. Devuelve el hallazgo (el id puede cambiar si el slug cambio). */
+/** Guarda un hallazgo conservando id/UUID; devuelve la revision actualizada. */
 export function saveFinding(projectId: string, finding: Finding): Promise<Finding> {
   return invoke("save_finding", { projectId, finding });
 }
@@ -268,13 +324,40 @@ export function hasExportToken(name: string): Promise<boolean> {
 }
 
 /** Devuelve el JSON exacto que se enviaria (para la vista previa/consentimiento). */
-export function previewExportPayload(projectId: string, targetName: string): Promise<unknown> {
-  return invoke("preview_export_payload", { projectId, targetName });
+export async function previewExportPayload(
+  projectId: string,
+  targetName: string,
+): Promise<PreparedExport> {
+  const value: unknown = await invoke("preview_export_payload", { projectId, targetName });
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("preparation_id" in value) ||
+    typeof value.preparation_id !== "string" ||
+    !("payload" in value) ||
+    typeof value.payload !== "string" ||
+    !("destination_url" in value) ||
+    typeof value.destination_url !== "string" ||
+    !("profile" in value) ||
+    (value.profile !== "legacy" && value.profile !== "identified_v2")
+  ) {
+    throw new Error("Respuesta de preparacion incompatible");
+  }
+  return {
+    preparation_id: value.preparation_id,
+    payload: value.payload,
+    profile: value.profile,
+    destination_url: value.destination_url,
+  };
 }
 
 /** Envia el proyecto al destino (POST JSON con Bearer). Requiere token guardado. */
-export function sendExportToApi(projectId: string, targetName: string): Promise<ApiSendResult> {
-  return invoke("send_export_to_api", { projectId, targetName });
+export function sendExportToApi(
+  projectId: string,
+  targetName: string,
+  preparationId: string,
+): Promise<ApiSendResult> {
+  return invoke("send_export_to_api", { projectId, targetName, preparationId });
 }
 
 /** Renderiza el PDF a imagenes PNG (data URLs) para la vista previa embebida. */

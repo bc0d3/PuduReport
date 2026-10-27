@@ -27,7 +27,7 @@ use pudureport_core::models::{
     ProjectAssignment, ProjectMeta, ProjectSummary, Snippet, TemplateMeta, WorkspaceMeta,
     WorkspaceStats,
 };
-use pudureport_core::{cvss, workspace};
+use pudureport_core::{continuity, cvss, workspace};
 
 const STORE_FILE: &str = "settings.json";
 const STORE_KEY_WORKSPACE: &str = "workspace_path";
@@ -36,6 +36,40 @@ const STORE_KEY_WORKSPACE: &str = "workspace_path";
 #[derive(Default)]
 struct AppState {
     workspace: Mutex<Option<PathBuf>>,
+    export: Mutex<ExportState>,
+}
+
+#[derive(Default)]
+struct ExportState {
+    generation: u64,
+    prepared: Option<export::PreparedExport>,
+    sending: bool,
+}
+
+/// Libera el estado de envio tambien ante error o cancelacion del futuro IPC.
+struct SendingGuard<'a>(&'a Mutex<ExportState>);
+
+impl Drop for SendingGuard<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut export) = self.0.lock() {
+            export.sending = false;
+        }
+    }
+}
+
+async fn blocking<T: Send + 'static>(
+    task: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|_| "la operacion local no pudo completarse".to_string())?
+}
+
+fn invalidate_export(state: &State<AppState>) -> Result<(), String> {
+    let mut export = state.export.lock().map_err(|_| "estado bloqueado")?;
+    export.generation = export.generation.wrapping_add(1);
+    export.prepared = None;
+    Ok(())
 }
 
 /// Helper: devuelve la ruta del workspace abierto o un error legible.
@@ -191,6 +225,7 @@ fn open_workspace(
 ) -> Result<WorkspaceMeta, String> {
     let root = PathBuf::from(&path);
     let meta = workspace::read_workspace_meta(&root).map_err(|e| e.to_string())?;
+    invalidate_export(&state)?;
     *state.workspace.lock().map_err(|_| "estado bloqueado")? = Some(root.clone());
     persist_workspace(&app, &root)?;
     push_recent(&app, &root, &meta.name);
@@ -209,6 +244,7 @@ fn create_workspace(
 ) -> Result<WorkspaceMeta, String> {
     let root = PathBuf::from(&path);
     let meta = workspace::create_workspace(&root, &name).map_err(|e| e.to_string())?;
+    invalidate_export(&state)?;
     *state.workspace.lock().map_err(|_| "estado bloqueado")? = Some(root.clone());
     persist_workspace(&app, &root)?;
     push_recent(&app, &root, &meta.name);
@@ -308,15 +344,80 @@ fn delete_project(state: State<AppState>, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn save_project(state: State<AppState>, id: String, mut meta: ProjectMeta) -> Result<(), String> {
+async fn save_project(
+    state: State<'_, AppState>,
+    id: String,
+    mut meta: ProjectMeta,
+) -> Result<ProjectMeta, String> {
     let root = current_root(&state)?;
-    // Ambiente/exposicion son listas cerradas: nunca se guarda texto libre.
-    meta.normalize_classification();
-    // Parte ejecutiva: claves de causas raiz validas, prioridades de la lista
-    // y el plan solo con hallazgos que existen.
-    let finding_ids = workspace::finding_ids(&root, &id).map_err(|e| e.to_string())?;
-    meta.normalize_executive(&finding_ids);
-    workspace::write_project_meta(&root, &id, &meta).map_err(|e| e.to_string())
+    blocking(move || {
+        // Ambiente/exposicion son listas cerradas: nunca se guarda texto libre.
+        meta.normalize_classification();
+        // Parte ejecutiva: claves de causas raiz validas, prioridades de la lista
+        // y el plan solo con hallazgos que existen.
+        let finding_ids = workspace::finding_ids(&root, &id).map_err(|e| e.to_string())?;
+        meta.normalize_executive(&finding_ids);
+        workspace::write_project_meta(&root, &id, &meta).map_err(|e| e.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn inspect_project_identity(
+    state: State<'_, AppState>,
+    project_id: String,
+) -> Result<continuity::IdentityStatus, String> {
+    let root = current_root(&state)?;
+    blocking(move || continuity::inspect(&root, &project_id).map_err(|error| error.to_string()))
+        .await
+}
+
+#[tauri::command]
+async fn prepare_project_identity(
+    state: State<'_, AppState>,
+    project_id: String,
+) -> Result<continuity::IdentityStatus, String> {
+    let root = current_root(&state)?;
+    invalidate_export(&state)?;
+    blocking(move || continuity::prepare(&root, &project_id).map_err(|error| error.to_string()))
+        .await
+}
+
+#[tauri::command]
+async fn copy_project(
+    state: State<'_, AppState>,
+    project_id: String,
+    name: String,
+    mode: continuity::CopyMode,
+    external_reference: Option<String>,
+) -> Result<String, String> {
+    let root = current_root(&state)?;
+    blocking(move || {
+        continuity::copy_project(
+            &root,
+            &project_id,
+            &name,
+            mode,
+            external_reference.as_deref(),
+        )
+        .map(|(id, _)| id)
+        .map_err(|error| error.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn duplicate_finding(
+    state: State<'_, AppState>,
+    project_id: String,
+    finding_id: String,
+) -> Result<Finding, String> {
+    let root = current_root(&state)?;
+    blocking(move || {
+        workspace::duplicate_finding(&root, &project_id, &finding_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
 }
 
 /// Exporta un resumen de hallazgos a CSV (`build/{Cliente}-{Tipo}-{fecha}-resumen.csv`)
@@ -344,16 +445,6 @@ const KEYRING_SERVICE: &str = "PuduReport-export";
 fn token_entry(root: &std::path::Path, name: &str) -> Result<keyring::Entry, String> {
     let account = format!("{}::{}", root.display(), name);
     keyring::Entry::new(KEYRING_SERVICE, &account).map_err(|e| e.to_string())
-}
-
-/// Devuelve el destino por nombre desde workspace.yaml, o un error legible.
-fn find_target(root: &std::path::Path, name: &str) -> Result<ExportTarget, String> {
-    workspace::read_workspace_meta(root)
-        .map_err(|e| e.to_string())?
-        .export_targets
-        .into_iter()
-        .find(|t| t.name == name)
-        .ok_or_else(|| format!("no existe el destino: {name}"))
 }
 
 /// Lista los destinos de exportacion configurados en el workspace.
@@ -425,14 +516,27 @@ fn has_export_token(state: State<AppState>, name: String) -> Result<bool, String
 /// Arma y devuelve el payload JSON exacto que se enviaria (para la vista previa
 /// y el consentimiento). No hace red.
 #[tauri::command]
-fn preview_export_payload(
-    state: State<AppState>,
+async fn preview_export_payload(
+    state: State<'_, AppState>,
     project_id: String,
     target_name: String,
-) -> Result<serde_json::Value, String> {
+) -> Result<export::PreparedExportView, String> {
     let root = current_root(&state)?;
-    let target = find_target(&root, &target_name)?;
-    export::build_api_payload(&root, &project_id, &target)
+    let generation = {
+        let mut export = state.export.lock().map_err(|_| "estado bloqueado")?;
+        export.generation = export.generation.wrapping_add(1);
+        export.prepared = None;
+        export.generation
+    };
+    let prepared =
+        blocking(move || export::PreparedExport::new(&root, &project_id, &target_name)).await?;
+    let mut export = state.export.lock().map_err(|_| "estado bloqueado")?;
+    if export.generation != generation {
+        return Err("la preparacion quedo obsoleta".to_string());
+    }
+    let view = prepared.view();
+    export.prepared = Some(prepared);
+    Ok(view)
 }
 
 /// Envia el proyecto al destino (POST JSON con Bearer). Requiere token guardado.
@@ -441,14 +545,40 @@ async fn send_export_to_api(
     state: State<'_, AppState>,
     project_id: String,
     target_name: String,
+    preparation_id: String,
 ) -> Result<export::ApiSendResult, String> {
     let root = current_root(&state)?;
-    let target = find_target(&root, &target_name)?;
-    let token = token_entry(&root, &target.name)?
-        .get_password()
-        .map_err(|_| "no hay token configurado para este destino".to_string())?;
-    let payload = export::build_api_payload(&root, &project_id, &target)?;
-    export::send_to_api(&target.url, &token, &payload).await
+    let prepared = {
+        let mut export = state.export.lock().map_err(|_| "estado bloqueado")?;
+        if export.sending {
+            return Err("hay un envio en curso; espera su resultado".to_string());
+        }
+        if export.prepared.as_ref().map(|value| value.id.as_str()) != Some(preparation_id.as_str())
+        {
+            return Err("revisa una nueva vista previa antes de enviar".to_string());
+        }
+        export.generation = export.generation.wrapping_add(1);
+        let prepared = export
+            .prepared
+            .take()
+            .ok_or("no hay una exportacion preparada")?;
+        export.sending = true;
+        prepared
+    };
+    let _sending = SendingGuard(&state.export);
+    let source_root = root.clone();
+    let (url, body, token) = blocking(move || {
+        let token = token_entry(&source_root, &target_name)?
+            .get_password()
+            .map_err(|_| "no se pudo leer el token del destino".to_string())?;
+        let (url, body) = prepared.confirm(&source_root, &project_id, &target_name)?;
+        Ok((url, body, token))
+    })
+    .await?;
+    if current_root(&state)? != root {
+        return Err("cambio el workspace; prepara nuevamente".to_string());
+    }
+    export::send_to_api(&url, &token, body).await
 }
 
 // ---------------------------------------------------------------------------
@@ -482,16 +612,18 @@ fn create_finding(
 }
 
 #[tauri::command]
-fn save_finding(
-    state: State<AppState>,
+async fn save_finding(
+    state: State<'_, AppState>,
     project_id: String,
     mut finding: Finding,
 ) -> Result<Finding, String> {
     let root = current_root(&state)?;
-    // Devuelve lo mismo que queda en disco (categoria y causa raiz validas).
-    workspace::normalize_finding(&root, &project_id, &mut finding);
-    workspace::write_finding(&root, &project_id, &finding).map_err(|e| e.to_string())?;
-    Ok(finding)
+    blocking(move || {
+        // Devuelve lo mismo que queda en disco (categoria y causa raiz validas).
+        workspace::normalize_finding(&root, &project_id, &mut finding);
+        workspace::write_finding(&root, &project_id, &finding).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1040,6 +1172,10 @@ pub fn run() {
             has_export_token,
             preview_export_payload,
             send_export_to_api,
+            inspect_project_identity,
+            prepare_project_identity,
+            copy_project,
+            duplicate_finding,
             list_findings,
             load_finding,
             create_finding,

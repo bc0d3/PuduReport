@@ -5,14 +5,14 @@
 //! ni la PoC) con las columnas que elija el usuario, para compartir un panorama
 //! rapido (ej. por correo). Excluye los hallazgos ocultos, igual que el PDF.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use pudureport_core::models::{
-    categoria_riesgo_label, CvssVersion, ExportTarget, Finding, FindingStatus, ProjectMeta,
-    Severity,
+    categoria_riesgo_label, CvssVersion, ExportProfile, ExportTarget, Finding, FindingStatus,
+    ProjectMeta, Severity,
 };
-use pudureport_core::workspace;
+use pudureport_core::{continuity, workspace};
 use serde_json::{json, Map, Value};
 
 use crate::naming;
@@ -251,16 +251,17 @@ fn project_field_value<'a>(key: &str, project: &'a ProjectMeta) -> Option<&'a st
 /// Los datos opcionales del proyecto (`target.project_fields`) solo se agregan
 /// si el destino los activa y el proyecto los tiene definidos.
 pub fn build_api_payload(
-    root: &Path,
+    data: &continuity::ProjectSnapshot,
     project_id: &str,
     target: &ExportTarget,
+    exported_at: &str,
 ) -> Result<Value, String> {
-    let project = workspace::read_project_meta(root, project_id).map_err(|e| e.to_string())?;
-    let findings: Vec<Finding> = workspace::list_findings(root, project_id)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .filter(|f| !f.meta.hidden)
-        .collect();
+    let identified = target.profile == ExportProfile::IdentifiedV2;
+    if identified {
+        continuity::validate(data).map_err(|error| error.to_string())?;
+    }
+    let project = &data.project;
+    let findings: Vec<&Finding> = data.findings.iter().filter(|f| !f.meta.hidden).collect();
 
     let items: Vec<Value> = findings
         .iter()
@@ -268,15 +269,24 @@ pub fn build_api_payload(
         .map(|(i, f)| {
             let mut obj = Map::new();
             for field in &target.fields {
-                obj.insert(field.clone(), json_value_for(field, i + 1, f, &project));
+                // La identidad es estructural de v2; nunca un campo legacy seleccionable.
+                if field == "uid" {
+                    continue;
+                }
+                obj.insert(field.clone(), json_value_for(field, i + 1, f, project));
             }
-            Value::Object(obj)
+            if identified {
+                let uid = continuity::parse_uid(f.meta.uid.as_deref(), &f.id)
+                    .map_err(|error| error.to_string())?;
+                obj.insert("uid".to_string(), json!(uid.to_string()));
+            }
+            Ok(Value::Object(obj))
         })
-        .collect();
+        .collect::<Result<_, String>>()?;
 
     let mut payload = json!({
         "source": "pudureport",
-        "exported_at": workspace::now_utc_iso(),
+        "exported_at": exported_at,
         "project": {
             "id": project_id,
             "name": project.name,
@@ -288,8 +298,30 @@ pub fn build_api_payload(
         "findings": items,
     });
 
+    if identified {
+        payload["schema_version"] = json!(2);
+        payload["project"]["uid"] = json!(continuity::parse_uid(
+            project.uid.as_deref(),
+            "project.yaml"
+        )
+        .map_err(|error| error.to_string())?
+        .to_string());
+        if target
+            .project_fields
+            .iter()
+            .any(|key| key == "external_reference")
+        {
+            if let Some(reference) =
+                continuity::external_reference(project.external_reference.as_deref())
+                    .map_err(|error| error.to_string())?
+            {
+                payload["project"]["external_reference"] = json!(reference);
+            }
+        }
+    }
+
     for key in &target.project_fields {
-        if let Some(value) = project_field_value(key, &project) {
+        if let Some(value) = project_field_value(key, project) {
             payload["project"][key.as_str()] = json!(value);
         }
     }
@@ -308,6 +340,73 @@ pub fn build_api_payload(
     Ok(payload)
 }
 
+/// Vista IPC: solo metadata y un identificador efimero local, nunca el token.
+#[derive(serde::Serialize)]
+pub struct PreparedExportView {
+    pub preparation_id: String,
+    pub payload: String,
+    pub profile: ExportProfile,
+    /// URL capturada con el payload; la UI revisa este destino, no una lista antigua.
+    pub destination_url: String,
+}
+
+/// Los bytes presentados son los bytes enviados; el servidor conserva su procedencia.
+pub struct PreparedExport {
+    pub id: String,
+    root: PathBuf,
+    project_id: String,
+    target: ExportTarget,
+    source: continuity::ProjectSnapshot,
+    body: String,
+}
+
+impl PreparedExport {
+    /// Captura datos guardados y destino sin generar ni escribir identidades.
+    pub fn new(root: &Path, project_id: &str, target_name: &str) -> Result<Self, String> {
+        let (source, target) = continuity::export_source(root, project_id, target_name)
+            .map_err(|error| error.to_string())?;
+        let payload = build_api_payload(&source, project_id, &target, &workspace::now_utc_iso())?;
+        Ok(Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            root: root.to_path_buf(),
+            project_id: project_id.to_string(),
+            target,
+            source,
+            body: serde_json::to_string_pretty(&payload).map_err(|error| error.to_string())?,
+        })
+    }
+
+    /// Proyecta los bytes inmutables revisables y su identificador de un solo uso.
+    pub fn view(&self) -> PreparedExportView {
+        PreparedExportView {
+            preparation_id: self.id.clone(),
+            payload: self.body.clone(),
+            profile: self.target.profile,
+            destination_url: self.target.url.clone(),
+        }
+    }
+
+    /// Verifica justo antes del envio. No reconstruye el payload ni su timestamp.
+    pub fn confirm(
+        self,
+        root: &Path,
+        project_id: &str,
+        target_name: &str,
+    ) -> Result<(String, String), String> {
+        if self.root != root || self.project_id != project_id || self.target.name != target_name {
+            return Err("cambio el contexto; revisa una nueva vista previa".to_string());
+        }
+        let (current, target) = continuity::export_source(root, project_id, target_name)
+            .map_err(|error| error.to_string())?;
+        if target != self.target || !self.source.same_sources(&current) {
+            return Err(
+                "cambiaron el proyecto o el destino; revisa una nueva vista previa".to_string(),
+            );
+        }
+        Ok((self.target.url, self.body))
+    }
+}
+
 /// Resultado de un envio a la API, para devolver al frontend.
 #[derive(serde::Serialize)]
 pub struct ApiSendResult {
@@ -319,10 +418,6 @@ pub struct ApiSendResult {
     pub body: String,
 }
 
-/// Envia el payload a la API del destino via POST JSON con `Authorization:
-/// Bearer <token>`. Exige https:// (rechaza http en claro). Timeout de 15s. El
-/// token nunca se registra ni se incluye en el payload. Es la unica salida de
-/// red de la app ademas del updater, y solo corre cuando el usuario lo pide.
 /// Exige que el destino use https:// (no http en claro). Sincrono para poder
 /// testearlo sin runtime async y para fallar antes de abrir cualquier conexion.
 fn ensure_https(url: &str) -> Result<(), String> {
@@ -337,27 +432,32 @@ fn ensure_https(url: &str) -> Result<(), String> {
     }
 }
 
-pub async fn send_to_api(url: &str, token: &str, payload: &Value) -> Result<ApiSendResult, String> {
+/// Envia los bytes preparados por POST HTTPS con Bearer, timeout de 15s y sin
+/// redirects ni reintentos. El token no se registra ni se incluye en el payload.
+/// Devuelve status y diagnostico acotado; los fallos de transporte son errores.
+pub async fn send_to_api(url: &str, token: &str, body: String) -> Result<ApiSendResult, String> {
     ensure_https(url)?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
+        // La confirmacion autoriza esta URL, no otro destino indicado por un redirect.
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("no se pudo crear el cliente HTTP: {e}"))?;
 
+    let request = build_request(&client, url, token, body)?;
     let resp = client
-        .post(url.trim())
-        .bearer_auth(token)
-        .json(payload)
-        .send()
+        .execute(request)
         .await
-        .map_err(|e| format!("fallo la conexion con el destino: {e}"))?;
+        .map_err(|_| "fallo la conexion con el destino".to_string())?;
 
     let status = resp.status();
-    let mut body = resp.text().await.unwrap_or_default();
-    if body.len() > 2000 {
-        body.truncate(2000);
-        body.push_str("...");
-    }
+    let body = response_excerpt(
+        &resp
+            .text()
+            .await
+            .map_err(|_| "no se pudo leer la respuesta del destino")?,
+        2000,
+    );
     Ok(ApiSendResult {
         status: status.as_u16(),
         ok: status.is_success(),
@@ -365,10 +465,51 @@ pub async fn send_to_api(url: &str, token: &str, payload: &Value) -> Result<ApiS
     })
 }
 
+fn build_request(
+    client: &reqwest::Client,
+    url: &str,
+    token: &str,
+    body: String,
+) -> Result<reqwest::Request, String> {
+    ensure_https(url)?;
+    client
+        .post(url.trim())
+        .bearer_auth(token)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(body)
+        .build()
+        .map_err(|_| "no se pudo preparar la solicitud HTTP".to_string())
+}
+
+fn response_excerpt(body: &str, limit: usize) -> String {
+    let mut chars = body.chars();
+    let mut result: String = chars.by_ref().take(limit).collect();
+    if chars.next().is_some() {
+        result.push_str("...");
+    }
+    result
+}
+
+#[cfg(test)]
+mod continuity_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use pudureport_core::models::{Finding, FindingMeta};
+
+    fn build_api_payload(
+        root: &Path,
+        project_id: &str,
+        target: &ExportTarget,
+    ) -> Result<Value, String> {
+        super::build_api_payload(
+            &continuity::snapshot(root, project_id).map_err(|error| error.to_string())?,
+            project_id,
+            target,
+            "2026-10-26T15:00:00Z",
+        )
+    }
 
     fn tmp_ws() -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("pudu-export-{}", uuid::Uuid::new_v4()));
@@ -422,6 +563,7 @@ mod tests {
         .unwrap();
 
         let target = ExportTarget {
+            profile: ExportProfile::Legacy,
             name: "bughunter".to_string(),
             url: "https://api.bughunter.cl/import".to_string(),
             fields: vec![
@@ -505,6 +647,7 @@ mod tests {
         // Destino previo (campos por default): mismo esquema de siempre.
         let (root, pid) = project_with_business_fields();
         let target = ExportTarget {
+            profile: ExportProfile::Legacy,
             name: "hub".to_string(),
             url: "https://hub.example/api/import".to_string(),
             fields: vec![
@@ -535,6 +678,7 @@ mod tests {
         let mut fields = vec!["numero".to_string()];
         fields.extend(BUSINESS_FIELDS.iter().map(|k| k.to_string()));
         let target = ExportTarget {
+            profile: ExportProfile::Legacy,
             name: "hub".to_string(),
             url: "https://hub.example/api/import".to_string(),
             fields,
@@ -666,6 +810,7 @@ mod tests {
     /// Destino minimo con los datos opcionales del proyecto indicados.
     fn target_with_project_fields(project_fields: &[&str]) -> ExportTarget {
         ExportTarget {
+            profile: ExportProfile::Legacy,
             name: "puduhub".to_string(),
             url: "https://hub.example/api/import".to_string(),
             fields: vec!["titulo".to_string()],

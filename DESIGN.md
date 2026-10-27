@@ -102,6 +102,17 @@ corresponda. No presentar un error de carga como lista vacia.
 
 ## Interaccion y accesibilidad
 
+### Continuidad y exportacion versionada
+
+Herramienta tecnica, local y precisa para pentesters; esencia: contexto, revision,
+continuidad. La interfaz reutiliza los tokens, Inter/JetBrains Mono, Tabler y
+`Modal` del sistema V2. La referencia vive en Datos del proyecto; las operaciones
+de identidad y copia se agrupan en Vista previa. El dialogo distingue continuar
+un documento de crear un trabajo independiente. La exportacion presenta perfil,
+estado y JSON revisable, con errores y recuperacion visibles. Envio es la accion
+primaria solo cuando la preparacion vigente esta lista; etiquetas y foco nativo
+conservan el acceso por teclado. No se incorpora una paleta ni navegacion nuevas.
+
 - Foco visible en controles; hover y seleccion separados. Navegacion con
   `aria-current`, controles de panel con `aria-expanded` y nombre accesible.
 - Tooltips propios mediante `HintButton` en rail y control de sidebar: demora

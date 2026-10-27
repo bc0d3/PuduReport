@@ -489,6 +489,20 @@ fn apply_severity(
     Ok(())
 }
 
+impl PuduReportServer {
+    /// Resuelve la carpeta y hace I/O fuera del executor async. Las operaciones
+    /// de core coordinan el bloqueo y rechazan revisiones obsoletas.
+    async fn in_workspace<T: Send + 'static>(
+        &self,
+        task: impl FnOnce(PathBuf) -> Result<T, McpError> + Send + 'static,
+    ) -> Result<T, McpError> {
+        let server = self.clone();
+        tokio::task::spawn_blocking(move || task(server.current_root()?))
+            .await
+            .map_err(|_| internal("la operacion local no pudo completarse"))?
+    }
+}
+
 #[tool_router]
 impl PuduReportServer {
     /// Workspace fijo, solo para tests. Resuelve siempre a esta ruta.
@@ -663,53 +677,55 @@ impl PuduReportServer {
         &self,
         Parameters(args): Parameters<CreateFindingArgs>,
     ) -> Result<String, McpError> {
-        let root = self.current_root()?;
-        let project = workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
-        let mut validated_meta = FindingMeta::default();
-        apply_severity(
-            &mut validated_meta,
-            &project.project_type,
-            args.cvss_version.as_deref(),
-            args.cvss_vector.as_deref(),
-            args.severity.as_deref(),
-        )?;
-        if let Some(status) = args.status.as_deref() {
-            parse_status(status)?;
-        }
-        validate_body_sections(&args.body, &args.sections)?;
-        // Validar todas las casillas antes de crear archivos o modificar el orden.
-        let structured_body = args
-            .sections
-            .as_ref()
-            .map(|sections| {
-                sections.apply(
-                    "## Descripcion\n\n## Impacto\n\n## Prueba de concepto\n\n## Remediacion\n",
-                )
-            })
-            .transpose()?;
-        let mut finding =
-            workspace::create_finding(&root, &args.project_id, &args.title).map_err(internal)?;
-        if let Some(body) = args.body.or(structured_body) {
-            finding.body = body;
-        }
-        if let Some(cwe) = args.cwe {
-            finding.meta.cwe = cwe;
-        }
-        if let Some(status) = args.status.as_deref() {
-            finding.meta.status = parse_status(status)?;
-        }
-        if let Some(affected) = args.affected {
-            finding.meta.affected = affected;
-        }
-        apply_severity(
-            &mut finding.meta,
-            &project.project_type,
-            args.cvss_version.as_deref(),
-            args.cvss_vector.as_deref(),
-            args.severity.as_deref(),
-        )?;
-        workspace::write_finding(&root, &args.project_id, &finding).map_err(internal)?;
-        to_json(&finding)
+        self.in_workspace(move |root| {
+            let project =
+                workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
+            let mut validated_meta = FindingMeta::default();
+            apply_severity(
+                &mut validated_meta,
+                &project.project_type,
+                args.cvss_version.as_deref(),
+                args.cvss_vector.as_deref(),
+                args.severity.as_deref(),
+            )?;
+            if let Some(status) = args.status.as_deref() {
+                parse_status(status)?;
+            }
+            validate_body_sections(&args.body, &args.sections)?;
+            // Validar todas las casillas antes de crear archivos o modificar el orden.
+            let structured_body = args
+                .sections
+                .as_ref()
+                .map(|sections| {
+                    sections.apply(
+                        "## Descripcion\n\n## Impacto\n\n## Prueba de concepto\n\n## Remediacion\n",
+                    )
+                })
+                .transpose()?;
+            let mut finding = workspace::create_finding(&root, &args.project_id, &args.title)
+                .map_err(internal)?;
+            if let Some(body) = args.body.or(structured_body) {
+                finding.body = body;
+            }
+            if let Some(cwe) = args.cwe {
+                finding.meta.cwe = cwe;
+            }
+            if let Some(status) = args.status.as_deref() {
+                finding.meta.status = parse_status(status)?;
+            }
+            if let Some(affected) = args.affected {
+                finding.meta.affected = affected;
+            }
+            apply_severity(
+                &mut finding.meta,
+                &project.project_type,
+                args.cvss_version.as_deref(),
+                args.cvss_vector.as_deref(),
+                args.severity.as_deref(),
+            )?;
+            to_json(&workspace::write_finding(&root, &args.project_id, &finding).map_err(internal)?)
+        })
+        .await
     }
 
     /// Actualiza el texto y los campos de un hallazgo existente.
@@ -720,48 +736,50 @@ impl PuduReportServer {
         &self,
         Parameters(args): Parameters<UpdateFindingArgs>,
     ) -> Result<String, McpError> {
-        let root = self.current_root()?;
-        let project = workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
-        let mut finding =
-            workspace::load_finding(&root, &args.project_id, &args.finding_id).map_err(internal)?;
-        validate_body_sections(&args.body, &args.sections)?;
-        let business = validate_business_fields(&args)?;
-        if let Some(value) = business.impacto_negocio {
-            finding.meta.impacto_negocio = value;
-        }
-        if let Some(value) = business.categoria_riesgo {
-            finding.meta.categoria_riesgo = value;
-        }
-        if let Some(value) = business.modulo {
-            finding.meta.modulo = value;
-        }
-        if let Some(sections) = args.sections {
-            finding.body = sections.apply(&finding.body)?;
-        }
-        if let Some(title) = args.title {
-            finding.meta.title = title;
-        }
-        if let Some(body) = args.body {
-            finding.body = body;
-        }
-        if let Some(cwe) = args.cwe {
-            finding.meta.cwe = cwe;
-        }
-        if let Some(status) = args.status.as_deref() {
-            finding.meta.status = parse_status(status)?;
-        }
-        if let Some(affected) = args.affected {
-            finding.meta.affected = affected;
-        }
-        apply_severity(
-            &mut finding.meta,
-            &project.project_type,
-            args.cvss_version.as_deref(),
-            args.cvss_vector.as_deref(),
-            args.severity.as_deref(),
-        )?;
-        workspace::write_finding(&root, &args.project_id, &finding).map_err(internal)?;
-        to_json(&finding)
+        self.in_workspace(move |root| {
+            let project =
+                workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
+            let mut finding = workspace::load_finding(&root, &args.project_id, &args.finding_id)
+                .map_err(internal)?;
+            validate_body_sections(&args.body, &args.sections)?;
+            let business = validate_business_fields(&args)?;
+            if let Some(value) = business.impacto_negocio {
+                finding.meta.impacto_negocio = value;
+            }
+            if let Some(value) = business.categoria_riesgo {
+                finding.meta.categoria_riesgo = value;
+            }
+            if let Some(value) = business.modulo {
+                finding.meta.modulo = value;
+            }
+            if let Some(sections) = args.sections {
+                finding.body = sections.apply(&finding.body)?;
+            }
+            if let Some(title) = args.title {
+                finding.meta.title = title;
+            }
+            if let Some(body) = args.body {
+                finding.body = body;
+            }
+            if let Some(cwe) = args.cwe {
+                finding.meta.cwe = cwe;
+            }
+            if let Some(status) = args.status.as_deref() {
+                finding.meta.status = parse_status(status)?;
+            }
+            if let Some(affected) = args.affected {
+                finding.meta.affected = affected;
+            }
+            apply_severity(
+                &mut finding.meta,
+                &project.project_type,
+                args.cvss_version.as_deref(),
+                args.cvss_vector.as_deref(),
+                args.severity.as_deref(),
+            )?;
+            to_json(&workspace::write_finding(&root, &args.project_id, &finding).map_err(internal)?)
+        })
+        .await
     }
 
     /// Edita una seccion sin reemplazar las demas ni la metadata.
@@ -772,17 +790,18 @@ impl PuduReportServer {
         &self,
         Parameters(args): Parameters<UpdateFindingSectionArgs>,
     ) -> Result<String, McpError> {
-        let root = self.current_root()?;
-        let mut finding =
-            workspace::load_finding(&root, &args.project_id, &args.finding_id).map_err(internal)?;
-        finding.body = pudureport_core::sections::update_section(
-            &finding.body,
-            args.section_key.as_str(),
-            &args.body,
-        )
-        .map_err(|message| McpError::invalid_params(message, None))?;
-        workspace::write_finding(&root, &args.project_id, &finding).map_err(internal)?;
-        to_json(&finding)
+        self.in_workspace(move |root| {
+            let mut finding = workspace::load_finding(&root, &args.project_id, &args.finding_id)
+                .map_err(internal)?;
+            finding.body = pudureport_core::sections::update_section(
+                &finding.body,
+                args.section_key.as_str(),
+                &args.body,
+            )
+            .map_err(|message| McpError::invalid_params(message, None))?;
+            to_json(&workspace::write_finding(&root, &args.project_id, &finding).map_err(internal)?)
+        })
+        .await
     }
 
     // --- Escritura (solo texto de secciones de prosa existentes) ---
@@ -797,36 +816,38 @@ impl PuduReportServer {
         &self,
         Parameters(args): Parameters<UpdateSectionArgs>,
     ) -> Result<String, McpError> {
-        let root = self.current_root()?;
-        let mut project =
-            workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
-        let Some(idx) = project
-            .sections
-            .iter()
-            .position(|s| s.key == args.section_key)
-        else {
-            let keys: Vec<_> = project.sections.iter().map(|s| s.key.clone()).collect();
-            return Err(McpError::invalid_params(
-                format!(
-                    "no existe la seccion '{}'; disponibles: {}",
-                    args.section_key,
-                    keys.join(", ")
-                ),
-                None,
-            ));
-        };
-        let section = &mut project.sections[idx];
-        if let Some(title) = args.title {
-            section.title = title;
-        }
-        if let Some(body) = args.body {
-            section.body = body;
-        }
-        if let Some(enabled) = args.enabled {
-            section.enabled = enabled;
-        }
-        workspace::write_project_meta(&root, &args.project_id, &project).map_err(internal)?;
-        to_json(&project.sections[idx])
+        self.in_workspace(move |root| {
+            let mut project =
+                workspace::read_project_meta(&root, &args.project_id).map_err(internal)?;
+            let Some(idx) = project
+                .sections
+                .iter()
+                .position(|s| s.key == args.section_key)
+            else {
+                let keys: Vec<_> = project.sections.iter().map(|s| s.key.clone()).collect();
+                return Err(McpError::invalid_params(
+                    format!(
+                        "no existe la seccion '{}'; disponibles: {}",
+                        args.section_key,
+                        keys.join(", ")
+                    ),
+                    None,
+                ));
+            };
+            let section = &mut project.sections[idx];
+            if let Some(title) = args.title {
+                section.title = title;
+            }
+            if let Some(body) = args.body {
+                section.body = body;
+            }
+            if let Some(enabled) = args.enabled {
+                section.enabled = enabled;
+            }
+            workspace::write_project_meta(&root, &args.project_id, &project).map_err(internal)?;
+            to_json(&project.sections[idx])
+        })
+        .await
     }
 
     // --- Escritura de imagenes (assets) ---
@@ -1065,6 +1086,7 @@ mod tests {
         finding.body = "## Descripcion\nPreservar descripcion\n## PoC\nAnterior\n## Remediacion\nPreservar fix\n".into();
         finding.meta.hidden_fields = vec!["poc".into()];
         workspace::write_finding(&root, &pid, &finding).unwrap();
+        finding.meta.revision = None;
         let before_meta = serde_json::to_value(&finding.meta).unwrap();
         srv.update_finding_section(Parameters(UpdateFindingSectionArgs {
             project_id: pid.clone(),
@@ -1076,7 +1098,9 @@ mod tests {
         .await
         .unwrap();
         let updated = workspace::load_finding(&root, &pid, &finding.id).unwrap();
-        assert_eq!(serde_json::to_value(&updated.meta).unwrap(), before_meta);
+        let mut persistent_meta = updated.meta.clone();
+        persistent_meta.revision = None;
+        assert_eq!(serde_json::to_value(&persistent_meta).unwrap(), before_meta);
         assert!(updated
             .body
             .starts_with("## Descripcion\nPreservar descripcion\n"));
@@ -1098,7 +1122,8 @@ mod tests {
             updated.body
         );
         if let Some(bin) = std::env::var_os("PUDU_TYPST_BIN") {
-            let source = guide
+            let normalized_guide = guide.replace("\r\n", "\n");
+            let source = normalized_guide
                 .split("```typst\n")
                 .nth(1)
                 .unwrap()
@@ -1208,6 +1233,71 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn mcp_preserves_identity_and_returns_current_revision() {
+        let (root, pid) = temp_workspace("continuity", "pentest");
+        let srv = PuduReportServer::new(root.clone());
+        let created = parse(
+            srv.create_finding(Parameters(
+                serde_json::from_value(
+                    serde_json::json!({"project_id": pid, "title": "Identidad"}),
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap(),
+        );
+        assert!(created["meta"]["uid"].is_string());
+        let id = created["id"].as_str().unwrap();
+        let loaded = workspace::load_finding(&root, &pid, id).unwrap();
+        assert_eq!(
+            created["meta"]["revision"],
+            loaded.meta.revision.clone().unwrap()
+        );
+        let updated = parse(
+            srv.update_finding(Parameters(
+                serde_json::from_value(
+                    serde_json::json!({"project_id": pid, "finding_id": id, "title": "Renombrado"}),
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap(),
+        );
+        assert_eq!(updated["meta"]["uid"], created["meta"]["uid"]);
+        assert_ne!(updated["meta"]["revision"], created["meta"]["revision"]);
+        assert_eq!(
+            updated["meta"]["revision"],
+            workspace::load_finding(&root, &pid, id)
+                .unwrap()
+                .meta
+                .revision
+                .unwrap()
+        );
+        assert!(workspace::write_finding(&root, &pid, &loaded).is_err());
+        // Un archivo anterior permanece sin identidad hasta la preparacion explicita.
+        let path = root.join(&pid).join("findings").join(format!("{id}.md"));
+        let legacy = std::fs::read_to_string(&path)
+            .unwrap()
+            .lines()
+            .filter(|line| !line.starts_with("uid:"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&path, legacy).unwrap();
+        let legacy_updated = parse(
+            srv.update_finding(Parameters(
+                serde_json::from_value(
+                    serde_json::json!({"project_id": pid, "finding_id": id, "title": "Legacy"}),
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap(),
+        );
+        assert!(legacy_updated["meta"].get("uid").is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
     async fn structured_sections_roundtrip_and_invalid_writes_are_atomic() {
         let (root, pid) = temp_workspace("structured-sections", "pentest");
         let srv = PuduReportServer::new(root.clone());
@@ -1244,9 +1334,13 @@ mod tests {
         assert!(saved.body.contains("Corregir y volver a verificar"));
         assert!(saved.body.contains("1. Paso actualizado"));
         assert!(!saved.body.contains("Acceso autorizado"));
+        assert_eq!(saved.meta.uid, finding.meta.uid);
+        assert_ne!(saved.meta.revision, finding.meta.revision);
+        let mut previous_meta = finding.meta.clone();
+        previous_meta.revision = saved.meta.revision.clone();
         assert_eq!(
             serde_json::to_value(&saved.meta).unwrap(),
-            serde_json::to_value(&finding.meta).unwrap()
+            serde_json::to_value(previous_meta).unwrap()
         );
 
         let mut bad_update = update;

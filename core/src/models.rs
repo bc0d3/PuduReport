@@ -9,6 +9,17 @@
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+fn de_optional_text<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::String(value) => Ok(Some(value)),
+        _ => Err(serde::de::Error::custom(
+            "se esperaba texto; omite el campo si no existe",
+        )),
+    }
+}
+
 /// Deserializa el campo `cwe` aceptando tanto el formato viejo (un string, ej
 /// `cwe: CWE-89`) como el nuevo (una lista). Mantiene compatibilidad con los
 /// hallazgos ya escritos en disco. Descarta entradas vacias.
@@ -111,6 +122,16 @@ pub struct ProjectAssignment {
 /// Front-matter estructurado de un hallazgo.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FindingMeta {
+    /// Identidad persistente; ausente en archivos anteriores y plantillas.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "de_optional_text"
+    )]
+    pub uid: Option<String>,
+    /// Revision de lectura para detectar guardados obsoletos. No se persiste.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
     #[serde(default)]
     pub title: String,
     #[serde(default)]
@@ -469,6 +490,23 @@ pub struct TeamMember {
 /// project.yaml
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProjectMeta {
+    /// Identidad del documento, independiente de la carpeta y de la evaluacion.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "de_optional_text"
+    )]
+    pub uid: Option<String>,
+    /// Pista compartible de vinculacion; no concede permisos ni fusiona datos.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "de_optional_text"
+    )]
+    pub external_reference: Option<String>,
+    /// Revision de lectura para detectar guardados obsoletos. No se persiste.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
     #[serde(default)]
     pub name: String,
     #[serde(default)]
@@ -1005,8 +1043,11 @@ pub struct WorkspaceMeta {
 /// se envian en cada exportacion, para que la API receptora reciba siempre el
 /// mismo esquema (util para KPIs). El cuerpo/PoC de los hallazgos nunca se
 /// incluye por este canal.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExportTarget {
+    /// Los destinos anteriores siguen usando el contrato legacy.
+    #[serde(default)]
+    pub profile: ExportProfile,
     /// Nombre unico del destino (identifica tambien la entrada en el keychain).
     pub name: String,
     /// URL del endpoint (se exige https:// al enviar).
@@ -1024,6 +1065,15 @@ pub struct ExportTarget {
     /// desconocidas se ignoran.
     #[serde(default)]
     pub project_fields: Vec<String>,
+}
+
+/// Contrato de exportacion elegido explicitamente por destino.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExportProfile {
+    #[default]
+    Legacy,
+    IdentifiedV2,
 }
 
 /// Resumen liviano de un proyecto para listados.

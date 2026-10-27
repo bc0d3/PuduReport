@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (c) 2026 bc0d3
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import * as api from "../lib/api";
-import { scheduleWrite } from "../lib/pendingWrites";
+import { flushWrites, scheduleWrite } from "../lib/pendingWrites";
 import type {
   CategoriaRiesgo,
   CausaRaiz,
@@ -68,7 +68,8 @@ export function FindingEditor({
   rootCauses = [],
   onGoToPreview,
   onPickProject,
-}: Props) {
+}: Readonly<Props>) {
+  const fieldId = useId();
   // En los tipos de examen no se usa CVSS: la severidad es cualitativa y manual,
   // y se ocultan los campos CVSS/CWE.
   const examMode = typeInfo(projectType).exam;
@@ -86,11 +87,13 @@ export function FindingEditor({
   const metaRef = useRef<FindingMeta | null>(null);
   const sectionsRef = useRef<Record<string, string>>({});
   const saveRevisions = useRef(new Map<string, number>());
+  const diskRevisions = useRef(new Map<string, string | undefined>());
 
   const loadFindings = useCallback(async () => {
     if (!projectId) return;
     const list = await guard(api.listFindings(projectId));
     if (list) {
+      diskRevisions.current = new Map(list.map((finding) => [finding.id, finding.meta.revision]));
       setFindings(list);
       setActiveId((prev) => prev ?? (list.length > 0 ? list[0].id : null));
     }
@@ -99,7 +102,7 @@ export function FindingEditor({
   useEffect(() => {
     setActiveId(null);
     setCurrent(null);
-    loadFindings();
+    void loadFindings();
   }, [loadFindings]);
 
   useEffect(() => {
@@ -124,7 +127,14 @@ export function FindingEditor({
       scheduleWrite(
         `finding:${projectId}:${id}`,
         async () => {
-          const saved = await api.saveFinding(projectId, finding);
+          const saved = await api.saveFinding(projectId, {
+            ...finding,
+            meta: {
+              ...finding.meta,
+              revision: diskRevisions.current.get(id) ?? finding.meta.revision,
+            },
+          });
+          diskRevisions.current.set(id, saved.meta.revision);
           if (saved && saveRevisions.current.get(id) === revision)
             setFindings((list) => list.map((f) => (f.id === saved.id ? saved : f)));
         },
@@ -138,13 +148,13 @@ export function FindingEditor({
   );
 
   function patchMeta(updater: (m: FindingMeta) => FindingMeta) {
-    setCurrent((prev) => {
-      if (!prev) return prev;
-      const meta = updater(prev.meta);
-      metaRef.current = meta;
-      scheduleSave(prev.id);
-      return { ...prev, meta };
-    });
+    if (!current || !metaRef.current) return;
+    const meta = updater(metaRef.current);
+    metaRef.current = meta;
+    const next = { ...current, meta, body: joinSections(sectionsRef.current) };
+    setCurrent(next);
+    setFindings((list) => list.map((finding) => (finding.id === next.id ? next : finding)));
+    scheduleSave(next.id);
   }
 
   // Campos ocultos en el PDF sin ocultar el hallazgo entero (affected y las
@@ -169,6 +179,9 @@ export function FindingEditor({
     const next = { ...sectionsRef.current, [key]: value };
     sectionsRef.current = next;
     setSections(next);
+    const draft = { ...current, meta: metaRef.current ?? current.meta, body: joinSections(next) };
+    setCurrent(draft);
+    setFindings((list) => list.map((finding) => (finding.id === draft.id ? draft : finding)));
     scheduleSave(current.id);
   }
 
@@ -176,6 +189,7 @@ export function FindingEditor({
     if (!projectId) return;
     const created = await guard(api.createFinding(projectId, title));
     if (created) {
+      diskRevisions.current.set(created.id, created.meta.revision);
       setFindings((list) => [...list, created]);
       setActiveId(created.id);
     }
@@ -195,17 +209,12 @@ export function FindingEditor({
   // campos y el cuerpo. Queda seleccionado para seguir editandolo.
   async function handleDuplicate(id: string) {
     if (!projectId) return;
-    const src = findings.find((f) => f.id === id);
-    if (!src) return;
-    const created = await guard(api.createFinding(projectId, `${src.meta.title} (copia)`));
-    if (!created) return;
-    const clone: Finding = {
-      ...created,
-      meta: { ...src.meta, title: `${src.meta.title} (copia)` },
-      body: src.body,
-    };
-    const saved = await guard(api.saveFinding(projectId, clone), "Hallazgo duplicado");
+    const saved = await guard(
+      flushWrites().then(() => api.duplicateFinding(projectId, id)),
+      "Hallazgo duplicado",
+    );
     if (saved) {
+      diskRevisions.current.set(saved.id, saved.meta.revision);
       setFindings((list) => [...list, saved]);
       setActiveId(saved.id);
     }
@@ -215,15 +224,23 @@ export function FindingEditor({
   // conserva el cuerpo sin guardar); si no, guarda la version de la lista.
   async function handleToggleHidden(id: string) {
     if (!projectId) return;
-    if (current && id === current.id) {
+    if (current?.id === id) {
       patchMeta((m) => ({ ...m, hidden: !m.hidden }));
       return;
     }
-    const target = findings.find((f) => f.id === id);
-    if (!target) return;
-    const updated: Finding = { ...target, meta: { ...target.meta, hidden: !target.meta.hidden } };
-    const saved = await guard(api.saveFinding(projectId, updated));
-    if (saved) setFindings((list) => list.map((f) => (f.id === saved.id ? saved : f)));
+    const saved = await guard(
+      flushWrites().then(async () => {
+        const target = await api.loadFinding(projectId, id);
+        return api.saveFinding(projectId, {
+          ...target,
+          meta: { ...target.meta, hidden: !target.meta.hidden },
+        });
+      }),
+    );
+    if (saved) {
+      diskRevisions.current.set(saved.id, saved.meta.revision);
+      setFindings((list) => list.map((f) => (f.id === saved.id ? saved : f)));
+    }
   }
 
   async function handleReorder(orderedIds: string[]) {
@@ -282,8 +299,7 @@ export function FindingEditor({
           Selecciona un proyecto para editar sus hallazgos.
           <div className="row" style={{ justifyContent: "center", marginTop: 12 }}>
             <button className="btn primary" onClick={onPickProject}>
-              <i className="ti ti-folder" />
-              Ir a proyectos
+              <i className="ti ti-folder" aria-hidden="true" /> <span>Ir a proyectos</span>
             </button>
           </div>
         </div>
@@ -308,7 +324,8 @@ export function FindingEditor({
         <div className="editor finding-editor">
           <div className="editor-eyebrow">
             <i className="ti ti-file-description" aria-hidden="true" />
-            Hallazgo<span>{current.id}</span>
+            <span>Hallazgo</span>
+            <span>{current.id}</span>
           </div>
           {!typeInfo(projectType).usesFindings && (
             <div
@@ -337,16 +354,19 @@ export function FindingEditor({
               onChange={(e) => patchMeta((m) => ({ ...m, title: e.target.value }))}
             />
             <button className="btn primary" onClick={handleExport}>
-              <i className="ti ti-download" />
-              Exportar PDF
+              <i className="ti ti-download" aria-hidden="true" /> <span>Exportar PDF</span>
             </button>
           </div>
 
           <div className="fieldrow">
             <div>
-              <label className="field-label-top">severidad</label>
+              <span className="field-label-top" id={`${fieldId}-severity-label`}>
+                severidad
+              </span>
               {examMode ? (
                 <select
+                  id={`${fieldId}-severity`}
+                  aria-labelledby={`${fieldId}-severity-label`}
                   className="select"
                   style={{ width: "100%" }}
                   value={current.meta.severity}
@@ -372,8 +392,11 @@ export function FindingEditor({
             </div>
             {!examMode && (
               <div>
-                <label className="field-label-top">CVSS {current.meta.cvss_version}</label>
+                <label className="field-label-top" htmlFor={`${fieldId}-cvss`}>
+                  CVSS {current.meta.cvss_version}
+                </label>
                 <button
+                  id={`${fieldId}-cvss`}
                   className="field cvss-field"
                   aria-label={`Calcular CVSS ${current.meta.cvss_version}`}
                   onClick={() => setCalcOpen(true)}
@@ -384,8 +407,11 @@ export function FindingEditor({
               </div>
             )}
             <div>
-              <label className="field-label-top">estado</label>
+              <label className="field-label-top" htmlFor={`${fieldId}-status`}>
+                estado
+              </label>
               <select
+                id={`${fieldId}-status`}
                 className="select"
                 style={{ width: "100%" }}
                 value={current.meta.status}
@@ -418,7 +444,7 @@ export function FindingEditor({
 
           {!examMode && (
             <div className="field" style={{ marginBottom: 14 }}>
-              <label>CWE</label>
+              <label htmlFor={`${fieldId}-cwe`}>CWE</label>
               <div className="tag-list" style={{ marginBottom: 6 }}>
                 {current.meta.cwe.map((c, i) => (
                   <span className="tag" key={`${c}-${i}`}>
@@ -440,6 +466,7 @@ export function FindingEditor({
                 <input
                   className="input"
                   placeholder="CWE-89"
+                  id={`${fieldId}-cwe`}
                   value={cweInput}
                   onChange={(e) => setCweInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addCwe()}
@@ -461,7 +488,7 @@ export function FindingEditor({
 
           <div className="field" style={{ marginBottom: 14 }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
-              <label>Activos afectados</label>
+              <label htmlFor={`${fieldId}-affected`}>Activos afectados</label>
               <button
                 className={`toggle ${isFieldHidden("affected") ? "off" : ""}`}
                 title={isFieldHidden("affected") ? "Oculto en el PDF" : "Visible en el PDF"}
@@ -491,6 +518,7 @@ export function FindingEditor({
               <input
                 className="input"
                 placeholder="https://app.acme.com/login"
+                id={`${fieldId}-affected`}
                 value={affectedInput}
                 onChange={(e) => setAffectedInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addAffected()}
@@ -610,7 +638,9 @@ export function FindingEditor({
                 key={s.key}
               >
                 <div className="row" style={{ justifyContent: "space-between" }}>
-                  <label>{s.title}</label>
+                  <span className="field-label" id={`${fieldId}-${s.key}`}>
+                    {s.title}
+                  </span>
                   <button
                     className={`toggle ${isFieldHidden(s.key) ? "off" : ""}`}
                     title={isFieldHidden(s.key) ? "Oculto en el PDF" : "Visible en el PDF"}
@@ -622,6 +652,7 @@ export function FindingEditor({
                 <p className="muted">{s.guidance}</p>
                 <MarkdownEditor
                   key={`${current.id}-${s.key}`}
+                  labelledBy={`${fieldId}-${s.key}`}
                   value={sections[s.key] ?? ""}
                   onChange={(md) => setSection(s.key, md)}
                   placeholder={
@@ -638,8 +669,7 @@ export function FindingEditor({
 
           <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
             <button className="btn danger" onClick={() => current && setDelTarget(current.id)}>
-              <i className="ti ti-trash" />
-              Eliminar hallazgo
+              <i className="ti ti-trash" aria-hidden="true" /> <span>Eliminar hallazgo</span>
             </button>
           </div>
         </div>

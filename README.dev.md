@@ -4,7 +4,7 @@ Doc para contribuir y entender la tool por dentro. El [README.md](README.md) es 
 
 ## Resumen
 
-App de escritorio **local-first y offline** para redactar reportes de pentest y generar PDF. Sin servidor, sin Docker, los datos nunca salen del equipo.
+App de escritorio **local-first y offline** para redactar reportes de pentest y generar PDF. Sin servidor ni Docker; la exportacion a API es opt-in y requiere confirmacion.
 
 - **Framework**: Tauri v2 (core Rust + webview).
 - **Frontend**: React + TypeScript + Vite.
@@ -46,16 +46,19 @@ src/                      frontend React + TS
 src-tauri/
   src/
     lib.rs                comandos IPC + estado de la app
-    workspace.rs          I/O de archivos (YAML + front-matter), assets, validacion anti-traversal
-    cvss.rs               calculo CVSS 3.1 + 4.0 (4.0 con tabla oficial de FIRST)
-    pdf.rs                serializa data.json + invoca Typst (PDF y preview PNG)
-    markdown.rs           conversor markdown -> markup Typst
+    export.rs             payload legacy/v2, preparacion y envio HTTP
     db.rs                 indice SQLite (reindexable)
     git.rs                init/commit sobre el workspace del usuario
-    models.rs             tipos serializables compartidos con el frontend
   binaries/               sidecars typst-* y pudureport-mcp-* (gitignored, se generan por release)
   tauri.conf.json         config Tauri (CSP, assetProtocol, bundle, sidecar)
 mcp/                      crate pudureport-mcp: servidor MCP por stdio (lee/edita hallazgos)
+core/src/                 logica compartida por app y MCP
+  workspace.rs            YAML/front-matter, assets, creacion y guardado
+  models.rs               modelos persistentes e IPC
+  continuity.rs           inventario, preparacion, copias y snapshot
+  storage.rs              bloqueo entre procesos y revision optimista
+  cvss.rs, pdf.rs, markdown.rs  puntuacion y pipeline de render
+tests/fixtures/export/    contratos JSON autonomos y fuentes sinteticas
 templates/                plantillas .typ base (pentest, oscp, htb, ejecutivo, documento-libre, retest)
 scripts/fetch-typst.mjs   baja el sidecar de Typst por plataforma
 scripts/build-mcp-sidecar.mjs  compila el sidecar pudureport-mcp por plataforma
@@ -84,7 +87,7 @@ npm run build          # tsc (strict) + vite build
 npm run format         # Prettier
 
 # Backend (desde src-tauri/)
-cargo test             # 33 tests (CVSS, front-matter, pipeline PDF, traversal, ...)
+cargo test             # pruebas Rust; alcance local acotado en docs/continuity-validation.md
 cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 
@@ -110,8 +113,18 @@ npm run tauri build    # genera .dmg / .msi / .exe / .AppImage / .deb
 
 ## Tests
 
-- Backend: 33 tests (unitarios + integracion del pipeline de PDF). El calculo CVSS 4.0 esta validado contra la implementacion de referencia de FIRST.org.
-- **Pendiente**: tests de frontend (Vitest) para `parseSections`/`joinSections`, `buildVector` (CVSS) y `parseWidth` (imagenes). Es el gap conocido de mayor prioridad.
+- Rust: pruebas de core, exportador/Tauri y MCP, con archivos temporales y Typst para el pipeline PDF.
+- TS: `node --test scripts/*.test.mjs` prueba utilidades, guardados y carreras del flujo de exportacion. Se complementa con `tsc` en el build: `transpileModule` no comprueba tipos.
+- Continuidad: [arquitectura, operacion y harness de UI](docs/continuity.md), [contrato](docs/export-api.md) y [evidencia local R1–R5/C1](docs/continuity-validation.md).
+
+Los guardados de core e IPC de proyecto y hallazgo devuelven la metadata recargada
+bajo el mismo bloqueo de escritura con su
+`revision`; conservarla para la siguiente escritura. El UUID se genera solo al
+crear, preparar explicitamente o copiar como trabajo independiente. Las
+operaciones nuevas de disco se ejecutan con `spawn_blocking`; los bloqueos en
+memoria no se conservan durante `.await` ni durante HTTP. `fs2` coordina procesos
+y `sha2` calcula revisiones. No introducir generacion de identidad en Serde o
+`Default`, ni reconstruir el JSON al enviar una preparacion.
 
 ## Release
 

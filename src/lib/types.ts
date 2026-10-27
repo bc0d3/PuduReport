@@ -14,6 +14,9 @@ export type FindingStatus = "open" | "fixed" | "accepted" | "wontfix";
 
 /** Front-matter estructurado de un hallazgo (findings/*.md). */
 export interface FindingMeta {
+  uid?: string;
+  /** Revision optimista de lectura; nunca se guarda en el front-matter. */
+  revision?: string;
   title: string;
   /** Derivada del vector CVSS, no editable a mano. */
   severity: Severity;
@@ -144,6 +147,10 @@ export type Exposicion = "" | "internet" | "interno";
 
 /** project.yaml */
 export interface ProjectMeta {
+  uid?: string;
+  external_reference?: string;
+  /** Revision optimista de lectura; nunca se guarda en project.yaml. */
+  revision?: string;
   name: string;
   client: string;
   /** Gerencia del cliente (opcional). Se muestra en la portada si no esta vacia. */
@@ -263,6 +270,7 @@ export interface WorkspaceMeta {
  * (setExportToken / hasExportToken).
  */
 export interface ExportTarget {
+  profile: ExportProfile;
   name: string;
   url: string;
   /** Campos de metadata a incluir por hallazgo (esquema estable). */
@@ -275,6 +283,25 @@ export interface ExportTarget {
    */
   project_fields: string[];
 }
+
+export type ExportProfile = "legacy" | "identified_v2";
+
+export interface PreparedExport {
+  preparation_id: string;
+  destination_url: string;
+  /** Representacion exacta que Rust conserva para el POST. */
+  payload: string;
+  profile: ExportProfile;
+}
+
+export interface IdentityStatus {
+  project_uid: string | null;
+  findings: number;
+  missing: number;
+  conflicts: string[];
+}
+
+export type ProjectCopyMode = "continue" | "independent";
 
 /** Resultado de un envio a la API externa. */
 export interface ApiSendResult {

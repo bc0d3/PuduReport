@@ -1,0 +1,8 @@
+{
+  "schema_version": 2,
+  "source": "pudureport",
+  "exported_at": "2026-10-26T15:00:00Z",
+  "project": { "id": "portal-demo", "uid": "38ce1480-2f15-4d6d-91c0-d515e1182034", "external_reference": "PENTEST-2026-042", "name": "Portal Demo", "client": "Empresa Demo", "type": "pentest", "start_date": "2026-10-01", "end_date": "2026-10-20", "environment": "qa", "exposure": "interno" },
+  "summary": { "total": 1, "by_severity": { "high": 1 } },
+  "findings": [{ "uid": "459da17c-28fc-4680-b6cf-ab3b6e186648", "numero": 1, "titulo": "Acceso indebido a información", "severidad": "high", "cvss": 8.1, "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H", "cvss_version": "3.1", "cwe": ["CWE-862"], "estado": "open", "afectados": ["https://portal.example.invalid/admin"], "nuevo": false, "modulo": "Administración", "impacto_negocio": "Consulta de información fuera del ámbito autorizado.", "categoria_riesgo": "fuga_datos", "causa_raiz": { "clave": "autorizacion", "titulo": "Validación de permisos incompleta" } }]
+}

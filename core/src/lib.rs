@@ -13,5 +13,7 @@ pub mod models;
 pub mod sections;
 pub mod workspace;
 
+pub mod continuity;
 pub mod naming;
 pub mod pdf;
+pub(crate) mod storage;
