@@ -69,6 +69,7 @@ test("escrituras del mismo archivo esperan la anterior aunque haya varios flush"
     assert.fail,
   );
   const second = flushWrites();
+  await Promise.resolve();
   assert.deepEqual(writes, ["start"]);
   release();
   await Promise.all([first, second]);
@@ -88,4 +89,105 @@ test("un error bloquea navegacion y permite reintentar el borrador", async () =>
   await assert.rejects(flushWrites(), /disk unavailable/);
   await flushWrites();
   assert.equal(attempts, 2);
+});
+
+test("archivos distintos tampoco se escriben simultaneamente", async () => {
+  const writes = [];
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  scheduleWrite(
+    "project:serial",
+    async () => {
+      writes.push("project");
+      await pending;
+    },
+    600,
+    assert.fail,
+  );
+  scheduleWrite(
+    "finding:serial",
+    async () => {
+      writes.push("finding");
+    },
+    600,
+    assert.fail,
+  );
+  const flush = flushWrites();
+  await Promise.resolve();
+  assert.deepEqual(writes, ["project"]);
+  release();
+  await flush;
+  assert.deepEqual(writes, ["project", "finding"]);
+});
+
+test("flush concurrentes comparten el error sin reintentar ni perder la edicion mas nueva", async () => {
+  let rejectWrite;
+  const failing = new Promise((_, reject) => {
+    rejectWrite = reject;
+  });
+  const writes = [];
+  scheduleWrite(
+    "project:failure",
+    async () => {
+      writes.push("old");
+      await failing;
+    },
+    600,
+    assert.fail,
+  );
+  const first = flushWrites();
+  await Promise.resolve();
+  scheduleWrite(
+    "project:failure",
+    async () => {
+      writes.push("latest");
+    },
+    600,
+    assert.fail,
+  );
+  const second = flushWrites();
+  const results = Promise.allSettled([first, second]);
+  const error = new Error("save conflict");
+  rejectWrite(error);
+  assert.deepEqual(await results, [
+    { status: "rejected", reason: error },
+    { status: "rejected", reason: error },
+  ]);
+  assert.deepEqual(writes, ["old"]);
+  await flushWrites();
+  assert.deepEqual(writes, ["old", "latest"]);
+});
+
+test("el drenaje incluye ediciones reentrantes y permite reutilizar una clave vaciada", async () => {
+  const writes = [];
+  const last = async () => {
+    writes.push("last");
+  };
+  const middle = async () => {
+    writes.push("middle");
+    scheduleWrite("project:drain", last, 600, assert.fail);
+  };
+  scheduleWrite(
+    "project:drain",
+    async () => {
+      writes.push("first");
+      scheduleWrite("project:drain", middle, 600, assert.fail);
+    },
+    600,
+    assert.fail,
+  );
+  await flushWrites();
+  assert.deepEqual(writes, ["first", "middle", "last"]);
+  scheduleWrite(
+    "project:drain",
+    async () => {
+      writes.push("reused");
+    },
+    600,
+    assert.fail,
+  );
+  await flushWrites();
+  assert.deepEqual(writes, ["first", "middle", "last", "reused"]);
 });

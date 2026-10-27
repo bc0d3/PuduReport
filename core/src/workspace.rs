@@ -29,6 +29,7 @@ use crate::models::{
     ProjectStats, ProjectStatus, ProjectSummary, SeverityCounts, Snippet, TemplateMeta,
     WorkspaceMeta, WorkspaceStats,
 };
+use crate::storage::{check_revision, revision, WorkspaceLock};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
@@ -44,6 +45,14 @@ pub enum WorkspaceError {
     FindingNotFound(String),
     #[error("nombre invalido: {0}")]
     InvalidName(String),
+    #[error("hay otra escritura en curso; espera y vuelve a intentar")]
+    Busy,
+    #[error("{0} cambio desde su lectura; conserva el borrador y vuelve a cargar")]
+    ConcurrentChange(String),
+    #[error("conflicto de identidad: {0}")]
+    Identity(String),
+    #[error("referencia externa invalida: debe contener entre 1 y 128 caracteres")]
+    InvalidReference,
 }
 
 type Result<T> = std::result::Result<T, WorkspaceError>;
@@ -53,7 +62,7 @@ type Result<T> = std::result::Result<T, WorkspaceError>;
 // ---------------------------------------------------------------------------
 
 /// Separa un documento "---\n<yaml>\n---\n<body>" en (yaml, body).
-fn split_front_matter(content: &str, source: &str) -> Result<(String, String)> {
+pub(crate) fn split_front_matter(content: &str, source: &str) -> Result<(String, String)> {
     let trimmed = content.strip_prefix('\u{feff}').unwrap_or(content);
     let trimmed = trimmed.trim_start();
     let rest = trimmed
@@ -82,15 +91,13 @@ fn join_front_matter<T: serde::Serialize>(meta: &T, body: &str) -> Result<String
 
 /// Escribe `bytes` en `path` de forma atomica: primero los vuelca a un archivo
 /// temporal en el MISMO directorio, fuerza el flush a disco (`sync_all`) y solo
-/// entonces lo renombra sobre el destino. Un `rename` dentro del mismo sistema
-/// de archivos es atomico, de modo que un corte de energia o un crash a mitad
-/// de la operacion nunca deja el archivo destino truncado: o sobrevive el
-/// contenido viejo intacto, o queda el nuevo completo. Es la garantia que exige
-/// la regla de oro del proyecto (los archivos son la fuente de verdad y no hay
-/// respaldo en servidor). El temporal lleva un nombre unico (UUID) para que dos
+/// entonces lo renombra sobre el destino. No trunca el archivo anterior si falla
+/// la escritura del temporal o su reemplazo. Esto no garantiza durabilidad ante
+/// todo corte de energia ni una transaccion de varios archivos. El temporal lleva
+/// un nombre unico (UUID) para que dos
 /// escrituras concurrentes (p.ej. GUI + MCP) no se pisen, y empieza con `.`
 /// para que el listado de proyectos/hallazgos lo ignore si quedara huerfano.
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     use std::io::Write;
 
     let dir = path.parent().ok_or_else(|| {
@@ -102,7 +109,10 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     let tmp = dir.join(format!(".{}.tmp", uuid::Uuid::new_v4()));
 
     let write_tmp = || -> std::io::Result<()> {
-        let mut f = fs::File::create(&tmp)?;
+        let mut f = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
         f.write_all(bytes)?;
         f.sync_all()?;
         Ok(())
@@ -164,7 +174,7 @@ fn slugify(title: &str) -> String {
 /// segmento de ruta seguro, sin traversal. Defensa en profundidad: aunque hoy
 /// los ids los genera el frontend con slugs, los comandos no deben confiar en
 /// la entrada (workspaces de terceros, llamadas IPC arbitrarias).
-fn validate_id(id: &str) -> Result<()> {
+pub(crate) fn validate_id(id: &str) -> Result<()> {
     let safe = !id.is_empty()
         && !id.contains('/')
         && !id.contains('\\')
@@ -212,6 +222,11 @@ pub fn read_workspace_meta(root: &Path) -> Result<WorkspaceMeta> {
 }
 
 pub fn write_workspace_meta(root: &Path, meta: &WorkspaceMeta) -> Result<()> {
+    let _lock = WorkspaceLock::acquire(root)?;
+    write_workspace_meta_locked(root, meta)
+}
+
+fn write_workspace_meta_locked(root: &Path, meta: &WorkspaceMeta) -> Result<()> {
     let yaml = serde_yaml::to_string(meta)?;
     write_atomic(&workspace_yaml_path(root), yaml.as_bytes())?;
     Ok(())
@@ -219,7 +234,7 @@ pub fn write_workspace_meta(root: &Path, meta: &WorkspaceMeta) -> Result<()> {
 
 /// Genera el .gitignore del workspace (ignora build/, incluye findings/+assets/).
 fn write_gitignore(root: &Path) -> Result<()> {
-    let content = "# Generado por PuduReport\nbuild/\n*.pdf\n.DS_Store\n";
+    let content = "# Generado por PuduReport\nbuild/\n.pudu/\n*.pdf\n.DS_Store\n";
     write_atomic(&root.join(".gitignore"), content.as_bytes())?;
     Ok(())
 }
@@ -319,6 +334,7 @@ pub fn create_project(
     client: &str,
     project_type: &str,
 ) -> Result<(String, ProjectMeta)> {
+    let _lock = WorkspaceLock::acquire(root)?;
     let id = unique_dir(root, &slugify(name));
     let dir = project_dir(root, &id);
     fs::create_dir_all(dir.join("findings"))?;
@@ -326,6 +342,7 @@ pub fn create_project(
     fs::create_dir_all(dir.join("build"))?;
 
     let meta = ProjectMeta {
+        uid: Some(uuid::Uuid::new_v4().to_string()),
         name: name.to_string(),
         client: client.to_string(),
         project_type: project_type.to_string(),
@@ -333,13 +350,15 @@ pub fn create_project(
         project_status: ProjectStatus::Todo,
         ..Default::default()
     };
-    write_project_meta(root, &id, &meta)?;
-    Ok((id, meta))
+    write_project_meta_locked(root, &id, &meta)?;
+    let saved = read_project_meta(root, &id)?;
+    Ok((id, saved))
 }
 
 /// Borra un proyecto completo (su carpeta y todo su contenido) del workspace.
 pub fn delete_project(root: &Path, project_id: &str) -> Result<()> {
     validate_id(project_id)?;
+    let _lock = WorkspaceLock::acquire(root)?;
     let dir = project_dir(root, project_id);
     if dir.exists() {
         fs::remove_dir_all(dir)?;
@@ -352,14 +371,20 @@ pub fn delete_project(root: &Path, project_id: &str) -> Result<()> {
 pub fn create_example_project(root: &Path) -> Result<(String, ProjectMeta)> {
     use crate::models::TeamMember;
 
-    let (id, _) = create_project(root, "Proyecto de ejemplo", "Cliente Demo S.A.", "pentest")?;
+    let (id, created) =
+        create_project(root, "Proyecto de ejemplo", "Cliente Demo S.A.", "pentest")?;
 
-    let findings = example_findings();
+    let mut findings = example_findings();
+    for finding in &mut findings {
+        finding.meta.uid = Some(uuid::Uuid::new_v4().to_string());
+    }
     let order: Vec<String> = findings.iter().map(|f| f.id.clone()).collect();
 
     // El proyecto se escribe antes que los hallazgos: write_finding valida la
     // causa raiz de cada hallazgo contra las causas raiz del proyecto.
     let meta = ProjectMeta {
+        uid: created.uid,
+        revision: created.revision,
         name: "Proyecto de ejemplo".to_string(),
         client: "Cliente Demo S.A.".to_string(),
         project_type: "pentest".to_string(),
@@ -390,7 +415,8 @@ pub fn create_example_project(root: &Path) -> Result<(String, ProjectMeta)> {
     for finding in &findings {
         write_finding(root, &id, finding)?;
     }
-    Ok((id, meta))
+    let saved = read_project_meta(root, &id)?;
+    Ok((id, saved))
 }
 
 /// Causas raiz del proyecto de ejemplo (parte ejecutiva del informe).
@@ -458,6 +484,8 @@ fn example_findings() -> Vec<Finding> {
         Finding {
             id: "001-inyeccion-sql-en-login".to_string(),
             meta: FindingMeta {
+                uid: None,
+                revision: None,
                 title: "Inyeccion SQL en el formulario de autenticacion".to_string(),
                 severity: Severity::Critical,
                 cvss_version: CvssVersion::V31,
@@ -479,6 +507,8 @@ fn example_findings() -> Vec<Finding> {
         Finding {
             id: "002-idor-en-api".to_string(),
             meta: FindingMeta {
+                uid: None,
+                revision: None,
                 title: "Referencia directa insegura a objetos (IDOR) en la API".to_string(),
                 severity: Severity::High,
                 cvss_version: CvssVersion::V40,
@@ -501,6 +531,8 @@ fn example_findings() -> Vec<Finding> {
         Finding {
             id: "003-cabeceras-seguridad-ausentes".to_string(),
             meta: FindingMeta {
+                uid: None,
+                revision: None,
                 title: "Cabeceras de seguridad HTTP ausentes".to_string(),
                 severity: Severity::Low,
                 cvss_version: CvssVersion::V31,
@@ -748,6 +780,7 @@ pub fn read_project_meta(root: &Path, id: &str) -> Result<ProjectMeta> {
     }
     let content = fs::read_to_string(path)?;
     let mut meta: ProjectMeta = serde_yaml::from_str(&content)?;
+    meta.revision = Some(revision(content.as_bytes()));
     // Layout del cuerpo consistente con las secciones (idempotente; sintetiza el
     // default del tipo en project.yaml previos a los bloques). Asi load_project
     // devuelve el layout efectivo al frontend.
@@ -791,10 +824,58 @@ pub fn normalize_finding(root: &Path, project_id: &str, finding: &mut Finding) {
     finding.meta.normalize_business_fields(keys.as_deref());
 }
 
-pub fn write_project_meta(root: &Path, id: &str, meta: &ProjectMeta) -> Result<()> {
+/// Devuelve la metadata y revision guardadas antes de liberar el bloqueo.
+pub fn write_project_meta(root: &Path, id: &str, meta: &ProjectMeta) -> Result<ProjectMeta> {
+    let _lock = WorkspaceLock::acquire(root)?;
+    write_project_meta_locked(root, id, meta)?;
+    read_project_meta(root, id)
+}
+
+fn write_project_meta_locked(root: &Path, id: &str, meta: &ProjectMeta) -> Result<()> {
     validate_id(id)?;
-    let yaml = serde_yaml::to_string(meta)?;
-    write_atomic(&project_yaml_path(root, id), yaml.as_bytes())?;
+    if meta.uid.is_some() {
+        crate::continuity::parse_uid(meta.uid.as_deref(), id)?;
+    }
+    let path = project_yaml_path(root, id);
+    let previous = read_optional(&path)?;
+    if previous.is_none() && meta.revision.is_some() {
+        return Err(WorkspaceError::ConcurrentChange(id.to_string()));
+    }
+    if let Some(bytes) = &previous {
+        let stored: ProjectMeta = serde_yaml::from_slice(bytes)?;
+        preserve_uid(stored.uid.as_deref(), meta.uid.as_deref(), id)?;
+        check_revision(bytes, meta.revision.as_deref(), id)?;
+    }
+    let mut clean = meta.clone();
+    clean.revision = None;
+    clean.external_reference =
+        crate::continuity::external_reference(clean.external_reference.as_deref())?;
+    let yaml = serde_yaml::to_string(&clean)?;
+    write_checked(&path, previous.as_deref(), yaml.as_bytes())?;
+    Ok(())
+}
+
+fn read_optional(path: &Path) -> Result<Option<Vec<u8>>> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+pub(crate) fn write_checked(path: &Path, previous: Option<&[u8]>, bytes: &[u8]) -> Result<()> {
+    if read_optional(path)?.as_deref() != previous {
+        return Err(WorkspaceError::ConcurrentChange("archivo".to_string()));
+    }
+    write_atomic(path, bytes)
+}
+
+fn preserve_uid(previous: Option<&str>, next: Option<&str>, entity: &str) -> Result<()> {
+    if previous != next {
+        return Err(WorkspaceError::Identity(format!(
+            "no se puede sustituir el UUID de {entity}"
+        )));
+    }
     Ok(())
 }
 
@@ -864,7 +945,8 @@ fn parse_finding_file(path: &Path) -> Result<Finding> {
     let content = fs::read_to_string(path)?;
     let source = path.display().to_string();
     let (yaml, body) = split_front_matter(&content, &source)?;
-    let meta: FindingMeta = serde_yaml::from_str(&yaml)?;
+    let mut meta: FindingMeta = serde_yaml::from_str(&yaml)?;
+    meta.revision = Some(revision(content.as_bytes()));
     let id = path
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
@@ -896,10 +978,13 @@ pub fn list_findings(root: &Path, project_id: &str) -> Result<Vec<Finding>> {
     }
     let order = project.map(|m| m.finding_order).unwrap_or_default();
     findings.sort_by_key(|f| {
-        order
-            .iter()
-            .position(|id| id == &f.id)
-            .unwrap_or(usize::MAX)
+        (
+            order
+                .iter()
+                .position(|id| id == &f.id)
+                .unwrap_or(usize::MAX),
+            f.id.clone(),
+        )
     });
     Ok(findings)
 }
@@ -930,6 +1015,7 @@ fn finding_slug(title: &str) -> String {
 /// Crea un hallazgo vacio con prefijo numerico incremental.
 pub fn create_finding(root: &Path, project_id: &str, title: &str) -> Result<Finding> {
     validate_id(project_id)?;
+    let _lock = WorkspaceLock::acquire(root)?;
     let dir = findings_dir(root, project_id);
     fs::create_dir_all(&dir)?;
 
@@ -938,20 +1024,21 @@ pub fn create_finding(root: &Path, project_id: &str, title: &str) -> Result<Find
     let finding = Finding {
         id: id.clone(),
         meta: FindingMeta {
+            uid: Some(uuid::Uuid::new_v4().to_string()),
             title: title.to_string(),
             ..Default::default()
         },
         body: default_finding_body(),
     };
-    write_finding(root, project_id, &finding)?;
+    write_finding_locked(root, project_id, &finding)?;
 
     // Anexar al orden del proyecto.
     let mut meta = read_project_meta(root, project_id)?;
     if !meta.finding_order.contains(&id) {
         meta.finding_order.push(id);
-        write_project_meta(root, project_id, &meta)?;
+        write_project_meta_locked(root, project_id, &meta)?;
     }
-    Ok(finding)
+    load_finding(root, project_id, &finding.id)
 }
 
 fn default_finding_body() -> String {
@@ -971,28 +1058,52 @@ fn next_finding_number(dir: &Path) -> Result<u32> {
             }
         }
     }
-    Ok(max + 1)
+    max.checked_add(1)
+        .ok_or_else(|| WorkspaceError::InvalidName("limite de hallazgos".to_string()))
 }
 
 /// Escribe un hallazgo a disco (id estable, no se renombra al cambiar titulo).
 /// Los campos de negocio se normalizan antes de escribir (ver
 /// `normalize_finding`): nunca se guarda una categoria o causa raiz invalida.
-pub fn write_finding(root: &Path, project_id: &str, finding: &Finding) -> Result<()> {
+/// Devuelve el hallazgo y revision guardados bajo el mismo bloqueo cooperativo.
+pub fn write_finding(root: &Path, project_id: &str, finding: &Finding) -> Result<Finding> {
+    let _lock = WorkspaceLock::acquire(root)?;
+    write_finding_locked(root, project_id, finding)?;
+    load_finding(root, project_id, &finding.id)
+}
+
+fn write_finding_locked(root: &Path, project_id: &str, finding: &Finding) -> Result<()> {
     validate_id(project_id)?;
     validate_id(&finding.id)?;
+    if finding.meta.uid.is_some() {
+        crate::continuity::parse_uid(finding.meta.uid.as_deref(), &finding.id)?;
+    }
+    let path = finding_path(root, project_id, &finding.id);
+    let previous = read_optional(&path)?;
+    if previous.is_none() && finding.meta.revision.is_some() {
+        return Err(WorkspaceError::ConcurrentChange(finding.id.clone()));
+    }
+    if let Some(bytes) = &previous {
+        let stored = parse_finding_file(&path)?;
+        preserve_uid(
+            stored.meta.uid.as_deref(),
+            finding.meta.uid.as_deref(),
+            &finding.id,
+        )?;
+        check_revision(bytes, finding.meta.revision.as_deref(), &finding.id)?;
+    }
     let mut meta = finding.meta.clone();
+    meta.revision = None;
     let project = read_project_meta(root, project_id).ok();
     let keys = project.as_ref().map(|p| p.root_cause_keys());
     meta.normalize_business_fields(keys.as_deref());
     let content = join_front_matter(&meta, &finding.body)?;
-    write_atomic(
-        &finding_path(root, project_id, &finding.id),
-        content.as_bytes(),
-    )?;
+    write_checked(&path, previous.as_deref(), content.as_bytes())?;
     Ok(())
 }
 
 pub fn delete_finding(root: &Path, project_id: &str, finding_id: &str) -> Result<()> {
+    let _lock = WorkspaceLock::acquire(root)?;
     validate_id(project_id)?;
     validate_id(finding_id)?;
     let path = finding_path(root, project_id, finding_id);
@@ -1001,18 +1112,19 @@ pub fn delete_finding(root: &Path, project_id: &str, finding_id: &str) -> Result
     }
     let mut meta = read_project_meta(root, project_id)?;
     meta.finding_order.retain(|id| id != finding_id);
-    write_project_meta(root, project_id, &meta)?;
+    write_project_meta_locked(root, project_id, &meta)?;
     Ok(())
 }
 
 pub fn reorder_findings(root: &Path, project_id: &str, order: Vec<String>) -> Result<()> {
+    let _lock = WorkspaceLock::acquire(root)?;
     validate_id(project_id)?;
     for id in &order {
         validate_id(id)?;
     }
     let mut meta = read_project_meta(root, project_id)?;
     meta.finding_order = order;
-    write_project_meta(root, project_id, &meta)?;
+    write_project_meta_locked(root, project_id, &meta)?;
     Ok(())
 }
 
@@ -1025,6 +1137,7 @@ pub fn assign_project_closure(
     name: &str,
     email: &str,
 ) -> Result<ProjectAssignment> {
+    let _lock = WorkspaceLock::acquire(root)?;
     validate_id(project_id)?;
     let mut meta = read_project_meta(root, project_id)?;
     let entry = ProjectAssignment {
@@ -1034,19 +1147,20 @@ pub fn assign_project_closure(
     };
     meta.assignment_history.push(entry.clone());
     meta.project_status = ProjectStatus::Assigned;
-    write_project_meta(root, project_id, &meta)?;
+    write_project_meta_locked(root, project_id, &meta)?;
     Ok(entry)
 }
 
 /// Reordena las tarjetas del tablero Kanban de Proyectos (orden global,
 /// filtrado por columna al renderizar).
 pub fn reorder_projects(root: &Path, order: Vec<String>) -> Result<()> {
+    let _lock = WorkspaceLock::acquire(root)?;
     for id in &order {
         validate_id(id)?;
     }
     let mut meta = read_workspace_meta(root)?;
     meta.project_order = order;
-    write_workspace_meta(root, &meta)?;
+    write_workspace_meta_locked(root, &meta)?;
     Ok(())
 }
 
@@ -1171,7 +1285,10 @@ pub fn save_finding_template(root: &Path, template: &FindingTemplate) -> Result<
         template.id.clone()
     };
     validate_id(&id)?;
-    let body = join_front_matter(&template.meta, &template.body)?;
+    let mut meta = template.meta.clone();
+    meta.uid = None;
+    meta.revision = None;
+    let body = join_front_matter(&meta, &template.body)?;
     write_atomic(&dir.join(format!("{id}.md")), body.as_bytes())?;
     Ok(())
 }
@@ -1188,6 +1305,7 @@ pub fn instantiate_template(
     vars: &std::collections::HashMap<String, String>,
     builtin_dir: Option<&Path>,
 ) -> Result<Finding> {
+    let _lock = WorkspaceLock::acquire(root)?;
     validate_id(project_id)?;
     validate_id(template_id)?;
     let user_path = library_findings_dir(root).join(format!("{template_id}.md"));
@@ -1213,20 +1331,41 @@ pub fn instantiate_template(
     let id = format!("{:03}-{}", next, finding_slug(&title));
 
     let mut meta = template.meta.clone();
+    meta.uid = Some(uuid::Uuid::new_v4().to_string());
+    meta.revision = None;
     meta.title = title;
     let finding = Finding {
         id: id.clone(),
         meta,
         body,
     };
-    write_finding(root, project_id, &finding)?;
+    write_finding_locked(root, project_id, &finding)?;
 
     let mut pmeta = read_project_meta(root, project_id)?;
     if !pmeta.finding_order.contains(&id) {
         pmeta.finding_order.push(id);
-        write_project_meta(root, project_id, &pmeta)?;
+        write_project_meta_locked(root, project_id, &pmeta)?;
     }
-    Ok(finding)
+    load_finding(root, project_id, &finding.id)
+}
+
+/// Duplica contenido con identidad nueva en una sola operacion coordinada.
+pub fn duplicate_finding(root: &Path, project_id: &str, finding_id: &str) -> Result<Finding> {
+    let _lock = WorkspaceLock::acquire(root)?;
+    let mut finding = load_finding(root, project_id, finding_id)?;
+    finding.meta.title = format!("{} (copia)", finding.meta.title);
+    finding.meta.uid = Some(uuid::Uuid::new_v4().to_string());
+    finding.meta.revision = None;
+    finding.id = format!(
+        "{:03}-{}",
+        next_finding_number(&findings_dir(root, project_id))?,
+        finding_slug(&finding.meta.title)
+    );
+    write_finding_locked(root, project_id, &finding)?;
+    let mut project = read_project_meta(root, project_id)?;
+    project.finding_order.push(finding.id.clone());
+    write_project_meta_locked(root, project_id, &project)?;
+    load_finding(root, project_id, &finding.id)
 }
 
 /// Reemplaza ocurrencias de {{clave}} por su valor.

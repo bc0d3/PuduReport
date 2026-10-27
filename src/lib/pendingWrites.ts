@@ -8,29 +8,36 @@ interface Entry {
   running?: Promise<void>;
 }
 const entries = new Map<string, Entry>();
+// El bloqueo de core es por workspace: tampoco solapar archivos distintos desde la UI.
+let writeTail: Promise<void> = Promise.resolve();
 
-async function flushEntry(key: string, entry: Entry): Promise<void> {
+async function drainEntry(key: string, entry: Entry): Promise<void> {
   clearTimeout(entry.timer);
-  while (entry.running || entry.task) {
-    if (entry.running) {
-      await entry.running;
-      continue;
-    }
-    const task = entry.task;
-    if (!task) continue;
-    entry.task = undefined;
-    const running = task();
-    entry.running = running;
-    try {
-      await running;
-    } catch (error) {
-      entry.task ??= task;
-      throw error;
-    } finally {
-      entry.running = undefined;
-    }
+  const task = entry.task;
+  if (!task) {
+    if (entries.get(key) === entry) entries.delete(key);
+    return;
   }
-  if (entries.get(key) === entry) entries.delete(key);
+  entry.task = undefined;
+  const writing = writeTail.then(task);
+  writeTail = writing.catch(() => undefined);
+  try {
+    await writing;
+  } catch (error) {
+    entry.task ??= task;
+    throw error;
+  }
+  // Cada paso cede al executor; un fallo conserva el borrador y detiene el drenaje.
+  return drainEntry(key, entry);
+}
+
+function flushEntry(key: string, entry: Entry): Promise<void> {
+  clearTimeout(entry.timer);
+  // Todos los flush de un archivo comparten el mismo drenaje, tambien ante error.
+  entry.running ??= drainEntry(key, entry).finally(() => {
+    entry.running = undefined;
+  });
+  return entry.running;
 }
 
 /** Coalesce por archivo y serializa escrituras; un fallo conserva el ultimo borrador. */

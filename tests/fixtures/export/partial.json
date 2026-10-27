@@ -1,0 +1,6 @@
+{
+  "source": "pudureport",
+  "exported_at": "2026-10-26T15:00:00Z",
+  "project": { "id": "portal-demo", "name": "Portal Demo", "client": "Empresa Demo", "type": "pentest", "start_date": "2026-10-01", "end_date": "2026-10-20", "environment": "qa" },
+  "findings": [{ "titulo": "Acceso indebido a información", "modulo": "Administración" }]
+}

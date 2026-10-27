@@ -174,7 +174,7 @@ function AppInner() {
     }
     setActiveProject(null);
     setProjectLoad("loading");
-    guard(api.loadProject(activeProjectId)).then((m) => {
+    void guard(api.loadProject(activeProjectId)).then((m) => {
       if (cancelled) return;
       setActiveProject(m ?? null);
       setProjectLoad(m ? "ready" : "error");
@@ -192,7 +192,7 @@ function AppInner() {
       setPdfTemplates([]);
       return;
     }
-    guard(api.listPdfTemplates()).then((t) => {
+    void guard(api.listPdfTemplates()).then((t) => {
       if (!cancelled) setPdfTemplates(t ?? []);
     });
     return () => {
@@ -224,7 +224,7 @@ function AppInner() {
           workspaceGeneration.current += 1;
           setWorkspace(meta);
           setWorkspacePath(path);
-          loadProjects();
+          void loadProjects();
           setView("inicio");
         }}
       />
@@ -263,31 +263,11 @@ function AppInner() {
       {activeProjectId &&
       projectLoad !== "ready" &&
       ["editor", "reporte", "preview", "historial", "plantillas"].includes(view) ? (
-        <div className="shell-state" role={projectLoad === "error" ? "alert" : "status"}>
-          <i
-            className={`ti ${projectLoad === "error" ? "ti-alert-circle" : "ti-hourglass"}`}
-            aria-hidden="true"
-          />
-          <h2>{projectLoad === "error" ? "No se pudo abrir el proyecto" : "Abriendo proyecto"}</h2>
-          <p>
-            {projectLoad === "error"
-              ? "Revisa que la carpeta del proyecto siga disponible."
-              : "Cargando datos del workspace local..."}
-          </p>
-          {projectLoad === "error" && (
-            <div className="row">
-              <button
-                className="btn primary"
-                onClick={() => setProjectLoadTick((tick) => tick + 1)}
-              >
-                Reintentar
-              </button>
-              <button className="btn" onClick={() => navigate("proyectos")}>
-                Ir a proyectos
-              </button>
-            </div>
-          )}
-        </div>
+        <ProjectLoadState
+          failed={projectLoad === "error"}
+          onRetry={() => setProjectLoadTick((tick) => tick + 1)}
+          onPickProject={() => navigate("proyectos")}
+        />
       ) : (
         <>
           {(view === "inicio" || view === "proyectos") && (
@@ -325,12 +305,9 @@ function AppInner() {
           {view === "reporte" && (
             <ReportBuilder
               key={activeProjectId ?? "none"}
-              workspace={workspace}
               projectId={activeProjectId}
               assetBase={assetBase}
-              onWorkspaceSaved={setWorkspace}
               onProjectMetaChange={updateProjectMeta}
-              onGoToPreview={() => navigate("preview")}
               onPickProject={() => navigate("proyectos")}
             />
           )}
@@ -350,7 +327,22 @@ function AppInner() {
             />
           )}
           {view === "preview" && (
-            <PdfPreview projectId={activeProjectId} onPickProject={() => navigate("proyectos")} />
+            <PdfPreview
+              key={`${workspacePath}:${activeProjectId}`}
+              projectId={activeProjectId}
+              workspacePath={workspacePath}
+              onIdentityPrepared={async () => {
+                if (activeProjectId) {
+                  const meta = await guard(api.loadProject(activeProjectId));
+                  if (meta) updateProjectMeta(meta);
+                }
+              }}
+              onCopyCreated={async (id) => {
+                await loadProjects();
+                activateProject(id);
+              }}
+              onPickProject={() => navigate("proyectos")}
+            />
           )}
           {view === "historial" && (
             <History
@@ -372,5 +364,42 @@ function AppInner() {
         </>
       )}
     </AppShell>
+  );
+}
+
+function ProjectLoadState({
+  failed,
+  onRetry,
+  onPickProject,
+}: Readonly<{
+  failed: boolean;
+  onRetry: () => void;
+  onPickProject: () => void;
+}>) {
+  if (!failed) {
+    return (
+      <div className="shell-state">
+        <i className="ti ti-hourglass" aria-hidden="true" />
+        <h2>Abriendo proyecto</h2>
+        <p>
+          <output>Cargando datos del workspace local...</output>
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="shell-state" role="alert">
+      <i className="ti ti-alert-circle" aria-hidden="true" />
+      <h2>No se pudo abrir el proyecto</h2>
+      <p>Revisa que la carpeta del proyecto siga disponible.</p>
+      <div className="row">
+        <button className="btn primary" onClick={onRetry}>
+          Reintentar
+        </button>
+        <button className="btn" onClick={onPickProject}>
+          Ir a proyectos
+        </button>
+      </div>
+    </div>
   );
 }

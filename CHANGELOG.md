@@ -4,6 +4,25 @@ Todo cambio notable se documenta en este archivo. El formato sigue Keep a Change
 
 ## [Unreleased]
 
+### Added
+- Identidades UUID persistentes para proyectos y hallazgos nuevos; inventario y preparacion explicita, reanudable, de proyectos anteriores.
+- Continuidad y copias desde Vista previa: continuar conserva identidades; trabajo independiente genera otras. Referencia compartida opcional, confirmada por separado y editable en Reporte.
+- Perfil de exportacion `identified_v2` opt-in por destino, con `schema_version: 2`, UUID obligatorios y referencia compartida seleccionable. `legacy` sigue siendo el predeterminado.
+- Fixtures JSON autonomos y pruebas de contratos, copias, concurrencia, invalidacion y correspondencia entre preview y request HTTP.
+
+### Changed
+- El preview de API conserva URL, perfil y bytes preparados en Rust. El envio consume esa preparacion y rechaza cambios de proyecto/destino; no reconstruye el JSON ni reintenta el POST automaticamente.
+- Las exportaciones no siguen redirecciones y el editor de destinos diferencia un error de keychain de un token ausente.
+- Guardados de proyecto/hallazgo coordinados entre app y MCP mediante bloqueo de workspace y revisiones optimistas; la UI serializa autoguardados y conserva borradores al fallar.
+- Duplicaciones y plantillas crean identidad de hallazgo nueva; los guardados existentes rechazan sustituciones de UUID.
+
+### Fixed
+- Los guardados obsoletos ya no recrean proyectos/hallazgos eliminados ni sobrescriben una revision distinta.
+- Vite excluye los directorios `target` del watcher para evitar errores de archivos bloqueados al compilar Rust en Windows.
+
+La aceptacion del receptor v2 y la validacion nativa multiplataforma siguen
+pendientes; ver [evidencia local](docs/continuity-validation.md).
+
 ## [0.0.26] - 2026-10-25
 
 ### Added

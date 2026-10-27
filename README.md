@@ -29,6 +29,7 @@ Aplicacion de escritorio local-first para redactar reportes de vulnerabilidades 
 - Generacion de PDF con plantillas personalizables: portada con tu logo y colores, marca de agua, secciones activables.
 - Parte ejecutiva para informes de ethical hacking: impacto al negocio y categoria de riesgo por hallazgo, causas raiz, tabla de hallazgos con modulo e impacto y plan de remediacion priorizado.
 - Workspaces locales en la carpeta que elijas. Cada workspace es git-friendly (solo texto + assets).
+- Continuidad opt-in: UUID persistentes, preparacion de proyectos anteriores y copias para continuar o iniciar un trabajo independiente. [Guia y limites](docs/continuity.md).
 - Multiplataforma: macOS, Windows y Linux.
 
 ## Capturas
@@ -98,6 +99,10 @@ El workspace por defecto se ubica donde tu lo elijas (file picker); sugerencia
 apta para versionar con git.
 
 ## Privacidad
+
+Los destinos de API conservan el perfil `legacy` por defecto. El perfil
+`identified_v2` agrega identidades y requiere un receptor compatible; la app
+presenta los mismos bytes que enviara. Ver [contrato de exportacion](docs/export-api.md).
 
 Sin telemetria. La unica salida de red automatica es la verificacion de actualizaciones. De forma opcional podes configurar una exportacion a una API propia (apagada por default): solo envia la metadata que elijas, nunca el cuerpo ni la PoC, y siempre te muestra que sale antes de enviar. Fuera de eso, los reportes no salen de tu equipo.
 

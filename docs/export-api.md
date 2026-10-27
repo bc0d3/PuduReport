@@ -4,6 +4,35 @@ PuduReport puede enviar los hallazgos de un proyecto a una API externa que vos
 configures (opt-in; ver "Destinos de exportacion" en CLAUDE.md). Este documento
 describe exactamente que recibe tu endpoint, para que puedas definir tu DTO.
 
+## Perfiles y continuidad
+
+Los destinos existentes sin `profile` y los nuevos usan **`legacy`**. Conserva
+la forma sin version ni identidades y los campos opcionales de 0.0.26.
+**`identified_v2`** se elige explicitamente para un receptor compatible:
+
+| Campo | Contrato v2 |
+| --- | --- |
+| `schema_version` | Entero exacto `2`, obligatorio; no es la version SemVer de la app. |
+| `project.uid` | UUID persistente del documento, obligatorio. |
+| `findings[].uid` | UUID persistente, obligatorio y sin duplicados en el documento. |
+| `project.external_reference` | Opt-in mediante `project_fields`; texto de 1–128 caracteres Unicode, recortado; se omite si no existe. |
+
+Los UUID no son campos desmarcables en v2. `project.id` sigue siendo un slug
+local informativo y `numero` cambia con el orden de presentacion. Ni estos
+valores, ni nombres iguales, ni una referencia compartida autorizan o fusionan
+automaticamente documentos o hallazgos. El receptor debe validar identidades,
+emisor y relaciones. Cada POST puede producir otra recepcion: este contrato no
+introduce idempotencia HTTP ni bajas por ausencia. `nuevo` conserva su significado
+de hallazgo nuevo en retest.
+
+La preparacion de archivos anteriores y las opciones de copia estan descritas
+en [Identidad y continuidad](continuity.md). Un perfil desconocido o identidades
+ausentes, invalidas o repetidas en v2 producen error; nunca se degrada a legacy.
+Los hallazgos ocultos tambien se incluyen en la validacion local de identidad,
+aunque no salen en el payload. Ejemplos autonomos:
+[legacy](../tests/fixtures/export/legacy-0.0.26.json) y
+[v2](../tests/fixtures/export/identified-v2.json).
+
 ## Transporte
 
 - Metodo: `POST`
@@ -11,11 +40,21 @@ describe exactamente que recibe tu endpoint, para que puedas definir tu DTO.
 - `Authorization: Bearer <token>` (el token lo configura el usuario; PuduReport
   lo guarda en el keychain del sistema, nunca en el repo).
 - Solo `https://` (PuduReport rechaza `http://` en claro).
+- No se siguen redirecciones: la confirmacion autoriza la URL presentada.
 - Un `POST` por proyecto, on-demand (cuando el usuario aprieta "Enviar").
 - Se espera una respuesta HTTP 2xx para considerar el envio exitoso. El cuerpo
   de la respuesta se muestra al usuario (util para devolver un id o un error).
+- Timeout total de 15 segundos; el diagnostico mostrado se recorta a 2000
+  caracteres Unicode, mas `...` si corresponde. No hay reintento automatico.
+- La app espera los guardados, conserva URL/perfil/JSON en una preparacion de
+  un solo uso y verifica archivos/destino antes de enviar esos mismos bytes.
+  Un cambio o error exige revisar otra preparacion. No se envian `revision` ni
+  `preparation_id`; son controles locales.
 
 ## Forma del payload
+
+La siguiente forma base describe `legacy`. v2 agrega los campos estructurales
+de la tabla anterior y conserva las reglas de seleccion del resto.
 
 ```
 {
@@ -34,7 +73,7 @@ Importante:
 - **Los campos de cada hallazgo son configurables por destino.** El usuario elige
   una vez que campos manda, y a partir de ahi manda siempre ese mismo set
   (esquema estable). Diseña tu DTO tratando cada campo de hallazgo como opcional,
-  y quedate con los que tu destino tenga configurados.
+   y quedate con los que tu destino tenga configurados. En v2, `uid` es obligatorio.
 - **El cuerpo y la prueba de concepto de los hallazgos NUNCA se envian** por este
   canal (solo metadata). Tampoco los hallazgos ocultos.
 
@@ -43,6 +82,8 @@ Importante:
 | Campo        | Tipo   | Notas                                        |
 |--------------|--------|----------------------------------------------|
 | `id`         | string | slug del proyecto (ej. `proyecto-de-ejemplo`)|
+| `uid` | string UUID | obligatorio solo en v2; identidad del documento |
+| `external_reference` | string, opcional | solo en v2 y seleccionado; pista de vinculacion, no autorizacion |
 | `name`       | string |                                              |
 | `client`     | string |                                              |
 | `type`       | string | `pentest` `redteam` `oscp` `htb` `ejecutivo` `documento` `retest` `cti` `incidente` `auditoria` `cumplimiento` `riesgos` `hunting` |
@@ -70,8 +111,8 @@ Severidades posibles como clave de `by_severity`: `critical` `high` `medium`
 
 ### `findings[]` (campos configurables)
 
-Cada objeto trae SOLO los campos que el destino tenga configurados. Estos son
-todos los posibles y su tipo:
+Cada objeto trae los campos que el destino tenga configurados, mas `uid`
+obligatorio en v2. Los campos seleccionables y su tipo son:
 
 | Campo          | Tipo                        | Notas                                                        |
 |----------------|-----------------------------|--------------------------------------------------------------|
@@ -98,6 +139,10 @@ clave viene en todos los hallazgos (esquema estable): `""` para los textos
 vacios y `null` para `categoria_riesgo` y `causa_raiz` sin definir. La `clave`
 de `causa_raiz` es un slug estable dentro del proyecto (no cambia si se edita el
 titulo); no es unica entre proyectos.
+
+El titulo de la causa raiz tiene hasta 120 caracteres. Su clave usa un limite
+base de 64 mas posibles sufijos de colision: no imponer un maximo exacto de 64.
+No se exportan el catalogo completo, descripciones de causas ni plan de remediacion.
 
 Etiquetas legibles de `categoria_riesgo` (las que usa el PDF y el CSV):
 
@@ -194,7 +239,7 @@ type RiskCategory =
   | "reputacional"
   | "reconocimiento";
 
-interface PuduReportExport {
+interface PuduReportLegacyExport {
   source: "pudureport";
   exported_at: string; // ISO-8601 UTC
   project: {
@@ -232,6 +277,18 @@ interface PuduReportFinding {
   categoria_riesgo?: RiskCategory | null;
   causa_raiz?: { clave: string; titulo: string } | null;
 }
+
+interface PuduReportIdentifiedExport
+  extends Omit<PuduReportLegacyExport, "project" | "findings"> {
+  schema_version: 2;
+  project: PuduReportLegacyExport["project"] & {
+    uid: string; // Validar UUID en runtime.
+    external_reference?: string;
+  };
+  findings: Array<PuduReportFinding & { uid: string }>;
+}
+
+type PuduReportExport = PuduReportLegacyExport | PuduReportIdentifiedExport;
 ```
 
 ## Ejemplo de handler (pseudocodigo)
@@ -244,10 +301,11 @@ POST /api/import/data/pudureport/
   responder 200 { "id": "<id de la importacion>" }
 ```
 
-## Prompt de implementacion (para tu API receptora)
+## Prompt de implementacion legacy (para tu API receptora)
 
 Pega esto en tu asistente de IA para generar el endpoint que recolecta la data.
-Es self-contained: trae el contrato adentro. Reemplaza lo que esta entre < >.
+Es self-contained para legacy: trae ese contrato adentro. Reemplaza lo que esta
+entre < >. Para v2 aplica ademas el contrato y las reglas de continuidad de arriba.
 
 ---
 
@@ -298,10 +356,9 @@ interface PuduReportExport {
 
 Persistencia:
 - Modela `import` (o `report_snapshot`), `project` y `finding` en tu DB.
-- Idempotencia: una nueva exportacion del MISMO `project.id` es una nueva foto en
-  el tiempo. Guarda cada import con su `exported_at`; no mezcles con imports
-  previos del mismo proyecto (asi podes ver la evolucion). Indexa por
-  `project.id` y `exported_at`.
+- Recepciones: guarda cada import como una foto independiente, con su emisor y
+  fecha de recepcion. `project.id` es local y `exported_at` no es una clave unica.
+  No deduzcas continuidad global o idempotencia por nombre, slug o timestamp.
 - El cuerpo/PoC de los hallazgos NUNCA llega por este canal (solo metadata), y
   los hallazgos ocultos ya vienen excluidos: no asumas que `findings` es la lista
   completa del proyecto, es lo que el usuario decidio compartir.

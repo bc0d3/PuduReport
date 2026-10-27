@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (c) 2026 bc0d3
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import * as api from "../lib/api";
 import type { FindingTemplate, PdfTemplate, ProjectMeta, Snippet } from "../lib/types";
 import { typeInfo } from "../lib/projectTypes";
@@ -10,6 +10,7 @@ import { Modal } from "../components/Modal";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
+import { errorMessage } from "../lib/exportFlow";
 
 interface Props {
   projectId: string | null;
@@ -35,7 +36,12 @@ function extractVars(...texts: string[]): string[] {
   return [...found];
 }
 
-export function TemplateLibrary({ projectId, project, onProjectSaved, onTemplatesChanged }: Props) {
+export function TemplateLibrary({
+  projectId,
+  project,
+  onProjectSaved,
+  onTemplatesChanged,
+}: Readonly<Props>) {
   const { guard, notify } = useToast();
   const [tab, setTab] = useState<Tab>("pdf");
   const [templates, setTemplates] = useState<FindingTemplate[]>([]);
@@ -68,12 +74,16 @@ export function TemplateLibrary({ projectId, project, onProjectSaved, onTemplate
   // override para que el proyecto siga al tipo; si no, guarda el override.
   async function applyTemplate(name: string) {
     if (!projectId || !project) return;
-    const next: ProjectMeta = {
-      ...project,
-      template_override: name === typeTemplate ? "" : name,
-    };
-    const done = await guard(api.saveProject(projectId, next), `Plantilla: ${name}`);
-    if (done !== undefined) onProjectSaved(next);
+    const done = await guard(
+      api.loadProject(projectId).then((current) =>
+        api.saveProject(projectId, {
+          ...current,
+          template_override: name === typeTemplate ? "" : name,
+        }),
+      ),
+      `Plantilla: ${name}`,
+    );
+    if (done) onProjectSaved(done);
   }
 
   // Tabla de plantillas PDF (se reutiliza para las incluidas y las del usuario).
@@ -163,13 +173,20 @@ export function TemplateLibrary({ projectId, project, onProjectSaved, onTemplate
   }
 
   async function deleteTpl(name: string) {
-    const done = await guard(api.deleteTemplate(name), "Plantilla eliminada");
-    if (done === undefined) return;
+    const done = await guard(
+      api.deleteTemplate(name).then(() => true),
+      "Plantilla eliminada",
+    );
+    if (!done) return;
     // Si el proyecto activo la usaba como override, lo limpiamos para no dejar
     // una referencia colgante que rompa la generacion del PDF.
     if (project && projectId && project.template_override === name) {
-      const next: ProjectMeta = { ...project, template_override: "" };
-      if ((await guard(api.saveProject(projectId, next))) !== undefined) onProjectSaved(next);
+      const saved = await guard(
+        api
+          .loadProject(projectId)
+          .then((current) => api.saveProject(projectId, { ...current, template_override: "" })),
+      );
+      if (saved) onProjectSaved(saved);
     }
     await reload();
     onTemplatesChanged?.();
@@ -194,8 +211,20 @@ export function TemplateLibrary({ projectId, project, onProjectSaved, onTemplate
   // titulo (misma logica que para las plantillas PDF).
   async function duplicateFinding(t: FindingTemplate) {
     const copy: FindingTemplate = { ...t, id: "", builtin: false };
-    const done = await guard(api.saveFindingTemplate(copy), "Plantilla duplicada a tu biblioteca");
-    if (done !== undefined) await reload();
+    const done = await guard(
+      api.saveFindingTemplate(copy).then(() => true),
+      "Plantilla duplicada a tu biblioteca",
+    );
+    if (done) await reload();
+  }
+
+  async function copySnippet(body: string) {
+    try {
+      await navigator.clipboard.writeText(body);
+      notify("Snippet copiado al portapapeles", "ok");
+    } catch (error_) {
+      notify(errorMessage(error_), "error");
+    }
   }
 
   function findingCard(t: FindingTemplate) {
@@ -232,7 +261,7 @@ export function TemplateLibrary({ projectId, project, onProjectSaved, onTemplate
   }
 
   useEffect(() => {
-    reload();
+    void reload();
   }, [reload]);
 
   return (
@@ -240,8 +269,7 @@ export function TemplateLibrary({ projectId, project, onProjectSaved, onTemplate
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div className="tabs">
           <button className={`tab ${tab === "pdf" ? "active" : ""}`} onClick={() => setTab("pdf")}>
-            <i className="ti ti-layout-cards" />
-            Plantillas PDF
+            <i className="ti ti-layout-cards" aria-hidden="true" /> <span>Plantillas PDF</span>
           </button>
           <button
             className={`tab ${tab === "findings" ? "active" : ""}`}
@@ -270,22 +298,11 @@ export function TemplateLibrary({ projectId, project, onProjectSaved, onTemplate
 
       {tab === "pdf" && (
         <>
-          {project ? (
-            <p className="muted" style={{ marginTop: 12, marginBottom: 4 }}>
-              Plantilla de <strong>{project.name}</strong> (tipo{" "}
-              {typeInfo(project.project_type).label}).
-              {project.template_override
-                ? " Usas un override manual; vuelve a la del tipo eligiendola de nuevo."
-                : " Sigue la plantilla del tipo. Elige otra para cambiarla solo en este proyecto."}
-            </p>
-          ) : (
-            <p className="muted" style={{ marginTop: 12, marginBottom: 4 }}>
-              Selecciona un proyecto para asignarle una plantilla.
-            </p>
-          )}
+          <ProjectTemplateNotice project={project} />
           <div className="field" style={{ maxWidth: 360, marginTop: 8, marginBottom: 8 }}>
             <input
               className="input"
+              aria-label="Buscar plantillas PDF"
               placeholder="Buscar por nombre o descripcion..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -361,8 +378,7 @@ export function TemplateLibrary({ projectId, project, onProjectSaved, onTemplate
                 <button
                   className="btn small"
                   onClick={() => {
-                    navigator.clipboard.writeText(s.body);
-                    notify("Snippet copiado al portapapeles", "ok");
+                    void copySnippet(s.body);
                   }}
                 >
                   Copiar
@@ -454,6 +470,24 @@ export function TemplateLibrary({ projectId, project, onProjectSaved, onTemplate
   );
 }
 
+function ProjectTemplateNotice({ project }: Readonly<{ project: ProjectMeta | null }>) {
+  if (!project) {
+    return (
+      <p className="muted" style={{ marginTop: 12, marginBottom: 4 }}>
+        Selecciona un proyecto para asignarle una plantilla.
+      </p>
+    );
+  }
+  return (
+    <p className="muted" style={{ marginTop: 12, marginBottom: 4 }}>
+      Plantilla de <strong>{project.name}</strong> (tipo {typeInfo(project.project_type).label}).
+      {project.template_override
+        ? " Usas un override manual; vuelve a la del tipo eligiendola de nuevo."
+        : " Sigue la plantilla del tipo. Elige otra para cambiarla solo en este proyecto."}
+    </p>
+  );
+}
+
 /**
  * Editor de una plantilla propia. Lo simple primero: titulo, descripcion y tags
  * en un form; el codigo Typst queda en una seccion "Avanzado" plegable. El
@@ -463,11 +497,12 @@ function TemplateEditor({
   template,
   onClose,
   onSaved,
-}: {
+}: Readonly<{
   template: PdfTemplate;
   onClose: () => void;
-  onSaved: () => void;
-}) {
+  onSaved: () => Promise<void>;
+}>) {
+  const fieldId = useId();
   const { guard } = useToast();
   const [title, setTitle] = useState(template.title);
   const [description, setDescription] = useState(template.description);
@@ -476,7 +511,13 @@ function TemplateEditor({
   const [showCode, setShowCode] = useState(false);
 
   useEffect(() => {
-    guard(api.readTemplateSource(template.name)).then((s) => setSource(s ?? ""));
+    let active = true;
+    void guard(api.readTemplateSource(template.name)).then((source) => {
+      if (active && source !== undefined) setSource(source);
+    });
+    return () => {
+      active = false;
+    };
   }, [guard, template.name]);
 
   async function save() {
@@ -487,12 +528,14 @@ function TemplateEditor({
       .map((t) => t.trim())
       .filter(Boolean);
     const metaDone = await guard(
-      api.saveTemplateMeta(template.name, title, description, tags),
+      api.saveTemplateMeta(template.name, title, description, tags).then(() => true),
+    );
+    if (!metaDone) return;
+    const srcDone = await guard(
+      api.saveTemplateSource(template.name, source).then(() => true),
       "Plantilla guardada",
     );
-    if (metaDone === undefined) return;
-    const srcDone = await guard(api.saveTemplateSource(template.name, source));
-    if (srcDone !== undefined) onSaved();
+    if (srcDone) await guard(onSaved());
   }
 
   return (
@@ -511,20 +554,27 @@ function TemplateEditor({
       }
     >
       <div className="field">
-        <label>Titulo</label>
-        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor={`${fieldId}-title`}>Titulo</label>
+        <input
+          id={`${fieldId}-title`}
+          className="input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
       </div>
       <div className="field">
-        <label>Descripcion</label>
+        <label htmlFor={`${fieldId}-description`}>Descripcion</label>
         <input
+          id={`${fieldId}-description`}
           className="input"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
       </div>
       <div className="field">
-        <label>Tags (separados por coma)</label>
+        <label htmlFor={`${fieldId}-tags`}>Tags (separados por coma)</label>
         <input
+          id={`${fieldId}-tags`}
           className="input"
           value={tagsInput}
           onChange={(e) => setTagsInput(e.target.value)}
@@ -537,8 +587,8 @@ function TemplateEditor({
       </div>
 
       <button className="btn small" style={{ marginTop: 4 }} onClick={() => setShowCode((v) => !v)}>
-        <i className={`ti ti-chevron-${showCode ? "down" : "right"}`} />
-        Avanzado: codigo Typst
+        <i className={`ti ti-chevron-${showCode ? "down" : "right"}`} aria-hidden="true" />{" "}
+        <span>Avanzado: codigo Typst</span>
       </button>
       {showCode && (
         <>
@@ -546,6 +596,7 @@ function TemplateEditor({
             Codigo Typst. Se guarda en tu libreria. Consume el mismo data.json.
           </p>
           <textarea
+            aria-label="Codigo Typst"
             className="textarea mono"
             style={{ width: "100%", minHeight: 320, fontSize: 12 }}
             value={source ?? "Cargando..."}
@@ -562,11 +613,13 @@ function InstantiateModal({
   template,
   onClose,
   onSubmit,
-}: {
+}: Readonly<{
   template: FindingTemplate;
   onClose: () => void;
-  onSubmit: (vars: Record<string, string>) => void;
-}) {
+  onSubmit: (vars: Record<string, string>) => Promise<void>;
+}>) {
+  const fieldId = useId();
+  const { guard } = useToast();
   const vars = useMemo(() => extractVars(template.meta.title, template.body), [template]);
   const [values, setValues] = useState<Record<string, string>>({});
 
@@ -579,7 +632,12 @@ function InstantiateModal({
           <button className="btn" onClick={onClose}>
             Cancelar
           </button>
-          <button className="btn primary" onClick={() => onSubmit(values)}>
+          <button
+            className="btn primary"
+            onClick={() => {
+              void guard(onSubmit(values));
+            }}
+          >
             Insertar
           </button>
         </>
@@ -590,8 +648,9 @@ function InstantiateModal({
       ) : (
         vars.map((v) => (
           <div className="field" key={v}>
-            <label>{`{{${v}}}`}</label>
+            <label htmlFor={`${fieldId}-${v}`}>{`{{${v}}}`}</label>
             <input
+              id={`${fieldId}-${v}`}
               className="input"
               value={values[v] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [v]: e.target.value }))}
@@ -603,7 +662,11 @@ function InstantiateModal({
   );
 }
 
-function TemplateForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function TemplateForm({
+  onClose,
+  onSaved,
+}: Readonly<{ onClose: () => void; onSaved: () => Promise<void> }>) {
+  const fieldId = useId();
   const { guard } = useToast();
   const [title, setTitle] = useState("");
   const [cwe, setCwe] = useState("");
@@ -628,8 +691,11 @@ function TemplateForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =
       body,
       builtin: false,
     };
-    const done = await guard(api.saveFindingTemplate(template), "Plantilla guardada");
-    if (done !== undefined) onSaved();
+    const done = await guard(
+      api.saveFindingTemplate(template).then(() => true),
+      "Plantilla guardada",
+    );
+    if (done) await guard(onSaved());
   }
 
   return (
@@ -648,30 +714,49 @@ function TemplateForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =
       }
     >
       <div className="field">
-        <label>Titulo (admite variables como {`{{cliente}}`})</label>
-        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor={`${fieldId}-title`}>Titulo (admite variables como {`{{cliente}}`})</label>
+        <input
+          id={`${fieldId}-title`}
+          className="input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
       </div>
       <div className="field">
-        <label>CWE</label>
-        <input className="input" value={cwe} onChange={(e) => setCwe(e.target.value)} />
+        <label htmlFor={`${fieldId}-cwe`}>CWE</label>
+        <input
+          id={`${fieldId}-cwe`}
+          className="input"
+          value={cwe}
+          onChange={(e) => setCwe(e.target.value)}
+        />
       </div>
       <div className="field">
-        <label>Cuerpo</label>
-        <MarkdownEditor value={body} onChange={setBody} />
+        <span className="field-label" id={`${fieldId}-body`}>
+          Cuerpo
+        </span>
+        <MarkdownEditor labelledBy={`${fieldId}-body`} value={body} onChange={setBody} />
       </div>
     </Modal>
   );
 }
 
-function SnippetForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function SnippetForm({
+  onClose,
+  onSaved,
+}: Readonly<{ onClose: () => void; onSaved: () => Promise<void> }>) {
+  const fieldId = useId();
   const { guard } = useToast();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
 
   async function save() {
     if (!title.trim()) return;
-    const done = await guard(api.saveSnippet({ id: "", title, body }), "Snippet guardado");
-    if (done !== undefined) onSaved();
+    const done = await guard(
+      api.saveSnippet({ id: "", title, body }).then(() => true),
+      "Snippet guardado",
+    );
+    if (done) await guard(onSaved());
   }
 
   return (
@@ -690,12 +775,20 @@ function SnippetForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       }
     >
       <div className="field">
-        <label>Titulo</label>
-        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor={`${fieldId}-title`}>Titulo</label>
+        <input
+          id={`${fieldId}-title`}
+          className="input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
       </div>
       <div className="field">
-        <label>Contenido</label>
+        <span className="field-label" id={`${fieldId}-body`}>
+          Contenido
+        </span>
         <MarkdownEditor
+          labelledBy={`${fieldId}-body`}
           value={body}
           onChange={setBody}
           placeholder="Texto reutilizable, listas o comandos. Puedes usar variables como {{cliente}}."

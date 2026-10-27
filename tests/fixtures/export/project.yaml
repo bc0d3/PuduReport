@@ -1,0 +1,18 @@
+uid: 38ce1480-2f15-4d6d-91c0-d515e1182034
+name: Portal Demo
+client: Empresa Demo
+project_type: pentest
+start_date: '2026-10-01'
+end_date: '2026-10-20'
+ambiente: qa
+exposicion: interno
+external_reference: PENTEST-2026-042
+finding_order: [001-acceso, 002-oculto]
+causas_raiz:
+  - clave: autorizacion
+    titulo: Validación de permisos incompleta
+    descripcion: Descripcion interna no exportable
+plan_remediacion:
+  - prioridad: inmediata
+    accion: Revisar permisos
+    hallazgos: [001-acceso]

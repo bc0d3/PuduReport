@@ -28,6 +28,25 @@ sidecar para descubrir las herramientas nuevas.
 La GUI y el MCP escriben los mismos archivos: evite editar el mismo hallazgo a
 la vez desde ambos. No hay fusion automatica de ediciones concurrentes.
 
+### Identidad y guardado
+
+Los proyectos y hallazgos nuevos tienen un `uid` persistente. Las herramientas
+de actualizacion lo conservan; los archivos anteriores permanecen sin UUID hasta
+usar **Vista previa > Continuidad y copias > Preparar identidades** en la app.
+El MCP no expone preparacion, copia de proyecto ni envio a API automaticos.
+
+Las lecturas y los resultados de crear/actualizar hallazgos incluyen
+`meta.revision`: una huella local de los bytes, no un campo persistido ni una
+identidad. El MCP carga la revision antes de escribir; no exige que la IA la
+envie como argumento. Si otro escritor cambia el archivo entre esa lectura y
+el guardado, o el bloqueo del workspace esta ocupado, la operacion falla.
+Vuelve a leer y concilia la edicion; no reintentes un reemplazo completo sin
+revisar el contenido actual. Esta comprobacion no detecta por si sola que un
+texto propuesto por la IA se baso en una lectura anterior a la llamada.
+
+La politica de archivos, copias y versiones antiguas esta en
+[Identidad y continuidad](continuity.md). El acceso a evidencias permanece igual.
+
 ## Hallazgos y Prueba de concepto
 
 Para crear o editar varias casillas, prefiera `sections` en `create_finding`

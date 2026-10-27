@@ -22,7 +22,7 @@ export default defineConfig({
       : undefined,
     watch: {
       // No vigilar el backend Rust desde el dev server del frontend.
-      ignored: ["**/src-tauri/**"],
+      ignored: ["**/src-tauri/**", "**/target/**"],
     },
   },
   // Tauri usa Chromium en Linux/Windows y WebKit en macOS.

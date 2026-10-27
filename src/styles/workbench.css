@@ -709,6 +709,11 @@
   margin-top: 3px;
 }
 .report-block-grip {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   cursor: grab;
 }
 .report-block-controls {
@@ -729,7 +734,7 @@
   border-color: var(--border-strong);
   background: var(--bg-panel);
 }
-.finding-section:focus-within > .row > label {
+.finding-section:focus-within > .row > .field-label {
   color: var(--accent);
 }
 .finding-section:focus-within :is(.ProseMirror, .md-source) {

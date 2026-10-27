@@ -1,6 +1,6 @@
 [package]
 name = "pudureport-core"
-version = "0.0.26"
+version = "0.0.27"
 description = "Logica compartida de PuduReport: modelo de datos, CVSS, workspace y markdown"
 license = "GPL-3.0-only"
 edition = "2021"
@@ -14,3 +14,6 @@ pulldown-cmark = { version = "0.12", default-features = false }
 thiserror = "2"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
+# Bloqueo entre procesos compatible con el MSRV declarado; SHA-256 para revisiones locales.
+fs2 = "0.4.3"
+sha2 = "0.10"

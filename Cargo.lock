@@ -923,6 +923,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs2"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2544,7 +2554,7 @@ dependencies = [
 
 [[package]]
 name = "pudureport"
-version = "0.0.26"
+version = "0.0.27"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2571,20 +2581,22 @@ dependencies = [
 
 [[package]]
 name = "pudureport-core"
-version = "0.0.26"
+version = "0.0.27"
 dependencies = [
  "base64 0.22.1",
+ "fs2",
  "pulldown-cmark",
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2",
  "thiserror 2.0.18",
  "uuid",
 ]
 
 [[package]]
 name = "pudureport-mcp"
-version = "0.0.26"
+version = "0.0.27"
 dependencies = [
  "base64 0.22.1",
  "dirs 5.0.1",
